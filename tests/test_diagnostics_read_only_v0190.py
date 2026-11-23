@@ -46,8 +46,8 @@ class FakeTransport:
 
 base = Path(tempfile.mkdtemp(prefix='mgt-diagnostics-readonly-v0190-'))
 context = hades2_adapter_context(base/'initialized')
-context.data_dir.parent.mkdir(parents=True)
-pref_path = context.data_dir.parent/'desired-state.json'
+context.data_dir.mkdir(parents=True)
+pref_path = context.data_dir/'desired-state.json'
 store = Hades2PreferenceStore(pref_path)
 prefs = store.defaults()
 prefs['invincibility'] = True
@@ -81,13 +81,13 @@ assert pref_path.read_bytes() == file_before
 # With no durable desired-state at all, a diagnostics/status read must not adopt
 # the live Lua configuration and create a new desired-state file.
 context = hades2_adapter_context(base/'uninitialized')
-context.data_dir.parent.mkdir(parents=True)
+context.data_dir.mkdir(parents=True)
 transport2 = FakeTransport()
 adapter2 = Hades2Adapter(context=context, transport=transport2, time_warp_controller=FakeTimeWarpController())
 assert adapter2.preference_initialized is False
 adapter2.observe_runtime()
 assert adapter2.preference_initialized is False
-assert not (context.data_dir.parent/'desired-state.json').exists()
+assert not (context.data_dir/'desired-state.json').exists()
 
 # Runtime observation is a dedicated status-only API rather than a flag that
 # mutation callers can opt into.

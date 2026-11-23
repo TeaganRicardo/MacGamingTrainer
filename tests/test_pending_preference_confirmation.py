@@ -169,7 +169,7 @@ def make_pending_adapter(prefix):
     adapter.state.update(copy.deepcopy(session.state), connected=True, pid=session.pid)
     adapter.preference_initialized = True
     adapter.preference_dirty = False
-    return context.data_dir.parent, session, adapter
+    return context.data_dir, session, adapter
 
 
 base, transport, adapter = make_pending_adapter('mgt-pending-confirmation-')

@@ -19,7 +19,7 @@ from .desired_reconciliation import Hades2DesiredStateReconciler
 from .operation_budgets import PROCESS_QUERY_TIMEOUT_SECONDS
 from .vital_state import normalize_vital_locks, observed_vital_lock, observed_vital_values
 from .config import DISPLAY_NAME, GAME_EXECUTABLE_NAME, MODULE_MANIFEST
-from .persistence import PersistenceError
+from .persistence import PersistenceError, migrate_legacy_root_data_dir
 from .preferences import (
     LEGACY_DAMAGE_MULTIPLIER,
     Hades2PreferenceStore,
@@ -154,10 +154,11 @@ class Hades2Adapter(GameAdapter):
                     'dormantFeatures':{},
                     'featureErrorPresentations':{},
                     'capabilities':disconnected_capabilities()}
-        self.preference_store=Hades2PreferenceStore(self.legacy_data_dir/'desired-state.json')
+        migrate_legacy_root_data_dir(self.context.data_dir)
+        self.preference_store=Hades2PreferenceStore(self.context.data_dir/'desired-state.json')
         self.preferences,self.preference_initialized=self.preference_store.load()
         self.preference_write_blocked=self.preference_store.write_blocked_error is not None
-        self.profile_service=Hades2ProfileService(self.legacy_data_dir/'profiles')
+        self.profile_service=Hades2ProfileService(self.context.data_dir/'profiles')
         self.command_contract=Hades2CommandContract(self)
         self.reply_projection=Hades2ReplyProjection()
         self.save_workspaces = self._create_save_workspaces()
@@ -1157,11 +1158,6 @@ class Hades2Adapter(GameAdapter):
 
     def apply_save_editor(self, params):
         return self._require_save_workspace(params["workspaceId"]).apply(params["draftEntryIds"])
-
-    @property
-    def legacy_data_dir(self) -> Path:
-        """Retain the flat storage used before the Host added game directories."""
-        return self.context.data_dir.parent
 
     def state_for_error(self) -> dict[str, Any]:
         return self.state

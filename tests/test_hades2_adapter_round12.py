@@ -214,9 +214,9 @@ assert hello['result']['game']['protocolVersion'] == module_protocol
 assert set(hello['result']['game']) == {'id', 'displayName', 'protocolVersion', 'targetApplication', 'saveManagement'}
 assert router.save_service.provider.context.game_path == prep.GAME
 assert router.save_service.provider.context.module_dir == a.context.module_dir
-legacy_data = base / 'Library/Application Support/MacGamingTrainer'
-assert a.preference_store.path == legacy_data / 'desired-state.json'
-assert a.profile_service.root == legacy_data / 'profiles'
+game_data = base / 'Library/Application Support/MacGamingTrainer/hades2'
+assert a.preference_store.path == game_data / 'desired-state.json'
+assert a.profile_service.root == game_data / 'profiles'
 
 # A process-query failure is not evidence that Hades stopped. Preserve the
 # existing debugger/session state and surface the query error instead of

@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix='hades2-teardown-') as directory:
         assert error.code == 'waiting', error.code
     else:
         raise AssertionError('the fixture teardown was expected to wait')
-    assert (context.data_dir.parent / 'desired-state.json').exists(), 'durable reset was not persisted first'
+    assert (context.data_dir / 'desired-state.json').exists(), 'durable reset was not persisted first'
     assert adapter.preference_dirty, 'an unobserved teardown was recorded as reconciled'
 
     before = len(resident.calls)

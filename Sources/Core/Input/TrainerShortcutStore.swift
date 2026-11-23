@@ -6,23 +6,26 @@ package enum TrainerShortcutProfileApplyResult: Equatable {
     case unsupportedLayoutVersion(Int)
 }
 
-/// Module-owned key-value storage hooks so each game keeps its statically
-/// verified UserDefaults namespace at the module boundary.
-package struct TrainerShortcutStorage<Action> {
+/// Module-scoped UserDefaults storage so each game's `<moduleID>.` key
+/// namespace holds by construction at the Core/module boundary.
+package struct TrainerShortcutStorage<Action: RawRepresentable> where Action.RawValue == String {
     let read: (Action) -> Any?
     let write: (Action, [String: Any]) -> Void
     let remove: (Action) -> Void
     let finalizePersistence: () -> Void
 
     package init(
-        read: @escaping (Action) -> Any?,
-        write: @escaping (Action, [String: Any]) -> Void,
-        remove: @escaping (Action) -> Void,
+        moduleID: String,
+        defaults: UserDefaults,
+        actionPrefix: String = "shortcut.",
         finalizePersistence: @escaping () -> Void = {}
     ) {
-        self.read = read
-        self.write = write
-        self.remove = remove
+        precondition(!moduleID.isEmpty && !moduleID.contains("."), "moduleID must be a single module identifier")
+        precondition(!actionPrefix.isEmpty, "actionPrefix must be non-empty")
+        let prefix = "\(moduleID).\(actionPrefix)"
+        self.read = { defaults.object(forKey: prefix + $0.rawValue) }
+        self.write = { defaults.set($1, forKey: prefix + $0.rawValue) }
+        self.remove = { defaults.removeObject(forKey: prefix + $0.rawValue) }
         self.finalizePersistence = finalizePersistence
     }
 }

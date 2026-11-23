@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from core.log_paths import trainer_data_root
+from core.log_paths import trainer_data_directory
 from core.target_probe import AmbiguousTargetError, BoundedCommandTimeoutError, bounded_run, locate_target
 
 from .config import (
@@ -20,6 +20,7 @@ from .config import (
     SUPPORTED_BUILD, resolve_game_install, steam_manifest_for_bundle,
 )
 from .operation_budgets import PROCESS_QUERY_TIMEOUT_SECONDS, SUBPROCESS_TIMEOUT_SECONDS
+from .persistence import migrate_legacy_root_data_dir
 
 GAME = GAME_APP
 SAVES = GAME_SAVES
@@ -305,8 +306,14 @@ def _stage_prepared(root, record, original, previous_prepared_sha256=None):
     return staged
 
 
+def _resolve_backup_parent(data_dir=None):
+    resolved = trainer_data_directory('hades2') if data_dir is None else Path(data_dir)
+    migrate_legacy_root_data_dir(resolved)
+    return resolved / 'backups'
+
+
 def prepare(data_dir=None):
-    backup_parent = (trainer_data_root() if data_dir is None else data_dir) / 'backups'
+    backup_parent = _resolve_backup_parent(data_dir)
     _require_stopped()
     game, exe, _steam = resolve_paths(query_running=False)
     identity = compatibility(query_running=False)
@@ -362,7 +369,7 @@ def prepare(data_dir=None):
 
 
 def restore(data_dir=None):
-    backup_parent = (trainer_data_root() if data_dir is None else data_dir) / 'backups'
+    backup_parent = _resolve_backup_parent(data_dir)
     _require_stopped()
     game, exe, _steam = resolve_paths(query_running=False)
     compatibility(query_running=False)

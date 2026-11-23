@@ -114,8 +114,8 @@ from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter
 
 adapter_base = Path(tempfile.mkdtemp(prefix='mgt-preference-adapter-'))
 context = hades2_adapter_context(adapter_base)
-context.data_dir.parent.mkdir(parents=True)
-(context.data_dir.parent/'desired-state.json').write_text(json.dumps({
+context.data_dir.mkdir(parents=True)
+(context.data_dir/'desired-state.json').write_text(json.dumps({
     'gardenQoL': True,
     'resourceLocks': {'Money': 'oops'},
     'elementLocks': {'Fire': 'oops'},
@@ -211,7 +211,7 @@ assert 'gardenQoL' not in profile_adapter.preferences
 assert profile_adapter.preferences['resourceLocks'] == {'MetaCurrency':12}
 assert profile_adapter.preferences['elementLocks'] == {'Water':4}
 assert profile_adapter.preferences['statLocks'] == {'grasp':30}
-persisted = json.loads((context.data_dir.parent/'desired-state.json').read_text(encoding='utf-8'))
+persisted = json.loads((context.data_dir/'desired-state.json').read_text(encoding='utf-8'))
 assert persisted['resourceLocks'] == {'MetaCurrency':12}
 assert persisted['elementLocks'] == {'Water':4}
 assert persisted['statLocks'] == {'grasp':30}

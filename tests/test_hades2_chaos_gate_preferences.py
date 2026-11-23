@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     for value in (0, 100, 32.5, None, 80):
         result = adapter.dispatch('set_chaos_gate_desired', {'probability': value}, 'desired')
         assert result['chaosGateProbability'] == value
-    persisted = json.loads((context.data_dir.parent/'desired-state.json').read_text())
+    persisted = json.loads((context.data_dir/'desired-state.json').read_text())
     assert persisted['schemaVersion'] == DESIRED_STATE_SCHEMA_VERSION and persisted['chaosGateProbability'] == 80
     assert persisted['gatheringProbabilities'] == {'flora': 25}
     assert not {'ForceSecretDoor', 'ForceNextRoom', 'door', 'scopeToken'} & set(persisted)
@@ -85,7 +85,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     def execute(command, params):
         calls.append((command, copy.deepcopy(params)))
         if command == 'set_chaos_gate_probability':
-            assert json.loads((context.data_dir.parent/'desired-state.json').read_text())['chaosGateProbability'] == params['probability']
+            assert json.loads((context.data_dir/'desired-state.json').read_text())['chaosGateProbability'] == params['probability']
             adapter.state['chaosGateProbability'] = params['probability']
         return dict(adapter.state)
     adapter.execute = execute
@@ -171,7 +171,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
         assert record['kind'] == 'mutate'
         assert record['command'] == 'set_chaos_gate_probability'
         assert record['params'] == {'probability': 0}
-        assert json.loads((context.data_dir.parent/'desired-state.json').read_text())['chaosGateProbability'] == 0
+        assert json.loads((context.data_dir/'desired-state.json').read_text())['chaosGateProbability'] == 0
         return {'status': 'ready', 'scene': 'run', 'chaosGateProbability': 0}
 
     reply_session = FakeResidentSession(

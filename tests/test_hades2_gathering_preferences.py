@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     for family, percentage in valid.items():
         result = adapter.dispatch('set_gathering_desired', {'family': family, 'probability': percentage}, 'desired-'+family)
         assert result['gatheringProbabilities'][family] == percentage
-    persisted = json.loads((context.data_dir.parent/'desired-state.json').read_text())
+    persisted = json.loads((context.data_dir/'desired-state.json').read_text())
     assert persisted['schemaVersion'] == DESIRED_STATE_SCHEMA_VERSION and persisted['gatheringProbabilities'] == valid
     assert not {'gatheringTargets', 'scopeToken', 'generate_gathering'} & set(persisted)
     restarted = Hades2Adapter(context=context, resident_session=OfflineSession(), time_warp_controller=FakeTimeWarpController())
@@ -101,7 +101,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     def execute(command, params):
         calls.append((command, copy.deepcopy(params)))
         if command == 'set_gathering_probabilities':
-            assert json.loads((context.data_dir.parent/'desired-state.json').read_text())['gatheringProbabilities'] == params['probabilities']
+            assert json.loads((context.data_dir/'desired-state.json').read_text())['gatheringProbabilities'] == params['probabilities']
             adapter.state['gatheringProbabilities'] = dict(params['probabilities'])
         return dict(adapter.state)
     adapter.execute = execute

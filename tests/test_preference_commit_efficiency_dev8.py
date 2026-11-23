@@ -39,12 +39,12 @@ adapter.preference_store.save = counted_save
 save_count = 0
 adapter.set_desired('invincibility', True)
 assert save_count == 1, save_count
-assert json.loads((context.data_dir.parent/'desired-state.json').read_text())['invincibility'] is True
+assert json.loads((context.data_dir/'desired-state.json').read_text())['invincibility'] is True
 
 save_count = 0
 adapter.set_boon_rarity_desired({'target':'Epic','multiplier':100,'forceLegendary':True,'forceDuo':False})
 assert save_count == 1, save_count
-assert json.loads((context.data_dir.parent/'desired-state.json').read_text())['boonRarity']['forceLegendary'] is True
+assert json.loads((context.data_dir/'desired-state.json').read_text())['boonRarity']['forceLegendary'] is True
 
 save_count = 0
 adapter.dispatch(
@@ -53,7 +53,7 @@ adapter.dispatch(
     'world-exit-once',
 )
 assert save_count == 0, save_count
-persisted = json.loads((context.data_dir.parent/'desired-state.json').read_text())
+persisted = json.loads((context.data_dir/'desired-state.json').read_text())
 assert 'nextRoomReward' not in persisted and 'nextRoomRewardToken' not in persisted
 
 # Programming/schema failures after the durable commit are surfaced instead of

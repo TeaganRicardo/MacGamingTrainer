@@ -624,7 +624,7 @@ def _stopped_operation(name):
     def invoke(adapter, params):
         if adapter.runtime.alive():
             raise ValueError("请断开连接并退出游戏后操作。")
-        info = {"prepare": preparation.prepare, "restore": preparation.restore}[name](adapter.legacy_data_dir)
+        info = {"prepare": preparation.prepare, "restore": preparation.restore}[name](adapter.context.data_dir)
         return dict(adapter.scan(), operation=info)
 
     return invoke

@@ -24,7 +24,7 @@ precondition(HotkeyChord.defaultShortcut(index: 72)?.displayText == "⌃⌥⌘1"
 precondition(HotkeyChord.defaultShortcut(index: 108)?.displayText == "⌃⌥⇧⌘1")
 precondition(HotkeyChord.defaultShortcut(index: HotkeyChord.defaultShortcutCapacity - 1)?.displayText == "⌃⌥⇧⌘M")
 precondition(Hades2ShortcutStore.defaultLayout()[.disableAll]?.displayText == "⌃⌥⌫", "disable all keeps one fixed panic chord")
-precondition(HotkeyChord.controlOptionDefault(index: 9)?.displayText == "⌃⌥A", "legacy v4 defaults must remain frozen")
+precondition(Hades2ShortcutStore.controlOptionDefault(index: 9)?.displayText == "⌃⌥A", "legacy v4 defaults must remain frozen")
 precondition(HotkeyChord.defaultShortcut(index: HotkeyChord.defaultShortcutCapacity) == nil)
 let generatedDefaults = (0..<HotkeyChord.defaultShortcutCapacity).compactMap(HotkeyChord.defaultShortcut(index:))
 precondition(Set(generatedDefaults.map { "\($0.keyCode):\($0.modifiers)" }).count == HotkeyChord.defaultShortcutCapacity)
@@ -41,6 +41,10 @@ func unique(_ store: Hades2ShortcutStore) -> Bool {
 
 
 func shortcutKey(_ action: ShortcutAction) -> String {
+    "hades2.shortcut.action.\(action.rawValue)"
+}
+
+func unprefixedShortcutKey(_ action: ShortcutAction) -> String {
     "shortcut.action.\(action.rawValue)"
 }
 
@@ -49,7 +53,7 @@ func legacyShortcutKey(_ identity: String) -> String {
 }
 
 func legacyShortcutKey(_ action: ShortcutAction) -> String {
-    action == .invincibility ? "shortcut.action.godMode" : shortcutKey(action)
+    action == .invincibility ? "shortcut.action.godMode" : unprefixedShortcutKey(action)
 }
 
 func seedV3Defaults(_ defaults: UserDefaults, invincibilityOverride: Int? = nil) {
@@ -74,7 +78,7 @@ let legacyV4Order: [String] = [
 
 func legacyV4DefaultLayout() -> [String: HotkeyChord] {
     Dictionary(uniqueKeysWithValues: legacyV4Order.enumerated().compactMap { index, action in
-        HotkeyChord.controlOptionDefault(index: index).map { (action, $0) }
+        Hades2ShortcutStore.controlOptionDefault(index: index).map { (action, $0) }
     })
 }
 
@@ -231,9 +235,27 @@ precondition(partialWithExistingOverride.chord(.infiniteHealth) != custom)
 precondition(unique(partialWithExistingOverride))
 
 // Versioned preferences and Profile imports must never restore a stale panic
-// reassignment. Valid non-reserved explicit overrides remain in place.
+// reassignment. Valid non-reserved explicit overrides remain in place across v6 -> v7 migration
+// and v7 reload.
+let migratedV6Preferences = makeDefaults()
+migratedV6Preferences.set(6, forKey: "shortcut.layoutVersion")
+migratedV6Preferences.set(unrelatedChord.payload, forKey: unprefixedShortcutKey(.disableAll))
+migratedV6Preferences.set(samePhysical.payload, forKey: unprefixedShortcutKey(.spawnPickup))
+migratedV6Preferences.set(custom.payload, forKey: unprefixedShortcutKey(.invincibility))
+let migratedFromV6 = Hades2ShortcutStore(defaults: migratedV6Preferences)
+precondition(migratedFromV6.chord(.disableAll) == disableAllDefault)
+precondition(migratedFromV6.chord(.invincibility) == custom)
+precondition(migratedFromV6.chord(.spawnPickup) == Hades2ShortcutStore.defaultLayout()[.spawnPickup])
+precondition(migratedV6Preferences.integer(forKey: "hades2.shortcut.layoutVersion") == 7)
+precondition(migratedV6Preferences.object(forKey: "shortcut.layoutVersion") == nil)
+precondition(migratedV6Preferences.object(forKey: unprefixedShortcutKey(.invincibility)) == nil)
+precondition(migratedV6Preferences.object(forKey: shortcutKey(.invincibility)) != nil)
+precondition(migratedV6Preferences.object(forKey: shortcutKey(.disableAll)) == nil)
+precondition(migratedV6Preferences.object(forKey: shortcutKey(.spawnPickup)) == nil)
+precondition(unique(migratedFromV6))
+
 let savedPreferences = makeDefaults()
-savedPreferences.set(6, forKey: "shortcut.layoutVersion")
+savedPreferences.set(7, forKey: "hades2.shortcut.layoutVersion")
 savedPreferences.set(unrelatedChord.payload, forKey: shortcutKey(.disableAll))
 savedPreferences.set(samePhysical.payload, forKey: shortcutKey(.spawnPickup))
 savedPreferences.set(custom.payload, forKey: shortcutKey(.invincibility))
@@ -295,9 +317,8 @@ var sampleStore = TrainerShortcutStore<SampleShortcutAction>(
     defaultLayout: sampleDefaultsLayout,
     lockedActions: [.disableAll: TrainerHotkeyLayout.disableAllChord],
     storage: TrainerShortcutStorage(
-        read: { samplePrefs.object(forKey: "sample.shortcut.\($0.rawValue)") },
-        write: { samplePrefs.set($1, forKey: "sample.shortcut.\($0.rawValue)") },
-        remove: { samplePrefs.removeObject(forKey: "sample.shortcut.\($0.rawValue)") }
+        moduleID: "sample",
+        defaults: samplePrefs
     )
 )
 let sampleCustom = HotkeyChord(keyCode: 8, modifiers: HotkeyChord.commandModifier, keyLabel: "C")

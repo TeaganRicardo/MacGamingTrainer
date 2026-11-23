@@ -63,7 +63,7 @@ class ResidentHelperDriver:
 
 with tempfile.TemporaryDirectory(prefix="mgt-speed-observation-") as temporary:
     context = hades2_adapter_context(Path(temporary))
-    store = Hades2PreferenceStore(context.data_dir.parent / "desired-state.json")
+    context.data_dir.mkdir(parents=True, exist_ok=True); store = Hades2PreferenceStore(context.data_dir / "desired-state.json")
     store.save(store.defaults())
     driver = ResidentHelperDriver()
     controller = ProcessTimeWarpController(driver, Path(temporary) / "helper", ["Hades II"])

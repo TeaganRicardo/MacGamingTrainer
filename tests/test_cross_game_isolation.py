@@ -20,34 +20,6 @@ from generate_game_binding import generate_module_sources  # noqa: E402,I001
 from product_support import load_selection, swift_module_sources  # noqa: E402
 from swift_module_layout import SWIFT_APP_MODULE, SWIFT_CORE_MODULE  # noqa: E402
 
-
-# Existing unprefixed Hades II UserDefaults keys retained until #771 WP4.1
-# migrates `shortcut.*` to `hades2.shortcut.*` (v6 -> v7 migration).
-WP4_1_UNPREFIXED_USERDEFAULTS_ALLOWLIST: dict[str, frozenset[str]] = {
-    'hades2': frozenset(
-        {
-            'shortcut.layoutVersion',
-            'shortcut.action.godMode',
-            'shortcut.action.gardenQoL',
-            'shortcut.action.damageEnabled',
-            'shortcut.action.',
-        }
-    ),
-}
-
-# Pre-WP4.2 Hades II root data directory accesses retained until #771 WP4.2
-# moves desired-state.json / profiles / backups / diagnostics under data_dir.
-WP4_2_ROOT_DATA_DIR_ALLOWLIST: dict[str, frozenset[str]] = {
-    'hades2': frozenset(
-        {
-            'Backend/games/hades2/adapter.py',
-            'Backend/games/hades2/command_contract.py',
-            'Backend/games/hades2/diagnostics.py',
-            'Backend/games/hades2/preparation.py',
-        }
-    ),
-}
-
 _FINDER_DUPLICATE_RE = re.compile(r'^(.+) [2-9]\d*$')
 
 
@@ -587,413 +559,47 @@ def _strip_swift_comments(source: str) -> str:
     return ''.join(out)
 
 
-def _split_top_level(text: str, sep: str = ',') -> list[str]:
-    """Split `text` at top-level `sep` outside parens, brackets, braces, and Swift strings."""
-    parts: list[str] = []
-    depth = 0
-    cur_start = 0
-    i = 0
-    n = len(text)
-    while i < n:
-        span = _swift_string_span(text, i)
-        if span is not None:
-            i = span[0]
-            continue
-        c = text[i]
-        if c in '([{':
-            depth += 1
-        elif c in ')]}' and depth > 0:
-            depth -= 1
-        elif c == sep and depth == 0:
-            parts.append(text[cur_start:i])
-            cur_start = i + 1
-        i += 1
-    parts.append(text[cur_start:])
-    return parts
-
-
-def _parse_single_string_literal(expr: str) -> Optional[tuple[str, bool]]:
-    stripped = expr.strip()
-    span = _swift_string_span(stripped, 0)
-    if span is None:
-        return None
-    end_idx, parsed = span
-    if end_idx != len(stripped):
-        return None
-    return parsed
-
-
-def _split_top_level_ternary(expr: str) -> Optional[tuple[str, str]]:
-    """If `expr` is `cond ? whenTrue : whenFalse` at top level, return `(whenTrue, whenFalse)`."""
-    depth = 0
-    i = 0
-    n = len(expr)
-    q_idx: Optional[int] = None
-    ternary_depth = 0
-    while i < n:
-        span = _swift_string_span(expr, i)
-        if span is not None:
-            i = span[0]
-            continue
-        c = expr[i]
-        if c in '([{':
-            depth += 1
-        elif c in ')]}' and depth > 0:
-            depth -= 1
-        elif depth == 0:
-            if c == '?':
-                if q_idx is None:
-                    q_idx = i
-                else:
-                    ternary_depth += 1
-            elif c == ':' and q_idx is not None:
-                if ternary_depth == 0:
-                    return expr[q_idx + 1 : i].strip(), expr[i + 1 :].strip()
-                ternary_depth -= 1
-        i += 1
-    return None
-
-
-def _extract_swift_brace_block(code: str, brace_index: int) -> str:
-    depth = 0
-    i = brace_index
-    n = len(code)
-    while i < n:
-        span = _swift_string_span(code, i)
-        if span is not None:
-            i = span[0]
-            continue
-        c = code[i]
-        if c == '{':
-            depth += 1
-        elif c == '}':
-            depth -= 1
-            if depth == 0:
-                return code[brace_index : i + 1]
-        i += 1
-    return code[brace_index:]
-
-
-def _parse_call_args(args_text: str) -> list[tuple[Optional[str], str]]:
-    args: list[tuple[Optional[str], str]] = []
-    for raw in _split_top_level(args_text, ','):
-        part = raw.strip()
-        if not part:
-            continue
-        colon_parts = _split_top_level(part, ':')
-        if len(colon_parts) >= 2 and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', colon_parts[0].strip()):
-            label = colon_parts[0].strip()
-            value = ':'.join(colon_parts[1:]).strip()
-            args.append((label, value))
-        else:
-            args.append((None, part))
-    return args
-
-
-def _type_block_for(code: str, type_name: str) -> Optional[str]:
-    match = re.search(rf'\b(?:struct|class|enum|extension)\s+{re.escape(type_name)}\b[^{{]*\{{', code)
-    if not match:
-        return None
-    return _extract_swift_brace_block(code, match.end() - 1)
-
-
-def _body_return_expressions(body_inner: str) -> Optional[list[str]]:
-    """Extract return expressions from a helper body; return `None` if control flow leaves unreturned paths."""
-    stripped = body_inner.strip()
-    if not stripped:
-        return None
-    explicit_returns = [
-        match.group(1).strip() for match in re.finditer(r'(?:^|[;{}\n])\s*return\s+([^\n;]+)', stripped)
-    ]
-    if explicit_returns:
-        # Reject bodies that mix `if/guard` early returns with a trailing non-`return` statement
-        # or have control flow without explicit exhaustive returns.
-        lines = [ln.strip() for ln in stripped.splitlines() if ln.strip()]
-        if not lines or not lines[-1].startswith('return '):
-            return None
-        return explicit_returns
-    # Single-expression implicit return (no semicolons/multiple statements or `if`/`switch` blocks).
-    if '\n' not in stripped and ';' not in stripped:
-        return [stripped]
-    return None
-
-
-def _resolve_swift_key_expression(
-    file_code: str,
-    expr: str,
-    *,
-    module_code: str = '',
-    seen: Optional[set[str]] = None,
-) -> Optional[list[tuple[str, bool]]]:
-    stripped = expr.strip()
-    if not stripped:
-        return None
-    single = _parse_single_string_literal(stripped)
-    if single is not None:
-        return [single]
-
-    ternary = _split_top_level_ternary(stripped)
-    if ternary is not None:
-        left_keys = _resolve_swift_key_expression(file_code, ternary[0], module_code=module_code, seen=seen)
-        right_keys = _resolve_swift_key_expression(file_code, ternary[1], module_code=module_code, seen=seen)
-        if left_keys is None or right_keys is None:
-            return None
-        return left_keys + right_keys
-
-    seen = set() if seen is None else set(seen)
-    call_match = re.fullmatch(
-        r'(?:(Self|self|[A-Za-z_][A-Za-z0-9_]*)\.)?([A-Za-z_][A-Za-z0-9_]*)\((.*)\)',
-        stripped,
-        re.DOTALL,
-    )
-    if call_match:
-        qualifier, fn_name, _ = call_match.group(1), call_match.group(2), call_match.group(3)
-        visit_key = f'fn:{qualifier or ""}.{fn_name}'
-        if visit_key in seen:
-            return None
-        seen.add(visit_key)
-        search_scope = file_code
-        if qualifier and qualifier not in ('Self', 'self') and module_code:
-            scoped = _type_block_for(module_code, qualifier)
-            if scoped is not None:
-                search_scope = scoped
-        results: list[tuple[str, bool]] = []
-        fn_matches = list(
-            re.finditer(rf'\bfunc\s+{re.escape(fn_name)}\s*\([^)]*\)\s*(?:->\s*[^{{]+)?\{{', search_scope)
-        )
-        if not fn_matches:
-            return None
-        for fn_match in fn_matches:
-            block = _extract_swift_brace_block(search_scope, fn_match.end() - 1)
-            ret_exprs = _body_return_expressions(block[1:-1])
-            if not ret_exprs:
-                return None
-            for ret_expr in ret_exprs:
-                sub = _resolve_swift_key_expression(search_scope, ret_expr, module_code=module_code, seen=seen)
-                if sub is None:
-                    return None
-                results.extend(sub)
-        return results or None
-
-    prop_match = re.fullmatch(r'(?:(Self|self|[A-Za-z_][A-Za-z0-9_]*)\.)?([A-Za-z_][A-Za-z0-9_]*)', stripped)
-    if prop_match:
-        qualifier, prop_name = prop_match.group(1), prop_match.group(2)
-        visit_key = f'prop:{qualifier or ""}.{prop_name}'
-        if visit_key in seen:
-            return None
-        seen.add(visit_key)
-        # Unqualified bare parameter names (`prop_name: Type`) are dynamic and must never match local constants.
-        if not qualifier and re.search(rf'\b{re.escape(prop_name)}\s*:', file_code):
-            return None
-        search_scope = file_code
-        if qualifier and qualifier not in ('Self', 'self') and module_code:
-            scoped = _type_block_for(module_code, qualifier)
-            if scoped is not None:
-                search_scope = scoped
-        prop_pattern = rf'\b(?:let|var)\s+{re.escape(prop_name)}(?:\s*:\s*String)?\s*=\s*([^\n;{{]+)'
-        val_matches = list(re.finditer(prop_pattern, search_scope))
-        if not val_matches:
-            return None
-        results = []
-        for val_match in val_matches:
-            rhs = val_match.group(1).strip()
-            sub = _resolve_swift_key_expression(search_scope, rhs, module_code=module_code, seen=seen)
-            if sub is None:
-                return None
-            results.extend(sub)
-        return results or None
-
-    return None
-
-
-_USERDEFAULTS_KEYED_METHODS = frozenset(
-    {
-        'object',
-        'string',
-        'integer',
-        'bool',
-        'double',
-        'float',
-        'data',
-        'array',
-        'dictionary',
-        'url',
-        'stringArray',
-        'removeObject',
-        'set',
-        'setValue',
-        'value',
-        'objectIsForced',
-    }
+_SHORTCUT_STORAGE_CALL_RE = re.compile(r'TrainerShortcutStorage(?:\s*<[^>]+>)?\s*\(')
+_SHORTCUT_STORAGE_RE = re.compile(
+    r'TrainerShortcutStorage(?:\s*<[^>]+>)?\s*\(\s*moduleID\s*:\s*("([^"]+)"|([A-Za-z_][A-Za-z0-9_]*)\.descriptor\.id)'
 )
 
 
-def _collect_swift_user_defaults_receivers(module_code: str) -> set[str]:
-    receivers = {'defaults'}
-    for typed_match in re.finditer(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*:\s*UserDefaults\b', module_code):
-        receivers.add(typed_match.group(1))
-    for init_match in re.finditer(r'\b(?:let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*UserDefaults\b', module_code):
-        receivers.add(init_match.group(1))
-    return receivers
-
-
-def _resolve_dict_literal_keys(
-    dict_expr: str,
-    file_code: str,
-    *,
-    module_code: str,
-    context_label: str,
-) -> tuple[list[tuple[str, bool]], list[str]]:
-    stripped = dict_expr.strip()
-    if not (stripped.startswith('[') and stripped.endswith(']')):
-        return [], [f'{context_label}({stripped})']
-    inner = stripped[1:-1].strip()
-    if not inner or inner == ':':
-        return [], []
-    resolved: list[tuple[str, bool]] = []
-    unresolved: list[str] = []
-    for entry in _split_top_level(inner, ','):
-        item = entry.strip()
-        if not item:
-            continue
-        kv = _split_top_level(item, ':')
-        if len(kv) < 2:
-            unresolved.append(f'{context_label}({item})')
-            continue
-        keys = _resolve_swift_key_expression(file_code, kv[0].strip(), module_code=module_code)
-        if keys is None:
-            unresolved.append(kv[0].strip())
-        else:
-            resolved.extend(keys)
-    return resolved, unresolved
-
-
-def _scan_swift_user_defaults_keys(
-    swift_path: Path,
-    *,
-    module_code: Optional[str] = None,
-) -> tuple[list[tuple[str, bool]], list[str]]:
-    """Return `(resolved_keys, unresolved_expressions)` for UserDefaults / AppStorage sites."""
-    file_code = _strip_swift_comments(swift_path.read_text(encoding='utf-8'))
-    mod_code = file_code if module_code is None else module_code
-    resolved: list[tuple[str, bool]] = []
-    unresolved: list[str] = []
-
-    for match in re.finditer(r'@AppStorage\s*\(', file_code):
-        open_idx = match.end() - 1
-        end_idx = _skip_balanced_parens(file_code, open_idx)
-        args = _parse_call_args(file_code[open_idx + 1 : end_idx - 1])
-        positional = [val for label, val in args if label is None]
-        if len(positional) != 1:
-            unresolved.append(file_code[match.start() : end_idx].strip())
-            continue
-        keys = _resolve_swift_key_expression(file_code, positional[0], module_code=mod_code)
-        if keys is None:
-            unresolved.append(positional[0])
-        else:
-            resolved.extend(keys)
-
-    receivers = _collect_swift_user_defaults_receivers(mod_code)
-    receiver_group = '|'.join(sorted((re.escape(name) for name in receivers), key=len, reverse=True))
-    receiver_pattern = (
-        rf'(?:UserDefaults(?:\([^)]*\))?(?:\.(?:standard|globalDomain))?|(?:self\.)?(?:{receiver_group}))'
-    )
-
-    for match in re.finditer(rf'\b{receiver_pattern}(?:\?|!)?\.([A-Za-z_][A-Za-z0-9_]*)\s*\(', file_code):
-        method = match.group(1)
-        if method not in _USERDEFAULTS_KEYED_METHODS and method not in ('register', 'setValuesForKeys'):
-            continue
-        open_idx = match.end() - 1
-        end_idx = _skip_balanced_parens(file_code, open_idx)
-        call_args = _parse_call_args(file_code[open_idx + 1 : end_idx - 1])
-        if method == 'register':
-            defaults_args = [val for label, val in call_args if label == 'defaults']
-            if not defaults_args:
-                unresolved.append(file_code[match.start() : end_idx].strip())
-                continue
-            for arg_expr in defaults_args:
-                r_keys, u_keys = _resolve_dict_literal_keys(
-                    arg_expr, file_code, module_code=mod_code, context_label='register(defaults:)'
-                )
-                resolved.extend(r_keys)
-                unresolved.extend(u_keys)
-            continue
-        if method == 'setValuesForKeys':
-            if not call_args:
-                unresolved.append('setValuesForKeys()')
-            else:
-                r_keys, u_keys = _resolve_dict_literal_keys(
-                    call_args[0][1], file_code, module_code=mod_code, context_label='setValuesForKeys'
-                )
-                resolved.extend(r_keys)
-                unresolved.extend(u_keys)
-            continue
-        for label, value in call_args:
-            if label != 'forKey':
-                continue
-            keys = _resolve_swift_key_expression(file_code, value, module_code=mod_code)
-            if keys is None:
-                unresolved.append(value)
-            else:
-                resolved.extend(keys)
-
-    return resolved, unresolved
-
-
-def _is_key_allowed_for_module(key: str, is_template: bool, module_id: str) -> bool:
-    if key.startswith(f'{module_id}.'):
-        return True
-    allowlist = WP4_1_UNPREFIXED_USERDEFAULTS_ALLOWLIST.get(module_id, frozenset())
-    if is_template:
-        return any(key.startswith(entry) for entry in allowlist if entry.endswith('.'))
-    return key in allowlist
-
-
 def check_module_storage_keys(root: Path) -> list[str]:
-    """Enforce per-module UserDefaults/data-key prefixes with explicit #771 WP4.1 allowlist."""
+    """Enforce TrainerShortcutStorage moduleID ownership and Python context.data_dir isolation."""
     tracked = _git_tracked_paths(root)
     specs = _discover_manifests(root)
-    all_ids = {spec.id for spec in specs}
     errors: list[str] = []
 
     for spec in specs:
-        swift_files = _iter_swift_files(spec.frontend_dir, root, tracked)
-        module_code = '\n'.join(_strip_swift_comments(p.read_text(encoding='utf-8')) for p in swift_files)
-        for path in swift_files:
+        for path in _iter_swift_files(spec.frontend_dir, root, tracked):
             rel = path.relative_to(root).as_posix()
-            keys, unresolved = _scan_swift_user_defaults_keys(path, module_code=module_code)
-            for expr in unresolved:
-                errors.append(f'{rel}: unresolved UserDefaults key expression {expr!r} in module {spec.id!r}')
-            for key, is_template in keys:
-                if any(key.startswith(f'{other}.') for other in all_ids - {spec.id}):
-                    errors.append(f'{rel}: module {spec.id!r} wrote foreign module key {key!r}')
+            code = _strip_swift_comments(path.read_text(encoding='utf-8'))
+            if '@AppStorage' in code:
+                errors.append(f'{rel}: module {spec.id!r} must not use @AppStorage directly')
+            for match in _SHORTCUT_STORAGE_CALL_RE.finditer(code):
+                scoped = _SHORTCUT_STORAGE_RE.match(code, match.start())
+                if scoped is None:
+                    errors.append(f'{rel}: TrainerShortcutStorage in module {spec.id!r} must declare a static moduleID')
                     continue
-                if not _is_key_allowed_for_module(key, is_template, spec.id):
+                literal_id, descriptor_type = scoped.group(2), scoped.group(3)
+                if literal_id is not None and literal_id != spec.id:
                     errors.append(
-                        f'{rel}: UserDefaults/data key {key!r} in module {spec.id!r} must start with '
-                        f'{spec.id + "."!r} (unprefixed Hades II keys are limited to the #771 WP4.1 allowlist)'
+                        f'{rel}: TrainerShortcutStorage moduleID {literal_id!r} does not match module {spec.id!r}'
+                    )
+                elif descriptor_type is not None and descriptor_type != spec.module_type:
+                    errors.append(
+                        f'{rel}: TrainerShortcutStorage descriptor type {descriptor_type!r} '
+                        f'does not match {spec.module_type!r}'
                     )
 
-    core_files = _iter_swift_files(root / 'Sources' / 'Core', root, tracked)
-    core_code = '\n'.join(_strip_swift_comments(p.read_text(encoding='utf-8')) for p in core_files)
-    for path in core_files:
-        rel = path.relative_to(root).as_posix()
-        keys, unresolved = _scan_swift_user_defaults_keys(path, module_code=core_code)
-        for expr in unresolved:
-            errors.append(f'{rel}: unresolved Core UserDefaults key expression {expr!r}')
-        for key, _is_template in keys:
-            for gid in sorted(all_ids):
-                if key.startswith(f'{gid}.'):
-                    errors.append(f'{rel}: Core UserDefaults key {key!r} uses game module prefix {gid + "."!r}')
-
     # Python data-directory isolation: modules must use context.data_dir (MacGamingTrainer/<game_id>/),
-    # never root trainer_data_root() / legacy_data_dir except pre-WP4.2 allowlisted files.
+    # never root trainer_data_root() / legacy_data_dir.
     for spec in specs:
-        allowed_files = WP4_2_ROOT_DATA_DIR_ALLOWLIST.get(spec.id, frozenset())
         for path in _iter_python_files(spec.backend_dir, root, tracked):
             rel = path.relative_to(root).as_posix()
             src = _non_comment_python_text(path)
-            if ('trainer_data_root' in src or 'legacy_data_dir' in src) and rel not in allowed_files:
+            if 'trainer_data_root' in src or 'legacy_data_dir' in src:
                 errors.append(f'{rel}: module {spec.id!r} uses root data dir outside context.data_dir')
             tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
             for node in ast.walk(tree):
@@ -1166,78 +772,28 @@ with tempfile.TemporaryDirectory(prefix='mgt-isolation-synth-') as tmp:
     (fx_dir / 'frontend/Ref.swift').write_text('let leak = "AlphaGameModule"\n', encoding='utf-8')
     assert any('fixture mentions real module tokens' in err for err in check_manifest_derived_identities(synth))
     (fx_dir / 'frontend/Ref.swift').write_text(
-        'import SwiftUI\n'
-        'struct V { @AppStorage("ref_fix.ok", store: UserDefaults(suiteName: "com.example")) var x = true }\n',
+        'import Foundation\n'
+        'let s = TrainerShortcutStorage<Action>(moduleID: RefGameModule.descriptor.id, defaults: .standard)\n',
         encoding='utf-8',
     )
     assert check_manifest_derived_identities(synth) == []
     assert check_module_storage_keys(synth) == []
 
-    # 3d. Storage keys: helper fail-open paths, @AppStorage, register(defaults:),
-    # raw strings, optional chaining, and cross-file receivers.
+    # 3d. Storage boundary: TrainerShortcutStorage moduleID ownership and @AppStorage rejection.
     bad_swift = synth / 'Sources/Alpha/BadStore.swift'
-    failing_swift_snippets = [
-        'import Foundation\nfunc f(d: UserDefaults) { d.set(true, forKey: "unprefixedKey") }\n',
-        'import SwiftUI\nstruct V { @AppStorage("beta.stolen") var x = false }\n',
-        (
-            'import SwiftUI\n'
-            'struct V { @AppStorage(dynKey, store: UserDefaults(suiteName: "alpha.suite")) var x = false }\n'
-        ),
-        'import Foundation\nfunc f(d: UserDefaults, k: String) { d.set(true, forKey: k) }\n',
-        (
-            'import Foundation\nfunc id(_ s: String) -> String { return s }\n'
-            'func f(d: UserDefaults, s: String) { d.set(true, forKey: id(s)) }\n'
-        ),
-        (
-            'import Foundation\n'
-            'func partial(_ b: Bool, _ s: String) -> String { if b { return "alpha.ok" }\nreturn s }\n'
-            'func f(d: UserDefaults, s: String) { d.set(true, forKey: partial(false, s)) }\n'
-        ),
-        'import Foundation\nfunc save(d: UserDefaults, k: String) { d.set(1, forKey: k) }\nlet k = "alpha.shadow"\n',
-        'import Foundation\nfunc f(d: UserDefaults) { d.register(defaults: ["alpha.arr": [1, 2], "unprefixed": 3]) }\n',
-        'import Foundation\nfunc f(d: UserDefaults, dk: String) { d.register(defaults: [dk: 1]) }\n',
-        'import Foundation\nfunc f(ud: UserDefaults?) { ud?.set(true, forKey: "unprefixed") }\n',
-        (
-            'import Foundation\nlet x = #"quote " /* unclosed"#\n'
-            'func f(d: UserDefaults) { d.set(true, forKey: "unprefixed") }\n'
-        ),
-        (
-            'import Foundation\n'
-            'func f(d: UserDefaults) { let y = "a \\(helper("//")) b"; d.set(true, forKey: "unprefixed") }\n'
-        ),
-    ]
-    for snippet in failing_swift_snippets:
+    for snippet in (
+        'import SwiftUI\nstruct V { @AppStorage("alpha.x") var x = false }\n',
+        'import Foundation\nlet s = TrainerShortcutStorage<A>(moduleID: "beta", defaults: .standard)\n',
+        'import Foundation\nlet s = TrainerShortcutStorage<A>(moduleID: dynID, defaults: .standard)\n',
+    ):
         bad_swift.write_text(snippet, encoding='utf-8')
         assert check_module_storage_keys(synth), f'expected storage key check failure for:\n{snippet}'
-
-    # Valid tricky Swift patterns must NOT false-positive.
-    valid_swift_snippets = [
-        (
-            'import Foundation\nfunc extract(forKey x: String) -> Int { 1 }\n'
-            'func f(d: UserDefaults) { d.set(extract(forKey: "notUD"), forKey: "alpha.real") }\n'
-        ),
-        'import Foundation\nfunc f(d: UserDefaults) { d.set(true, forKey: """alpha.multi""") }\n',
-        (
-            'import SwiftUI\n'
-            'struct V { @AppStorage(wrappedValue: "dark", "alpha.theme", '
-            'store: UserDefaults(suiteName: "com.example.app")) var t: String = "dark" }\n'
-        ),
-    ]
-    for snippet in valid_swift_snippets:
-        bad_swift.write_text(snippet, encoding='utf-8')
-        assert check_module_storage_keys(synth) == [], f'unexpected false positive on:\n{snippet}'
+    bad_swift.write_text(
+        'import Foundation\nlet s = TrainerShortcutStorage<A>(moduleID: "alpha", defaults: .standard)\n',
+        encoding='utf-8',
+    )
+    assert check_module_storage_keys(synth) == []
     bad_swift.unlink()
-
-    # Cross-file receiver in another Swift file of the same module must still be checked.
-    (synth / 'Sources/Alpha/Holder.swift').write_text(
-        'import Foundation\nlet sharedUD = UserDefaults.standard\n', encoding='utf-8'
-    )
-    (synth / 'Sources/Alpha/Ext.swift').write_text(
-        'func save() { sharedUD.set(true, forKey: "unprefixed") }\n', encoding='utf-8'
-    )
-    assert any('unprefixed' in err for err in check_module_storage_keys(synth))
-    (synth / 'Sources/Alpha/Holder.swift').unlink()
-    (synth / 'Sources/Alpha/Ext.swift').unlink()
 
     (synth / 'Sources/Core/BadVocab.swift').write_text(
         'import SwiftUI\nstruct TrainerBoonLayout {}\n', encoding='utf-8'
@@ -1245,28 +801,17 @@ with tempfile.TemporaryDirectory(prefix='mgt-isolation-synth-') as tmp:
     assert any('Hades-family vocabulary' in err for err in check_manifest_derived_identities(synth))
     (synth / 'Sources/Core/BadVocab.swift').unlink()
 
-    # Core must not write a module-prefixed UserDefaults key.
-    (synth / 'Sources/Core/BadCore.swift').write_text(
-        'import Foundation\nfunc c(d: UserDefaults) { d.set(1, forKey: "alpha.bad") }\n', encoding='utf-8'
-    )
-    assert any('game module prefix' in err for err in check_module_storage_keys(synth))
-    (synth / 'Sources/Core/BadCore.swift').unlink()
-
     # 3e. Root / foreign data directory escapes must fail (`trainer_data_root`,
-    # `trainer_data_directory`, `trainer_log_directory`).
+    # `legacy_data_dir`, `trainer_data_directory`, `trainer_log_directory`).
     for bad_py in (
         'from core.log_paths import trainer_data_root\nROOT_DIR = trainer_data_root()\n',
+        'def f(self): return self.legacy_data_dir\n',
         'from core.log_paths import trainer_data_directory\nDIR = trainer_data_directory(game_id="beta")\n',
         'from core.log_paths import trainer_log_directory\nLOGS = trainer_log_directory("beta")\n',
     ):
         (synth / 'Backend/games/alpha/store.py').write_text(bad_py, encoding='utf-8')
         assert check_module_storage_keys(synth), f'expected data-dir failure for {bad_py!r}'
     (synth / 'Backend/games/alpha/store.py').unlink()
-
-    # 3f. WP4.1 allowlist allows existing `shortcut.*` keys in `hades2` only, rejecting unlisted ones.
-    assert _is_key_allowed_for_module('shortcut.layoutVersion', False, 'hades2')
-    assert not _is_key_allowed_for_module('shortcut.newUnlistedKey', False, 'hades2')
-    assert not _is_key_allowed_for_module('shortcut.layoutVersion', False, 'alpha')
 
     # 3g. Tools/games/<id>/ isolation catches relative & absolute foreign imports,
     # token leaks, and unowned top-level Tools/ scripts referencing a game module.
