@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
-from core.process_time_warp import ProcessTimeWarpError
+from core.process_time_warp import ProcessTimeWarpError, time_warp_helper_path
 from core.save_resolution import SaveProviderContext
 from core.structured_save_edit import SaveEditorWorkspaceRegistry
 from core.target_probe import AmbiguousTargetError, BoundedCommandTimeoutError, locate_target
@@ -135,7 +135,7 @@ class Hades2Adapter(GameAdapter):
         if time_warp_controller is None:
             if transport is None:
                 raise ValueError('time_warp_controller is required with an injected resident_session.')
-            helper_path=Path(__file__).resolve().parents[2]/'core/native/libMGTTimeWarp.dylib'
+            helper_path=time_warp_helper_path()
             time_warp_controller=transport.create_time_warp_controller(
                 helper_path,[GAME_EXECUTABLE_NAME]
             )

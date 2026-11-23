@@ -1,4 +1,4 @@
-"""Shared LLDB driver for the Core-owned Process Time Warp controller."""
+"""Optional debugger-package LLDB driver for the Process Time Warp capability."""
 from __future__ import annotations
 
 import importlib

@@ -16,7 +16,7 @@ import verify_module_build
 from generate_game_binding import generate_module_sources
 from swift_module_layout import SWIFT_APP_MODULE
 from module_support import ManifestError
-from build_module_native import build_libraries
+from build_module_native import build_libraries, build_process_time_warp
 
 
 with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
@@ -165,6 +165,55 @@ with tempfile.TemporaryDirectory(prefix='mgt-product-build-') as temporary:
     else:
         raise AssertionError('A divergent packaged debugger driver was accepted')
     driver.write_bytes(original_driver)
+    assert not (resources / 'Backend/core/native').exists()
+    time_warp_src = project / 'Native/ProcessTimeWarp'
+    (time_warp_src / 'vendor/fishhook').mkdir(parents=True)
+    for rel in ('ProcessTimeWarp.c', 'vendor/fishhook/fishhook.c', 'vendor/fishhook/LICENSE'):
+        shutil.copy2(ROOT / 'Native/ProcessTimeWarp' / rel, time_warp_src / rel)
+    tw_arches = []
+    def run_tw_tool(command, **kwargs):
+        if command[0] == 'fixture-clang':
+            tw_arches.append(command[command.index('-arch') + 1])
+            Path(command[command.index('-o') + 1]).write_bytes(b'compiled time warp fixture')
+    with patch('build_module_native.subprocess.run', side_effect=run_tw_tool):
+        assert not build_process_time_warp(
+            product_support.load_selection().normalized(),
+            time_warp_src, project,
+            output_dir=resources / 'Backend/core/native',
+            clang='fixture-clang', sdk='fixture-sdk',
+            architectures=['arm64'], minimum_macos='14.0',
+        )
+    assert tw_arches == []
+    declaration['buildRequirements'] = {'lldbPython': True, 'processTimeWarp': True}
+    module_path.write_text(json.dumps(declaration))
+    shutil.copy2(module_path, resources / 'Backend/games/one/module.json')
+    try:
+        verify_module_build.verify_module_build('all', dist)
+    except ValueError as error:
+        assert 'Process Time Warp' in str(error), error
+    else:
+        raise AssertionError('A package missing its declared Process Time Warp helper was accepted')
+    with patch('build_module_native.subprocess.run', side_effect=run_tw_tool):
+        assert build_process_time_warp(
+            product_support.load_selection().normalized(),
+            time_warp_src, project,
+            output_dir=resources / 'Backend/core/native',
+            clang='fixture-clang', sdk='fixture-sdk',
+            architectures=['arm64'], minimum_macos='14.0',
+        )
+    assert tw_arches == ['arm64'], tw_arches
+    assert verify_module_build.verify_module_build('all', dist) == app.resolve()
+    declaration['buildRequirements'] = {'lldbPython': True, 'processTimeWarp': False}
+    module_path.write_text(json.dumps(declaration))
+    shutil.copy2(module_path, resources / 'Backend/games/one/module.json')
+    try:
+        verify_module_build.verify_module_build('all', dist)
+    except ValueError as error:
+        assert 'Unrequested Process Time Warp' in str(error), error
+    else:
+        raise AssertionError('An unrequested packaged Process Time Warp helper was accepted')
+    shutil.rmtree(resources / 'Backend/core/native')
+    assert verify_module_build.verify_module_build('all', dist) == app.resolve()
     (resources / 'GAME_MODULES.json').write_text(json.dumps(['one']))
     try:
         verify_module_build.verify_module_build('all', dist)

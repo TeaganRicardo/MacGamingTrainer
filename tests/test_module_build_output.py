@@ -56,6 +56,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
     (games / 'module.json').write_text(MANIFEST_PATH.read_text())
     if MANIFEST.get('buildRequirements', {}).get('lldbPython', False):
         shutil.copytree(ROOT / 'Backend/debugger', resources / 'Backend/debugger')
+    if MANIFEST.get('buildRequirements', {}).get('processTimeWarp', False):
+        time_warp_dir = resources / 'Backend/core/native'
+        time_warp_dir.mkdir(parents=True, exist_ok=True)
+        (time_warp_dir / 'libMGTTimeWarp.dylib').write_bytes(b'temporary time warp helper fixture')
+        shutil.copy2(ROOT / 'Native/ProcessTimeWarp/vendor/fishhook/LICENSE', time_warp_dir / 'LICENSE.fishhook')
     for library in MANIFEST.get('nativeLibraries', []):
         native = games / 'native' / library['filename']
         native.parent.mkdir(exist_ok=True)

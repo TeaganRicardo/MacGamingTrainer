@@ -74,6 +74,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
     assert normalized['nativeLibraries'] == []
     assert normalized['buildRequirements'] == {
         'lldbPython': False,
+        'processTimeWarp': False,
         'debuggerEntitlement': False,
         'entitlements': '',
     }

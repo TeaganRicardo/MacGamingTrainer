@@ -59,6 +59,7 @@ class BuildRequirements:
     debugger_entitlement: bool
     entitlements: str
     test_prerequisites: tuple = ()
+    process_time_warp: bool = False
 
 
 @dataclass(frozen=True)
@@ -244,7 +245,12 @@ def load_manifest(game_id: str) -> BuildManifest:
         raise ManifestError('buildRequirements must be an object.')
     lldb_python = req.get('lldbPython', False)
     debugger_entitlement = req.get('debuggerEntitlement', False)
-    if type(lldb_python) is not bool or type(debugger_entitlement) is not bool:
+    process_time_warp = req.get('processTimeWarp', False)
+    if (
+        type(lldb_python) is not bool
+        or type(debugger_entitlement) is not bool
+        or type(process_time_warp) is not bool
+    ):
         raise ManifestError('build requirement flags must be boolean.')
     entitlements = req.get('entitlements', '')
     if entitlements:
@@ -265,7 +271,13 @@ def load_manifest(game_id: str) -> BuildManifest:
         if not (ROOT / 'Tools' / 'ci_prerequisites' / f'{prereq}.sh').is_file():
             raise ManifestError(f'buildRequirements.testPrerequisites references unknown prerequisite: {prereq!r}.')
         test_prerequisites.append(prereq)
-    requirements = BuildRequirements(lldb_python, debugger_entitlement, entitlements, tuple(test_prerequisites))
+    requirements = BuildRequirements(
+        lldb_python,
+        debugger_entitlement,
+        entitlements,
+        tuple(test_prerequisites),
+        process_time_warp=process_time_warp,
+    )
 
     resources_value = raw.get('appResources', [])
     if not isinstance(resources_value, list):
@@ -388,6 +400,7 @@ def normalized_manifest(manifest: BuildManifest) -> dict:
         },
         'buildRequirements': {
             'lldbPython': manifest.requirements.lldb_python,
+            'processTimeWarp': manifest.requirements.process_time_warp,
             'debuggerEntitlement': manifest.requirements.debugger_entitlement,
             'entitlements': manifest.requirements.entitlements,
         },

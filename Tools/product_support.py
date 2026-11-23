@@ -58,6 +58,7 @@ class BuildSelection:
             },
             'buildRequirements': {
                 'lldbPython': any(module.requirements.lldb_python for module in self.modules),
+                'processTimeWarp': any(module.requirements.process_time_warp for module in self.modules),
                 'debuggerEntitlement': any(module.requirements.debugger_entitlement for module in self.modules),
                 'entitlements': list(dict.fromkeys(
                     module.requirements.entitlements for module in self.modules
