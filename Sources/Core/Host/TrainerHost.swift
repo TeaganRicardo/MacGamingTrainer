@@ -5,24 +5,17 @@ import SwiftUI
 struct TrainerHostView<Module: TrainerGameModule>: View {
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
-    private let context: TrainerGameContext<Module>
+    @ObservedObject private var context: TrainerGameContext<Module>
     @ObservedObject private var model: Module.Model
     @ObservedObject private var targetMonitor: TrainerTargetProcessMonitor
     @ObservedObject private var saveManager: TrainerSaveManagerModel
     private var toolWindows: TrainerToolWindowStore { context.toolWindows }
 
     init(context: TrainerGameContext<Module>) {
-        self.context = context
+        _context = ObservedObject(wrappedValue: context)
         _model = ObservedObject(wrappedValue: context.model)
         _targetMonitor = ObservedObject(wrappedValue: context.targetMonitor)
         _saveManager = ObservedObject(wrappedValue: context.saveManager)
-    }
-
-    private var managementActions: TrainerManagementActions {
-        guard Module.descriptor.supportsSaveManagement else { return .none }
-        return TrainerManagementActions(openSaveManagement: {
-            context.openSaveManagement(localization: localization, theme: theme)
-        })
     }
 
     var body: some View {
@@ -32,7 +25,6 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                     TrainerHostWorkbenchSearch(catalog: search)
                 }
                 Module.makeContent(model: model)
-                    .environment(\.trainerManagementActions, managementActions)
                     .environment(\.trainerManagementGroups,
                                  context.managementGroups(localization: localization, theme: theme))
             }

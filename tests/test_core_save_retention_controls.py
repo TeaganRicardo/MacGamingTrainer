@@ -148,18 +148,18 @@ final class HostSaveStubModel: ObservableObject, TrainerHostModel {
 }
 
 private struct ManagementProbeView: View {
-    @Environment(\.trainerManagementActions) private var managementActions
-    let onCapture: (TrainerManagementActions) -> Void
+    @Environment(\.trainerManagementGroups) private var managementGroups
+    let onCapture: ([TrainerManagementGroup]) -> Void
 
     var body: some View {
         Color.clear
             .frame(width: 1, height: 1)
-            .onAppear { onCapture(managementActions) }
+            .onAppear { onCapture(managementGroups) }
     }
 }
 
 enum HostSaveProbeBridge {
-    nonisolated(unsafe) static var captured: TrainerManagementActions?
+    nonisolated(unsafe) static var captured: [TrainerManagementGroup]?
 }
 
 struct HostUnsupportedSaveModule: TrainerGameModule {
@@ -171,6 +171,13 @@ struct HostUnsupportedSaveModule: TrainerGameModule {
     )
     static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> HostSaveStubModel { HostSaveStubModel() }
+    static func makeManagementCatalog(
+        model: HostSaveStubModel,
+        localization: TrainerLocalizationStore,
+        toolWindows: TrainerToolWindowActions
+    ) -> TrainerManagementCatalog? {
+        TrainerManagementCatalog()
+    }
     static func makeContent(model: HostSaveStubModel) -> some View {
         ManagementProbeView { HostSaveProbeBridge.captured = $0 }
     }
@@ -187,6 +194,13 @@ struct HostSupportedSaveModule: TrainerGameModule {
     )
     static let presentation = TrainerGamePresentation()
     static func makeModel(services: TrainerModuleServices) -> HostSaveStubModel { HostSaveStubModel() }
+    static func makeManagementCatalog(
+        model: HostSaveStubModel,
+        localization: TrainerLocalizationStore,
+        toolWindows: TrainerToolWindowActions
+    ) -> TrainerManagementCatalog? {
+        TrainerManagementCatalog()
+    }
     static func makeContent(model: HostSaveStubModel) -> some View {
         ManagementProbeView { HostSaveProbeBridge.captured = $0 }
     }
@@ -503,8 +517,8 @@ struct Main {
         wait("unsupported TrainerHostView did not mount management environment") {
             HostSaveProbeBridge.captured != nil
         }
-        check(HostSaveProbeBridge.captured?.openSaveManagement == nil,
-              "supportsSaveManagement=false exposed openSaveManagement")
+        check(HostSaveProbeBridge.captured?.flatMap(\.actions).contains(where: { $0.id == "saveManagement" }) == false,
+              "supportsSaveManagement=false exposed saveManagement action")
         unsupportedWindow.close()
 
         HostSaveProbeBridge.captured = nil
@@ -542,11 +556,14 @@ struct Main {
               namedNativeControl(sidebarHost, role: "AXButton", name: saveMgmtTitle) == nil,
               "Host sidebar unexpectedly presented Save Management")
 
+        var capturedSaveAction: TrainerManagementAction? {
+            HostSaveProbeBridge.captured?.flatMap(\.actions).first(where: { $0.id == "saveManagement" })
+        }
         wait("supported TrainerHostView did not mount management environment") {
-            HostSaveProbeBridge.captured?.openSaveManagement != nil
+            capturedSaveAction != nil
         }
         let listsBeforeOpen = requests("core.save.list", log: log).count
-        HostSaveProbeBridge.captured?.openSaveManagement?()
+        capturedSaveAction?.perform()
         wait("Save Management tool window did not open and refresh") {
             requests("core.save.list", log: log).count == listsBeforeOpen + 1 &&
                 !supportedContext.saveManager.busy &&

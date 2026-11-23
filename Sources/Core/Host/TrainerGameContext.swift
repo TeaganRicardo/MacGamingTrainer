@@ -266,7 +266,7 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     }
 
     func openSaveManagement(localization: TrainerLocalizationStore, theme: TrainerTheme) {
-        guard Module.descriptor.supportsSaveManagement else { return }
+        guard Module.descriptor.supportsSaveManagement, canOpenSaveManagementFromHost else { return }
         toolWindows.open(
             id: "host-save-management",
             title: localization.localized("host.saveManagement"),

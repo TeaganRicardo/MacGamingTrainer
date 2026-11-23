@@ -237,7 +237,9 @@ package struct TrainerManagementGroups: View {
                 if index > 0 { Divider() }
                 let group = groups[index]
                 VStack(alignment: .leading, spacing: theme.controlPadding) {
-                    Text(group.title).font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                    if !group.title.isEmpty {
+                        Text(group.title).font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                    }
                     ForEach(group.rows.indices, id: \.self) { rowIndex in
                         let row = group.rows[rowIndex]
                         if let note = row.note {

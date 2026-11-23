@@ -28,23 +28,6 @@ package struct GameModuleDescriptor: Identifiable, Hashable, Sendable {
     }
 }
 
-package struct TrainerManagementActions {
-    package let openSaveManagement: (() -> Void)?
-
-    static let none = TrainerManagementActions(openSaveManagement: nil)
-}
-
-private struct TrainerManagementActionsKey: EnvironmentKey {
-    static let defaultValue = TrainerManagementActions.none
-}
-
-extension EnvironmentValues {
-    package var trainerManagementActions: TrainerManagementActions {
-        get { self[TrainerManagementActionsKey.self] }
-        set { self[TrainerManagementActionsKey.self] = newValue }
-    }
-}
-
 package struct TrainerGamePresentation: Hashable {
     let sidebarIconSystemName: String
 
@@ -298,12 +281,4 @@ extension TrainerGameModule {
     @MainActor package static var managedBackupEditor: (@MainActor (Model, TrainerSaveSnapshot) -> TrainerToolWindowContent)? { nil }
     /// A module without its own namespace has no module-owned text to resolve.
     package static var presentationKeyPrefix: String { "" }
-}
-
-package struct TrainerEmptyCommands: Commands {
-    package init() {}
-
-    package var body: some Commands {
-        CommandGroup(after: .appInfo) { EmptyView() }
-    }
 }
