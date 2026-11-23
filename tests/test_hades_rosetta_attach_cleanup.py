@@ -289,14 +289,24 @@ with tempfile.TemporaryDirectory(prefix='hades-timeouts-') as directory:
         ('time_warp.set_speed', 22),
     ] + [(command, 50) for command in DEFERRED_TRAIT_COMMANDS], sidecar.recorded
 
+from games.hades.command_contract import command_budget_audit, command_metadata
+
 hades_module_swift = (ROOT / 'Sources/Hades/HadesModule.swift').read_text(encoding='utf-8')
-assert 'case "connect": return 190' in hades_module_swift and 190 > 90 + 4 * 22
-assert 'case "load_profile": return 120' in hades_module_swift and 120 > 5 * 22
-deferred_case = ', '.join(f'"{command}"' for command in ('add_trait', 'update_trait', 'remove_trait', 'set_trait_uses', 'expire_trait', 'refresh_trait', 'add_chaos_pair'))
-assert f'case {deferred_case}: return 60' in hades_module_swift and 60 > 50
+hades_command_swift = (ROOT / 'Sources/Hades/Generated/HadesCommand.generated.swift').read_text(encoding='utf-8')
+assert 'request.command.timeout' in hades_module_swift
+metadata = {row['name']: row for row in command_metadata()}
+assert metadata['connect']['timeoutSeconds'] == 190.0 and 190 > 90 + 4 * 22
+assert metadata['load_profile']['timeoutSeconds'] == 120.0 and 120 > 5 * 22
+for command in ('add_trait', 'update_trait', 'remove_trait', 'set_trait_uses', 'expire_trait', 'refresh_trait', 'add_chaos_pair'):
+    assert metadata[command]['timeoutSeconds'] == 60.0 and 60 > 50, command
 assert set(('add_trait', 'update_trait', 'remove_trait', 'set_trait_uses', 'expire_trait', 'refresh_trait', 'add_chaos_pair')) == set(DEFERRED_TRAIT_COMMANDS)
-assert 'case "set_feature", "disable_all", "lock_vital", "lock_resource", "lock_rerolls", "set_value": return 55' in hades_module_swift and 55 > 2 * 22
-assert 'default: return 30' in hades_module_swift and 30 > 22
+for command in ('set_feature', 'disable_all', 'lock_vital', 'lock_resource', 'lock_rerolls', 'set_value'):
+    assert metadata[command]['timeoutSeconds'] == 55.0 and 55 > 2 * 22, command
+assert metadata['status']['timeoutSeconds'] == 30.0 and 30 > 22
+assert 'case .connect: return 190.0' in hades_command_swift
+assert 'default: return 30.0' in hades_command_swift
+for row in command_budget_audit():
+    assert row['timeoutSeconds'] > row['worstCaseInnerSeconds'], row
 
 
 # 5. _boundary() must grant _resume()/breakpoint wait a fresh 3s budget after _stop()

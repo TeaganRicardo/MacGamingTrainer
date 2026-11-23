@@ -5,6 +5,7 @@ from pathlib import Path
 
 from core.adapter import AdapterError
 from .native_library import load_native_library
+from .operation_budgets import LUA_CLEANUP_TIMEOUT_SECONDS, LUA_EXPRESSION_TIMEOUT_SECONDS
 
 
 # These values mirror MGTMailboxInstallStatus in native/MailboxProtocol.h.
@@ -113,7 +114,7 @@ def install_command_mailbox(transport, lldb, mailbox, library):
         options.SetLanguage(lldb.eLanguageTypeC_plus_plus)
         options.SetStopOthers(True)
         options.SetTryAllThreads(False)
-        options.SetTimeoutInMicroSeconds(2_000_000)
+        options.SetTimeoutInMicroSeconds(int(LUA_EXPRESSION_TIMEOUT_SECONDS * 1_000_000))
         options.SetIgnoreBreakpoints(True)
         options.SetUnwindOnError(True)
         result = thread.GetFrameAtIndex(0).EvaluateExpression(expression, options)
@@ -135,11 +136,11 @@ def install_command_mailbox(transport, lldb, mailbox, library):
             transport.target.BreakpointDelete(breakpoint.GetID())
         if not initial_stop_failed and transport.process and transport.alive():
             try:
-                transport.stop(time.monotonic() + 3, phase="mailbox.install_cleanup")
+                transport.stop(time.monotonic() + LUA_CLEANUP_TIMEOUT_SECONDS, phase="mailbox.install_cleanup")
                 transport.restore_focus()
                 if scratch is not None:
                     transport.process.DeallocateMemory(scratch)
-                transport.resume(time.monotonic() + 3)
+                transport.resume(time.monotonic() + LUA_CLEANUP_TIMEOUT_SECONDS)
             except BaseException:
                 mailbox.poison()
                 transport.tainted = True

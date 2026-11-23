@@ -18,6 +18,7 @@ import time
 from core.adapter import AdapterError
 from core.operation_profile import record
 from .config import LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
+from .operation_budgets import LUA_EXPRESSION_TIMEOUT_SECONDS
 
 
 OK, EMPTY, BUSY, STALE, INVALID, CLOSED, POISONED, DUPLICATE, CAPACITY = range(9)
@@ -205,7 +206,7 @@ class Hades2CommandMailbox:
             raise AdapterError("lua_error", text or "hades2.error.luaFailed")
         return text
 
-    def execute(self, source, *, timeout_seconds=2.0):
+    def execute(self, source, *, timeout_seconds=LUA_EXPRESSION_TIMEOUT_SECONDS):
         if self.tainted:
             raise AdapterError("restart_required", "hades2.error.restartRequired")
         if self._closed or not self.installed:

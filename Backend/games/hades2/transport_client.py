@@ -14,6 +14,7 @@ from core.adapter import AdapterError
 from core.sidecar import JsonLineSidecarClient, SidecarStartError, SidecarTerminalError
 
 from .config import LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS
+from .operation_budgets import LUA_EXPRESSION_TIMEOUT_SECONDS
 
 
 _WORKER_PROTOCOL_VERSION = 1
@@ -379,7 +380,7 @@ class Hades2LuaTransport:
             return
         self._call("transport.detach")
 
-    def execute(self, source, *, expression_timeout_seconds=2.0):
+    def execute(self, source, *, expression_timeout_seconds=LUA_EXPRESSION_TIMEOUT_SECONDS):
         return self._call(
             "transport.execute",
             {

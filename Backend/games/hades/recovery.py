@@ -5,8 +5,7 @@ import tempfile
 
 from core.adapter import AdapterError
 from core.target_probe import bounded_run
-
-PROCESS_IDENTITY_TIMEOUT_SECONDS = 2.0
+from .operation_budgets import PROCESS_IDENTITY_TIMEOUT_SECONDS
 
 
 def process_identity(pid):

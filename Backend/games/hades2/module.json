@@ -6,6 +6,11 @@
   "backend": {
     "adapter": "games.hades2.adapter:Hades2Adapter"
   },
+  "commandContract": {
+    "metadata": "games.hades2.command_contract:command_metadata",
+    "enumName": "Hades2Command",
+    "defaultTimeoutSeconds": 6.0
+  },
   "frontend": {
     "sourceDirectory": "Sources/Hades2",
     "moduleType": "Hades2GameModule",

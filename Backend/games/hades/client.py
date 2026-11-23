@@ -4,6 +4,11 @@ from pathlib import Path
 
 from core.adapter import AdapterError
 from core.sidecar import JsonLineSidecarClient, SidecarStartError, SidecarTerminalError
+from .operation_budgets import (
+    SIDECAR_CONNECT_TIMEOUT_SECONDS,
+    SIDECAR_DEFAULT_TIMEOUT_SECONDS,
+    SIDECAR_DEFERRED_TRAIT_TIMEOUT_SECONDS,
+)
 from .recovery import process_identity
 from .schema import DEFERRED_TRAIT_COMMANDS, MUTATING_COMMANDS
 
@@ -12,10 +17,10 @@ class HadesRuntimeClient:
     @staticmethod
     def _reply_timeout(method):
         if method == 'connect':
-            return 90
+            return SIDECAR_CONNECT_TIMEOUT_SECONDS
         if method in DEFERRED_TRAIT_COMMANDS:
-            return 50
-        return 22
+            return SIDECAR_DEFERRED_TRAIT_TIMEOUT_SECONDS
+        return SIDECAR_DEFAULT_TIMEOUT_SECONDS
     def __init__(self, sidecar=None, *, recovery, identity=process_identity):
         self.sidecar = sidecar or self._new_sidecar()
         self.connected = False
@@ -34,7 +39,7 @@ class HadesRuntimeClient:
         environment['PYTHONDONTWRITEBYTECODE'] = '1'
         return JsonLineSidecarClient(
             ['/usr/bin/xcrun', 'python3', '-u', '-m', 'games.hades.time_warp_worker'],
-            cwd=backend, env=environment, reply_timeout_seconds=90,
+            cwd=backend, env=environment, reply_timeout_seconds=SIDECAR_CONNECT_TIMEOUT_SECONDS,
             child_owns_cleanup=True,
         )
 

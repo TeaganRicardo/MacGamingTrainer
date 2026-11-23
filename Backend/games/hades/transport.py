@@ -6,10 +6,15 @@ import sys
 import time
 
 from core.adapter import AdapterError
+from .operation_budgets import (
+    EXPRESSION_TIMEOUT_MICROSECONDS,
+    LLDB_MODULE_PATH_TIMEOUT_SECONDS,
+    PROCESS_CONTROL_TIMEOUT_SECONDS,
+)
 
 LUA_SOURCE_LIMIT_BYTES = 128 * 1024
 
-sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun', 'lldb', '-P'], text=True, shell=False, timeout=10).strip())
+sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun', 'lldb', '-P'], text=True, shell=False, timeout=LLDB_MODULE_PATH_TIMEOUT_SECONDS).strip())
 import lldb
 
 
@@ -103,7 +108,7 @@ class HadesLuaTransport:
                         raise failure('incompatible', 'unsupportedBuild', 'Function prefix mismatch: ' + name)
                 self.addresses[name] = address
             self.tainted = False
-            self._resume(time.monotonic() + 3)
+            self._resume(time.monotonic() + PROCESS_CONTROL_TIMEOUT_SECONDS)
         except Exception as exc:
             self._rollback_failed_attach(exc)
 
@@ -118,7 +123,7 @@ class HadesLuaTransport:
                 try:
                     self._drain()
                     if self.process.GetState() == lldb.eStateStopped:
-                        self._resume(time.monotonic() + 3)
+                        self._resume(time.monotonic() + PROCESS_CONTROL_TIMEOUT_SECONDS)
                 except Exception as release_exc:
                     if getattr(release_exc, 'code', None) == 'not_connected':
                         raise release_exc from exc
@@ -242,7 +247,7 @@ class HadesLuaTransport:
         # Lua execution. Keep its failure distinct from uncertain cleanup, and
         # give the post-stop breakpoint wait its own 3s budget under Rosetta.
         self._boundary_initial_stop_pending = True
-        self._stop_or_release_late_stop(time.monotonic() + 3)
+        self._stop_or_release_late_stop(time.monotonic() + PROCESS_CONTROL_TIMEOUT_SECONDS)
         self._boundary_initial_stop_pending = False
         self._restore_focus()
         error = lldb.SBError()
@@ -254,7 +259,7 @@ class HadesLuaTransport:
         if self.process.WriteMemory(focus, b'\x00', error) != 1 or error.Fail():
             raise failure('memory_error', 'debuggerCall', str(error))
         breakpoint = self.target.BreakpointCreateByAddress(self.addresses['_ZN3sgg3App6UpdateEf'])
-        deadline = time.monotonic() + 3
+        deadline = time.monotonic() + PROCESS_CONTROL_TIMEOUT_SECONDS
         self._resume(deadline, breakpoint_expected=True)
         while time.monotonic() < deadline:
             self._drain()
@@ -326,7 +331,7 @@ class HadesLuaTransport:
             }})'''
             options = lldb.SBExpressionOptions()
             options.SetLanguage(lldb.eLanguageTypeC_plus_plus)
-            options.SetTimeoutInMicroSeconds(2_000_000)
+            options.SetTimeoutInMicroSeconds(EXPRESSION_TIMEOUT_MICROSECONDS)
             options.SetIgnoreBreakpoints(True)
             options.SetUnwindOnError(True)
             options.SetStopOthers(True)
@@ -368,12 +373,12 @@ class HadesLuaTransport:
                     if self.vm_interrupted:
                         self._terminate_interrupted_process()
                     else:
-                        self._stop(time.monotonic() + 3)
+                        self._stop(time.monotonic() + PROCESS_CONTROL_TIMEOUT_SECONDS)
                         self.target.DeleteAllBreakpoints()
                         self._restore_focus()
                         if scratch is not None:
                             self.process.DeallocateMemory(scratch)
-                        self._resume(time.monotonic() + 3)
+                        self._resume(time.monotonic() + PROCESS_CONTROL_TIMEOUT_SECONDS)
                 except Exception as error:
                     self.tainted = True
                     detail = getattr(error, 'diagnostic', None) or str(error)
@@ -390,7 +395,7 @@ class HadesLuaTransport:
             error = self.process.Kill()
             if error.Fail():
                 raise failure('outcome_unknown', 'luaTerminationFailed', str(error))
-            deadline = time.monotonic() + 3
+            deadline = time.monotonic() + PROCESS_CONTROL_TIMEOUT_SECONDS
             while time.monotonic() < deadline:
                 self._drain()
                 if self.process.GetState() == lldb.eStateExited:
@@ -460,7 +465,7 @@ class HadesLuaTransport:
         elif self.alive():
             stage = 'stop'
             try:
-                self._stop(time.monotonic() + 3)
+                self._stop(time.monotonic() + PROCESS_CONTROL_TIMEOUT_SECONDS)
                 stage = 'restore_focus'
                 self._restore_focus()
                 stage = 'delete_breakpoints'

@@ -8,15 +8,21 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun','lldb','-P'], text=True, shell=False, timeout=10).strip())
-import lldb
-from core.operation_profile import profiled
-from core.adapter import AdapterError as TransportError
-
 from .config import DISPLAY_NAME, GAME_ARCHITECTURE, LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
 from .native_effect_query import prepare_native_query
 from .mailbox import Hades2CommandMailbox
 from .native_mailbox import prepare_command_mailbox, install_command_mailbox
+from .operation_budgets import (
+    LLDB_MODULE_PATH_TIMEOUT_SECONDS,
+    LUA_BOUNDARY_TIMEOUT_SECONDS,
+    LUA_CLEANUP_TIMEOUT_SECONDS,
+    LUA_EXPRESSION_TIMEOUT_SECONDS,
+)
+
+sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun','lldb','-P'], text=True, shell=False, timeout=LLDB_MODULE_PATH_TIMEOUT_SECONDS).strip())
+import lldb
+from core.operation_profile import profiled
+from core.adapter import AdapterError as TransportError
 
 
 class Hades2LuaTransport:
@@ -130,7 +136,7 @@ class Hades2LuaTransport:
 
         phase=time.monotonic()
         try:
-            self.resume(time.monotonic()+3)
+            self.resume(time.monotonic() + LUA_CLEANUP_TIMEOUT_SECONDS)
         except Exception as exc:
             profile['resume']=time.monotonic()-phase
             profile['total']=time.monotonic()-started
@@ -269,7 +275,7 @@ class Hades2LuaTransport:
         self.focus_original=None
 
     @profiled("debugger.boundary")
-    def boundary(self, timeout=3, *, entry_address=None):
+    def boundary(self, timeout=LUA_BOUNDARY_TIMEOUT_SECONDS, *, entry_address=None):
         self._boundary_initial_stop_pending=False
         if getattr(self, 'cleanup_pending', False):raise self._quarantined_error()
         if self.tainted:raise TransportError('restart_required','上次调用结果不明，请重启游戏后重新连接。')
@@ -289,7 +295,7 @@ class Hades2LuaTransport:
                 try:
                     self.drain()
                     if self.process.GetState()==lldb.eStateStopped:
-                        self.resume(time.monotonic()+3)
+                        self.resume(time.monotonic() + LUA_CLEANUP_TIMEOUT_SECONDS)
                 except BaseException as release_exc:
                     # Failure to release a debugger-owned stop ends trust in
                     # this attachment, even though no Lua call was submitted.
@@ -339,14 +345,14 @@ class Hades2LuaTransport:
         finally:
             if not leased:self.target.BreakpointDelete(bp.GetID())
 
-    def execute(self, source, *, expression_timeout_seconds=2.0):
+    def execute(self, source, *, expression_timeout_seconds=LUA_EXPRESSION_TIMEOUT_SECONDS):
         if getattr(self, 'cleanup_pending', False):
             raise self._quarantined_error()
         if getattr(self, 'mailbox_mode', 'lldb') == 'mailbox':
             return self._execute_mailbox(source, expression_timeout_seconds=expression_timeout_seconds)
         return self._execute_lldb(source, expression_timeout_seconds=expression_timeout_seconds)
 
-    def _execute_mailbox(self, source, *, expression_timeout_seconds=2.0):
+    def _execute_mailbox(self, source, *, expression_timeout_seconds=LUA_EXPRESSION_TIMEOUT_SECONDS):
         started=time.monotonic()
         self.last_expression_duration=0
         self.last_mailbox_profile={}
@@ -398,7 +404,7 @@ class Hades2LuaTransport:
                 raise
 
     @profiled("debugger.execute")
-    def _execute_lldb(self, source, *, expression_timeout_seconds=2.0):
+    def _execute_lldb(self, source, *, expression_timeout_seconds=LUA_EXPRESSION_TIMEOUT_SECONDS):
         if getattr(self, 'cleanup_pending', False):
             raise self._quarantined_error()
         if self.tainted:
@@ -485,10 +491,10 @@ class Hades2LuaTransport:
                 self.target.BreakpointDelete(bp.GetID())
             if not initial_stop_failed and self.process and self.alive():
                 try:
-                    self.stop(time.monotonic()+3,phase='execute.cleanup_stop',primary_error_code=primary_error_code)
+                    self.stop(time.monotonic() + LUA_CLEANUP_TIMEOUT_SECONDS, phase='execute.cleanup_stop', primary_error_code=primary_error_code)
                     self.restore_focus()
                     if scratch is not None:self.process.DeallocateMemory(scratch)
-                    self.resume(time.monotonic()+3)
+                    self.resume(time.monotonic() + LUA_CLEANUP_TIMEOUT_SECONDS)
                 except BaseException:
                     self.tainted=True
                     raise
@@ -578,7 +584,7 @@ class Hades2LuaTransport:
             self._mailbox=None
         if self.process and self.alive():
             try:
-                self.stop(time.monotonic()+3,phase='detach.stop')
+                self.stop(time.monotonic() + LUA_CLEANUP_TIMEOUT_SECONDS, phase='detach.stop')
             except Exception as exc:
                 self._record_cleanup_failure('stop',exc)
                 raise

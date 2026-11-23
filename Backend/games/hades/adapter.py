@@ -17,11 +17,9 @@ from .recovery import HadesRecoveryJournal
 from .world import WORLD_COMMANDS, mutation_params as world_mutation_params, reward_catalog, world_terms
 from .profiles import HadesProfileStore
 from .diagnostics import build_diagnostics
+from .operation_budgets import LAUNCH_TIMEOUT_SECONDS, PROCESS_QUERY_TIMEOUT_SECONDS
 from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, LOCK_FIELDS, ONE_SHOT_COMMANDS,
                      RESOURCE_IDS, feature_value, preference_value, invalid_value, number)
-
-PROCESS_QUERY_TIMEOUT_SECONDS = 2.0
-LAUNCH_TIMEOUT_SECONDS = 10.0
 
 
 def _locate_hades_target(context):

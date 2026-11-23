@@ -51,6 +51,7 @@ MODULE_EXACT_PATHS = {
     "Tools/build_module_native.py",
     "Tools/clean_signing_metadata.py",
     "Tools/generate_game_binding.py",
+    "Tools/generate_module_commands.py",
     "Tools/macos_toolchain_identity.py",
     "Tools/module_inventory.py",
     "Tools/module_support.py",

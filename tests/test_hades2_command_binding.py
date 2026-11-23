@@ -4,13 +4,13 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-GENERATOR = ROOT / "Tools/games/hades2/generate_hades2_command_binding.py"
+GENERATOR = ROOT / "Tools/generate_module_commands.py"
 CHECKED_IN = ROOT / "Sources/Hades2/Generated/Hades2Command.generated.swift"
 
 with tempfile.TemporaryDirectory(prefix="mgt-hades-command-binding-") as td:
     generated = Path(td) / "Hades2Command.generated.swift"
     subprocess.run(
-        [sys.executable, str(GENERATOR), str(generated)],
+        [sys.executable, str(GENERATOR), "hades2", str(generated)],
         check=True,
         cwd=ROOT,
     )

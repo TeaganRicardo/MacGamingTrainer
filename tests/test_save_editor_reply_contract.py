@@ -22,7 +22,7 @@ assert "activeEdits" in hades and "failedDrafts" in hades
 assert "typedDrafts" in hades2 and "membershipDrafts" in hades2
 # Structural boundary: Core Save reply coordinator names no game.
 assert "Hades" not in core and "Hades2" not in core
-assert "save_editor_close" in hades and ".saveEditorClose" in hades2
+assert ".saveEditorClose" in hades and ".saveEditorClose" in hades2
 assert "self.release(abandoned)" in hades
 assert "self.releaseWorkspace(abandoned)" in hades2
 assert "self.session.lifecycleID == lifecycle" in hades

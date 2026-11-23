@@ -337,13 +337,18 @@ final class Session {
         events.append("stop")
     }
 }
+enum HadesRequest: String {
+    case disableAll = "disable_all"
+    case disconnect = "disconnect"
+}
 final class ExitHarness {
     var connected = true
     var backendAvailable = true
     let session = Session()
     var failures: Set<String> = []
-    func send(_ command: String, operation: String, announceSuccess: Bool,
+    func send(_ request: HadesRequest, operation: String, announceSuccess: Bool,
               completion: @escaping (Bool) -> Void) {
+        let command = request.rawValue
         session.events.append(command)
         if failures.contains(command) { session.diagnostics.append("recovery: " + command) }
         completion(!failures.contains(command))

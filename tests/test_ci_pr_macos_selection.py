@@ -122,6 +122,8 @@ for changed_path, owner in (
     ("Tools/select_macos_pr_tests.py", "test_multi_game_context_state.py"),
     ("Tools/product_support.py", "test_core_host_lifecycle_macos.py"),
     ("Tools/generate_game_binding.py", "test_hades2_gathering_frontend.py"),
+    ("Tools/generate_module_commands.py", "test_hades2_model_flow.py"),
+    ("Tools/generate_module_commands.py", "test_hades_frontend.py"),
     ("Backend/games/hades2/module.json", "test_hades2_gathering_frontend.py"),
     ("Backend/games/hades/catalog.json", "test_hades_frontend.py"),
     ("Info.plist", "test_reference_fixture_session_integration.py"),

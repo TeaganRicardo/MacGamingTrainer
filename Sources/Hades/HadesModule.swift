@@ -134,7 +134,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     var connectionDetailText: TrainerTextToken {
         TrainerTextToken(key: connected ? (heroReady ? "hades.ready" : "hades.waitingForHero") : "hades.connectionHelp")
     }
-    var launchActionFromHost: (@MainActor () -> Void)? { { [weak self] in self?.send("launch", operation: "host.launchGame") } }
+    var launchActionFromHost: (@MainActor () -> Void)? { { [weak self] in self?.send(.launch, operation: "host.launchGame") } }
 
     init(services: TrainerModuleServices, defaults: UserDefaults = .standard) {
         self.services = services
@@ -153,21 +153,21 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
 
     func backendDidStart() {
         refreshFromHost()
-        send("catalog", operation: "hades.catalog", announceSuccess: false)
+        send(.catalog, operation: "hades.catalog", announceSuccess: false)
     }
 
     func backendDidStop() { resetObservation() }
 
     func connectFromHost(reason: TrainerHostConnectReason) {
         guard !connected, hostActionsEnabled else { return }
-        send("connect", operation: "host.connectGame")
+        send(.connect, operation: "host.connectGame")
     }
 
     func disconnectFromHost() {
         guard connected, hostActionsEnabled else { return }
-        send("disconnect", operation: "host.disconnectGame")
+        send(.disconnect, operation: "host.disconnectGame")
     }
-    func refreshFromHost() { send("status", operation: "host.refreshStatus", announceSuccess: false) }
+    func refreshFromHost() { send(.status, operation: "host.refreshStatus", announceSuccess: false) }
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
         resetObservation()
     }
@@ -204,7 +204,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     func setBoonRarityTarget(_ target: String) {
         guard canEditIntent, ["Common", "Rare", "Epic", "Heroic"].contains(target) else { return }
-        send("set_boon_rarity", params: ["target": target], operation: "hades.boonRarityEnabled")
+        send(.setBoonRarity(target: target), operation: "hades.boonRarityEnabled")
     }
     func setFeature(_ feature: HadesFeature, value: Any) {
         guard canEditIntent else { return }
@@ -214,7 +214,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             pendingFeatureIntents[feature] = intent
             requestID = intent.requestID
         }
-        send("set_feature", params: ["feature": feature.rawValue, "value": value], operation: feature.key) { [weak self] _ in
+        send(.setFeature(feature: feature.rawValue, value: value), operation: feature.key) { [weak self] _ in
             // The reply has been projected; only this request's intent retires.
             guard let self, let requestID, self.pendingFeatureIntents[feature]?.requestID == requestID else { return }
             self.pendingFeatureIntents[feature] = nil
@@ -275,15 +275,14 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         return Self.displayText(value)
     }
     func setValue(_ field: String, value: Double, target: HadesHeroTarget?) {
-        sendToHero("set_value", params: ["field": field, "value": value], target: target, operation: "hades.values")
+        sendToHero(.setValue(field: field, value: value), target: target, operation: "hades.values")
     }
     func setResource(_ resource: String, value: Double, target: HadesHeroTarget?) {
-        sendToHero("set_resource", params: ["resource": resource, "value": value], target: target, operation: "hades.resources")
+        sendToHero(.setResource(resource: resource, value: value), target: target, operation: "hades.resources")
     }
     func lockHealth(_ locked: Bool) {
         sendToHero(
-            "lock_vital",
-            params: ["vital": "health", "locked": locked],
+            .lockVital(vital: "health", locked: locked),
             target: target,
             operation: "hades.values"
         )
@@ -291,8 +290,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func lockMoney(_ locked: Bool) {
         guard !(locked && isEnabled(.moneyNoDecrease)) else { return }
         sendToHero(
-            "lock_resource",
-            params: ["resource": "Money", "locked": locked],
+            .lockResource(resource: "Money", locked: locked),
             target: target,
             operation: "hades.values"
         )
@@ -300,25 +298,22 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func lockRerolls(_ locked: Bool) {
         guard !(locked && isEnabled(.rerollsNoDecrease)) else { return }
         sendToHero(
-            "lock_rerolls",
-            params: ["locked": locked],
+            .lockRerolls(locked: locked),
             target: target,
             operation: "hades.values"
         )
     }
     func gainResource(_ resource: String, amount: Double, target: HadesHeroTarget?) {
-        sendToHero("gain_resource", params: ["resource": resource, "amount": amount], target: target, operation: "hades.gainResource")
+        sendToHero(.gainResource(resource: resource, amount: amount), target: target, operation: "hades.gainResource")
     }
     @discardableResult
-    func worldAction(_ command: String, roomID: String?, params: [String: Any] = [:], operation: String,
+    func worldAction(_ request: HadesRequest, roomID: String?, operation: String,
                      completion: ((Bool) -> Void)? = nil) -> Bool {
         guard let roomID, roomID == world?.roomId else {
             presentFeedback(TrainerTextToken(key: "hades.error.staleRoom"), tone: .warning)
             return false
         }
-        var payload = params
-        payload["roomId"] = roomID
-        return sendToHero(command, params: payload, target: target, operation: operation, completion: completion)
+        return sendToHero(request, extraParams: ["roomId": roomID], target: target, operation: operation, completion: completion)
     }
 
     func repairWorldActionSelection() {
@@ -353,8 +348,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         guard canMutate && canAcceptRuntimeAction, let exit = selectedWorldExit else { return false }
         if let lease = exit.activeLease {
             return worldAction(
-                "cancel_world_exit", roomID: world?.roomId,
-                params: ["doorToken": exit.effectiveDoorToken, "leaseToken": lease.leaseToken],
+                .cancelWorldExit(doorToken: exit.effectiveDoorToken, leaseToken: lease.leaseToken),
+                roomID: world?.roomId,
                 operation: "hades.worldActions.modifyExit", completion: completion
             )
         }
@@ -362,12 +357,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             return false
         }
         return worldAction(
-            "apply_world_exit", roomID: world?.roomId,
-            params: [
-                "doorToken": exit.effectiveDoorToken,
-                "kind": selected.kind,
-                "targetID": selected.id,
-            ],
+            .applyWorldExit(doorToken: exit.effectiveDoorToken, kind: selected.kind, targetID: selected.id),
+            roomID: world?.roomId,
             operation: "hades.worldActions.modifyExit", completion: completion
         )
     }
@@ -377,8 +368,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         guard canMutate && canAcceptRuntimeAction else { return false }
         if let lease = worldOccurrenceLease {
             return worldAction(
-                "cancel_world_occurrence", roomID: world?.roomId,
-                params: ["leaseToken": lease.leaseToken],
+                .cancelWorldOccurrence(leaseToken: lease.leaseToken),
+                roomID: world?.roomId,
                 operation: "hades.occurrence.title", completion: completion
             )
         }
@@ -386,8 +377,8 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             return false
         }
         return worldAction(
-            "apply_world_occurrence", roomID: world?.roomId,
-            params: ["targetID": selectedWorldOccurrenceTarget],
+            .applyWorldOccurrence(targetID: selectedWorldOccurrenceTarget),
+            roomID: world?.roomId,
             operation: "hades.occurrence.title", completion: completion
         )
     }
@@ -396,17 +387,17 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func generateSelectedChamberObject(completion: ((Bool) -> Void)? = nil) -> Bool {
         guard chamberObjectActionAvailable else { return false }
         return worldAction(
-            "generate_chamber_object", roomID: world?.roomId,
-            params: ["object": selectedChamberObject],
+            .generateChamberObject(object: selectedChamberObject),
+            roomID: world?.roomId,
             operation: "hades.chamberObject", completion: completion
         )
     }
 
     func generateFishing(completion: ((Bool) -> Void)? = nil) {
-        worldAction("generate_fishing", roomID: world?.roomId, operation: "hades.generateFishing", completion: completion)
+        worldAction(.generateFishing, roomID: world?.roomId, operation: "hades.generateFishing", completion: completion)
     }
     func generateChaosGate(completion: ((Bool) -> Void)? = nil) {
-        worldAction("generate_chaos_gate", roomID: world?.roomId, operation: "hades.generateChaosGate", completion: completion)
+        worldAction(.generateChaosGate, roomID: world?.roomId, operation: "hades.generateChaosGate", completion: completion)
     }
     /// A Generate row acts for a ready hero in an observed room.
     var canSpawnReward: Bool { canMutate && world != nil }
@@ -416,7 +407,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @discardableResult
     func spawnReward(_ reward: String, in group: HadesRewardGroup, completion: ((Bool) -> Void)? = nil) -> Bool {
         guard canSpawnReward, rewards(in: group).contains(where: { $0.id == reward }) else { return false }
-        return worldAction("spawn_reward", roomID: world?.roomId, params: ["reward": reward],
+        return worldAction(.spawnReward(reward), roomID: world?.roomId,
                            operation: "hades.spawnReward", completion: completion)
     }
     private func acquisitionOption(_ target: HadesAcquisitionTarget) -> HadesCatalogEntry? {
@@ -494,7 +485,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             level = 1
         }
         return sendToHero(
-            "add_trait", params: ["trait": trait.id, "rarity": rarity, "level": level],
+            .addTrait(trait: trait.id, rarity: rarity, level: level),
             target: target, operation: "hades.acquire", completion: completion
         )
     }
@@ -508,46 +499,44 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
               let rarity = selectedAcquisitionRarity,
               let encounters = Int(acquisitionEncounters), (1...100).contains(encounters) else { return false }
         return sendToHero(
-            "add_chaos_pair",
-            params: ["blessing": blessing.id, "curse": selectedChaosCurse,
-                     "rarity": rarity, "encounters": encounters],
+            .addChaosPair(blessing: blessing.id, curse: selectedChaosCurse, rarity: rarity, encounters: encounters),
             target: target, operation: "hades.chaosPair", completion: completion
         )
     }
 
     func updateTrait(_ trait: HadesCurrentTrait, rarity: String, level: Int, target: HadesHeroTarget?) {
-        sendToHero("update_trait", params: ["instanceId": trait.instanceId, "rarity": rarity, "level": level], target: target, operation: "hades.apply")
+        sendToHero(.updateTrait(instanceID: trait.instanceId, rarity: rarity, level: level), target: target, operation: "hades.apply")
     }
     func removeTrait(_ trait: HadesCurrentTrait) {
-        sendToHero("remove_trait", params: ["instanceId": trait.instanceId], target: target, operation: "hades.remove")
+        sendToHero(.removeTrait(instanceID: trait.instanceId), target: target, operation: "hades.remove")
     }
 
     func setTraitUses(_ trait: HadesCurrentTrait, uses: Int, target: HadesHeroTarget?) {
-        sendToHero("set_trait_uses", params: ["instanceId": trait.instanceId, "uses": uses],
+        sendToHero(.setTraitUses(instanceID: trait.instanceId, uses: uses),
                    target: target, operation: "hades.remainingUses")
     }
     func expireTrait(_ trait: HadesCurrentTrait) {
-        sendToHero("expire_trait", params: ["instanceId": trait.instanceId], target: target,
+        sendToHero(.expireTrait(instanceID: trait.instanceId), target: target,
                    operation: trait.blessing == nil ? "hades.expireEffect" : "hades.activateBlessing")
     }
     func refreshTrait(_ trait: HadesCurrentTrait) {
-        sendToHero("refresh_trait", params: ["instanceId": trait.instanceId], target: target,
+        sendToHero(.refreshTrait(instanceID: trait.instanceId), target: target,
                    operation: "hades.refreshEffect")
     }
     func disableAll() {
         guard hostActionsEnabled else { return }
-        send("disable_all", operation: "host.disableAll")
+        send(.disableAll, operation: "host.disableAll")
     }
     func makeSaveEditorModel(snapshotID: String? = nil) -> HadesSaveEditorModel {
         HadesSaveEditorModel(session: session, snapshotID: snapshotID)
     }
-    func listProfiles() { send("list_profiles", operation: "hades.manage.profiles", announceSuccess: false) }
+    func listProfiles() { send(.listProfiles, operation: "hades.manage.profiles", announceSuccess: false) }
     func saveProfile(_ name: String, completion: ((Bool) -> Void)? = nil) {
-        send("save_profile", params: ["name": name], operation: "hades.profile.save", completion: completion)
+        send(.saveProfile(name: name), operation: "hades.profile.save", completion: completion)
     }
-    func loadProfile(_ name: String) { send("load_profile", params: ["name": name], operation: "hades.profile.load") }
-    func deleteProfile(_ name: String) { send("delete_profile", params: ["name": name], operation: "host.delete") }
-    func runDiagnostics() { send("diagnostics", operation: "hades.manage.diagnostics", announceSuccess: false) }
+    func loadProfile(_ name: String) { send(.loadProfile(name: name), operation: "hades.profile.load") }
+    func deleteProfile(_ name: String) { send(.deleteProfile(name: name), operation: "host.delete") }
+    func runDiagnostics() { send(.diagnostics, operation: "hades.manage.diagnostics", announceSuccess: false) }
     func openLog() {
         session.flushDiagnostics()
         logSink.flush()
@@ -568,7 +557,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func exportDiagnostics() {
         session.flushDiagnostics()
         logSink.flush()
-        send("diagnostics", operation: "hades.diagnostics.export", announceSuccess: false) { [weak self] ok in
+        send(.diagnostics, operation: "hades.diagnostics.export", announceSuccess: false) { [weak self] ok in
             guard ok, let self, var report = self.diagnosticsReport else { return }
             self.session.flushDiagnostics()
             self.logSink.flush()
@@ -629,16 +618,16 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
 
     @discardableResult
-    private func sendToHero(_ command: String, params: [String: Any] = [:], target captured: HadesHeroTarget?,
+    private func sendToHero(_ request: HadesRequest, extraParams: [String: Any] = [:], target captured: HadesHeroTarget?,
                             operation: String, completion: ((Bool) -> Void)? = nil) -> Bool {
         guard canMutate else { return false }
         guard let captured, captured == target else {
             presentFeedback(TrainerTextToken(key: "hades.error.staleHero"), tone: .warning)
             return false
         }
-        var payload = params
+        var payload = extraParams
         payload["target"] = captured.payload
-        send(command, params: payload, operation: operation, completion: completion)
+        send(request, extraParams: payload, operation: operation, completion: completion)
         return true
     }
 
@@ -748,37 +737,25 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             completion()
             return
         }
-        send("disable_all", operation: "host.disableAll", announceSuccess: false) { [weak self] _ in
+        send(.disableAll, operation: "host.disableAll", announceSuccess: false) { [weak self] _ in
             guard let self else { completion(); return }
-            self.send("disconnect", operation: "host.disconnectGame", announceSuccess: false) { _ in
+            self.send(.disconnect, operation: "host.disconnectGame", announceSuccess: false) { _ in
                 completion()
             }
         }
     }
 
-    // Exceed the worst-case sequential sidecar RPC sums in HadesAdapter so
-    // backend/sidecar recovery owns timeouts rather than premature Host kills.
-    private static func requestTimeout(for command: String) -> TimeInterval {
-        switch command {
-        case "connect": return 190
-        case "load_profile": return 120
-        case "add_trait", "update_trait", "remove_trait", "set_trait_uses", "expire_trait", "refresh_trait", "add_chaos_pair": return 60
-        case "set_feature", "disable_all", "lock_vital", "lock_resource", "lock_rerolls", "set_value": return 55
-        default: return 30
-        }
-    }
-
-    private func send(_ command: String, params: [String: Any] = [:], operation: String,
+    private func send(_ request: HadesRequest, extraParams: [String: Any] = [:], operation: String,
                       announceSuccess: Bool = true, completion: ((Bool) -> Void)? = nil) {
-        let offlineIntent = !connected && ["set_feature", "set_boon_rarity", "load_profile", "disable_all"].contains(command)
-        session.send(command, params: params, operation: operation, announceSuccess: announceSuccess,
-                     timeout: Self.requestTimeout(for: command),
-                     requiresTrustedTarget: !offlineIntent &&
-                        !["launch", "catalog", "list_profiles", "save_profile", "delete_profile"].contains(command),
+        var payload = request.params
+        for (key, value) in extraParams { payload[key] = value }
+        session.send(request.command.rawValue, params: payload, operation: operation, announceSuccess: announceSuccess,
+                     timeout: request.command.timeout,
+                     requiresTrustedTarget: request.command.requiresTrustedTarget(connected: connected),
                      completion: { [weak self] ok in
             if announceSuccess, ok, let self {
-                let pendingCleanup = command == "disable_all" && !self.connected
-                let pendingProfile = command == "load_profile" && !self.connected
+                let pendingCleanup = request.command == .disableAll && !self.connected
+                let pendingProfile = request.command == .loadProfile && !self.connected
                 let noticeKey: String
                 if pendingCleanup { noticeKey = "hades.disableAllPending" }
                 else if pendingProfile { noticeKey = "hades.profile.pending" }

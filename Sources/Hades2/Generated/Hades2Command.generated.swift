@@ -1,4 +1,4 @@
-// Generated from Backend/games/hades2/command_contract.py. Do not edit.
+// Generated from games.hades2.command_contract. Do not edit.
 import Foundation
 
 enum Hades2Command: String {
@@ -65,19 +65,45 @@ enum Hades2Command: String {
 
     var timeout: TimeInterval {
         switch self {
-        case .scan: return 15.0
-        case .status: return 15.0
+        case .scan: return 40.0
+        case .status: return 30.0
         case .connect: return 90.0
         case .disconnect: return 12.0
-        case .launch: return 10.0
+        case .launch: return 50.0
+        case .disableAll: return 65.0
+        case .saveEditorInventory: return 30.0
+        case .saveEditorOpen: return 35.0
         case .saveEditorQuery: return 30.0
         case .saveEditorDetail: return 30.0
         case .saveEditorApply: return 30.0
+        case .loadProfile: return 55.0
         case .diagnostics: return 70.0
         case .exportDiagnostics: return 85.0
         case .prepare: return 560.0
         case .restore: return 240.0
         default: return 6.0
         }
+    }
+
+    var supportsOfflineIntent: Bool {
+        switch self {
+        case .resetDesired, .setDesired, .setGatheringDesired, .setChaosGateDesired, .setBoonRarityDesired, .loadProfile: return true
+        default: return false
+        }
+    }
+
+    private var baseRequiresTrustedTarget: Bool {
+        switch self {
+        case .scan, .launch, .saveEditorInventory, .saveEditorOpen, .saveEditorTarget, .saveEditorQuery, .saveEditorDetail, .saveEditorStage, .saveEditorUnstage, .saveEditorReview, .saveEditorCancel, .saveEditorApply, .saveEditorClose, .listProfiles, .saveProfile, .deleteProfile: return false
+        default: return true
+        }
+    }
+
+    func offlineIntent(connected: Bool) -> Bool {
+        !connected && supportsOfflineIntent
+    }
+
+    func requiresTrustedTarget(connected: Bool) -> Bool {
+        baseRequiresTrustedTarget && !offlineIntent(connected: connected)
     }
 }

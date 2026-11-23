@@ -187,8 +187,7 @@ enum Hades2Request {
         case .lockElement(let element, let locked):
             return ["element": element, "locked": locked]
         case .setBoonRarity(let target, let forceLegendary, let forceDuo):
-            // Keep the v17 payload shape; the retired probability value is neutral.
-            return ["target": target, "multiplier": 100, "forceLegendary": forceLegendary, "forceDuo": forceDuo]
+            return ["target": target, "forceLegendary": forceLegendary, "forceDuo": forceDuo]
         case .applyWorldOccurrence(let target):
             return ["target": target]
         case .cancelWorldOccurrence(let leaseToken):
@@ -299,10 +298,6 @@ final class Hades2API {
         if let saveWorkspaceID { params["workspaceId"] = saveWorkspaceID }
         if let saveBaselineGeneration { params["baselineGeneration"] = saveBaselineGeneration }
         if let saveDraftEntryIDs { params["draftEntryIds"] = saveDraftEntryIDs }
-        let offlineIntent = !runtimeConnected && [
-            .resetDesired, .setDesired, .setGatheringDesired, .setChaosGateDesired,
-            .setBoonRarityDesired, .loadProfile,
-        ].contains(request.command)
         session.send(
             request.command.rawValue,
             params: params,
@@ -310,8 +305,7 @@ final class Hades2API {
             operationArguments: operationArguments,
             announceSuccess: announceSuccess,
             timeout: request.command.timeout,
-            requiresTrustedTarget: !offlineIntent && !request.command.rawValue.hasPrefix("save_editor_") &&
-                ![.scan, .launch, .listProfiles, .saveProfile, .deleteProfile].contains(request.command),
+            requiresTrustedTarget: request.command.requiresTrustedTarget(connected: runtimeConnected),
             started: started,
             reply: reply,
             failed: failed,

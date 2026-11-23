@@ -19,14 +19,15 @@ from core.adapter import AdapterError
 
 from .catalog import localize_catalog
 from .localization import invalidate_display_names
+from .operation_budgets import REPLAY_EXPRESSION_TIMEOUT_SECONDS, TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS
 
 
 TransportError = AdapterError
 
 _TRAIT_TRAY_HANDOFF_KEY = "__trainerTraitTrayHandoff"
-_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS = 0.75
+_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS = TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS
 _TRAIT_TRAY_HANDOFF_POLL_SECONDS = 0.05
-_REPLAY_EXPRESSION_TIMEOUT_SECONDS = 5.0
+_REPLAY_EXPRESSION_TIMEOUT_SECONDS = REPLAY_EXPRESSION_TIMEOUT_SECONDS
 _OBSERVATION_COLLECTIONS = frozenset(("resources", "elements", "currentRunTraits"))
 
 
