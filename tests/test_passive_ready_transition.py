@@ -131,6 +131,6 @@ assert event_switch.index('send(.runtimeReset') < event_switch.index('case .runt
 ready_block = event_switch[event_switch.index('case .runtimeReady'):]
 assert ready_block.index('pendingRunReadySignal = true') < ready_block.index('guard connected else { return }')
 
-status_observer = model[model.index('        statusObserver ='):model.index('        DispatchQueue.main.async', model.index('        statusObserver ='))]
+status_observer = model[model.index('        services.backendStatusTransitions'):model.index('\n        DispatchQueue.main.async', model.index('        services.backendStatusTransitions'))]
 assert 'if !current.busy' in status_observer
 assert 'consumeRunLogReadySignalIfPossible()' in status_observer

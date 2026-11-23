@@ -463,8 +463,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 guard let self else { return }
                 self.applyBackendStatus(current, previous: previous)
                 if !current.busy {
-                    self.consumeDeferredLaunchAttachIfPossible()
-                    self.consumeRunLogReadySignalIfPossible()
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        self.consumeDeferredLaunchAttachIfPossible()
+                        self.consumeRunLogReadySignalIfPossible()
+                    }
                 }
             }
             .store(in: &subscriptions)
@@ -899,7 +902,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private func applyManagementPatch(_ patch: Hades2StatePatch) {
         if let value = patch.profiles { profiles = value }
         if let value = patch.diagnostics {
-            diagnostics = value
+            diagnostics = value.map {
+                TrainerDiagnosticCheck(
+                    id: $0.id,
+                    name: TrainerTextToken(key: $0.name, arguments: $0.nameArguments),
+                    ok: $0.ok,
+                    detail: TrainerTextToken(key: $0.detail, arguments: $0.detailArguments)
+                )
+            }
             diagnosticsPassed = patch.diagnosticsPassed ?? value.filter(\.ok).count
             diagnosticsTotal = patch.diagnosticsTotal ?? value.count
         }

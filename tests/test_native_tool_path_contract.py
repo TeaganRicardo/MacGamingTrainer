@@ -3,7 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = {
-    "Backend/games/hades2/command_contract.py": {"run": ["/usr/bin/open", "/usr/bin/open"]},
+    "Backend/games/hades2/command_contract.py": {"run": ["/usr/bin/open"]},
     "Backend/games/hades2/transport.py": {"check_output": ["/usr/bin/xcrun"]},
     "Backend/debugger/lldb_time_warp.py": {"check_output": ["/usr/bin/xcrun"]},
     "Backend/games/hades/transport.py": {"check_output": ["/usr/bin/xcrun"]},

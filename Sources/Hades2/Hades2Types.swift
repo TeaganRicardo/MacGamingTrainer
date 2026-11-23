@@ -179,6 +179,32 @@ struct TrainerProfile: Identifiable {
     let updatedAt: String
 }
 
+struct Hades2DiagnosticCheck: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let nameArguments: [String]
+    let ok: Bool
+    let detail: String
+    let detailArguments: [String]
+
+    static func decode(_ row: [String: Any]) -> Hades2DiagnosticCheck? {
+        guard let name = row["name"] as? String, !name.isEmpty else { return nil }
+        let nameArguments = (row["nameArguments"] as? [Any])?.map { String(describing: $0) } ?? []
+        let detail = row["detail"] as? String ?? row["detail"].map { String(describing: $0) } ?? ""
+        let detailArguments = (row["detailArguments"] as? [Any])?.map { String(describing: $0) } ?? []
+        let id = (row["id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            ?? ([name] + nameArguments).joined(separator: ":")
+        return Hades2DiagnosticCheck(
+            id: id,
+            name: name,
+            nameArguments: nameArguments,
+            ok: row["ok"] as? Bool ?? false,
+            detail: detail,
+            detailArguments: detailArguments
+        )
+    }
+}
+
 // MARK: - Current-run trait/buff inventory
 //
 // A row projected from live runtime state, never from the acquisition catalog
