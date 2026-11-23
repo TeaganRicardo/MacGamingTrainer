@@ -56,7 +56,21 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
     ], text=True, cwd=project, env=env))
     assert normalized['id'] == game_id
     assert normalized['frontend']['moduleType'] == 'ReferenceFixtureGameModule'
-    assert normalized['appResources'] == []  # No Hades-specific resource required by a second module.
+    assert normalized['appResources'] == [
+        {
+            'source': 'Sources/ReferenceFixture/Localization/reference_fixture.zh-CN.json',
+            'destination': 'reference_fixture.zh-CN.json',
+        },
+        {
+            'source': 'Sources/ReferenceFixture/Localization/reference_fixture.en.json',
+            'destination': 'reference_fixture.en.json',
+        },
+    ]
+    assert normalized['commandContract'] == {
+        'metadata': 'games.reference_fixture.command_contract:command_metadata',
+        'enumName': 'ReferenceFixtureCommand',
+        'defaultTimeoutSeconds': 6.0,
+    }
     assert normalized['nativeLibraries'] == []
     assert normalized['buildRequirements'] == {
         'lldbPython': False,
@@ -64,6 +78,20 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
         'entitlements': '',
     }
     assert 'saveManagement' not in normalized
+
+    # Removing optional appResources / commandContract leaves a minimal valid module.
+    manifest_path = backend_module / 'module.json'
+    base_manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    minimal = dict(base_manifest)
+    minimal.pop('appResources', None)
+    minimal.pop('commandContract', None)
+    manifest_path.write_text(json.dumps(minimal), encoding='utf-8')
+    minimal_normalized = json.loads(subprocess.check_output([
+        'python3', str(tools / 'validate_game_module.py'), game_id, '--json'
+    ], text=True, cwd=project, env=env))
+    assert minimal_normalized['appResources'] == []
+    assert 'commandContract' not in minimal_normalized
+    manifest_path.write_text(json.dumps(base_manifest), encoding='utf-8')
 
     # Modules that return full observations need no replay callback override.
     # Cached delivery must remain byte-identical and must not execute a prior
@@ -134,8 +162,8 @@ router.close()
     assert 'import ReferenceFixture\n' in catalog.read_text()
 
     core = sorted((project / 'Sources/Core').rglob('*.swift'))
-    sources = [project / 'Sources/App.swift'] + core + [
-        frontend / 'ReferenceFixtureModule.swift',
+    frontend_sources = sorted(frontend.rglob('*.swift'))
+    sources = [project / 'Sources/App.swift'] + core + frontend_sources + [
         binding,
         catalog,
     ]

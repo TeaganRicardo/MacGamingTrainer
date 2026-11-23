@@ -63,6 +63,38 @@ with tempfile.TemporaryDirectory(prefix='mgt-packaged-module-') as temporary:
         assert disabled['ok'] is True
         assert disabled['result'] == {'connected': True, 'enabled': False}
 
+        profiles = request('profiles-list', 'list_profiles')
+        assert profiles['ok'] is True
+        assert profiles['result'] == {'profiles': []}
+
+        saved = request('profiles-save', 'save_profile', {
+            'name': 'default',
+            'shortcuts': {'_layoutVersion': 1, 'toggleFeature': {'keyCode': 18, 'modifiers': 2304, 'keyLabel': '1'}},
+        })
+        assert saved['ok'] is True
+        assert [row['name'] for row in saved['result']['profiles']] == ['default']
+
+        assert request('enable-before-load', 'set_enabled', {'value': True})['result']['enabled'] is True
+        loaded = request('profiles-load', 'load_profile', {'name': 'default'})
+        assert loaded['ok'] is True
+        assert loaded['result']['enabled'] is False
+        assert loaded['result']['shortcuts'] == {
+            '_layoutVersion': 1,
+            'toggleFeature': {'keyCode': 18, 'modifiers': 2304, 'keyLabel': '1'},
+        }
+
+        diagnostics = request('diag', 'diagnostics')
+        assert diagnostics['ok'] is True
+        assert [check['id'] for check in diagnostics['result']['diagnostics']['checks']] == [
+            'backend_session',
+            'profile_store',
+        ]
+        assert diagnostics['result']['diagnostics']['checks'][1]['detailArguments'] == ['1']
+
+        deleted = request('profiles-delete', 'delete_profile', {'name': 'default'})
+        assert deleted['ok'] is True
+        assert deleted['result'] == {'profiles': []}
+
         status = request('status', 'status')
         assert status['ok'] is True
         assert status['result'] == {'connected': True, 'enabled': False}

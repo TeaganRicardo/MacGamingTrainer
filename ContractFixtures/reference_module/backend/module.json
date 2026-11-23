@@ -6,6 +6,11 @@
   "backend": {
     "adapter": "games.reference_fixture.adapter:ReferenceFixtureAdapter"
   },
+  "commandContract": {
+    "metadata": "games.reference_fixture.command_contract:command_metadata",
+    "enumName": "ReferenceFixtureCommand",
+    "defaultTimeoutSeconds": 6.0
+  },
   "frontend": {
     "sourceDirectory": "Sources/ReferenceFixture",
     "moduleType": "ReferenceFixtureGameModule",
@@ -23,5 +28,15 @@
   "targetApplication": {
     "processName": "Reference Fixture Target",
     "bundleIdentifier": "com.example.macgamingtrainer.reference-target"
-  }
+  },
+  "appResources": [
+    {
+      "source": "Sources/ReferenceFixture/Localization/reference_fixture.zh-CN.json",
+      "destination": "reference_fixture.zh-CN.json"
+    },
+    {
+      "source": "Sources/ReferenceFixture/Localization/reference_fixture.en.json",
+      "destination": "reference_fixture.en.json"
+    }
+  ]
 }

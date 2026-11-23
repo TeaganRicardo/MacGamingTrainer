@@ -401,8 +401,8 @@ def manifest() -> list[Mutation]:
         Mutation(
             ident="fixture-key-unresolvable",
             invariant="a module's presentation table actually contains the key it emits",
-            path=ROOT / "ContractFixtures/reference_module/frontend/ReferenceFixtureModule.swift",
-            old='            "referenceFixture.error.failed": [.zhCN: "夹具请求失败（{0}，{1}）。", .en: "Fixture request failed ({0}, {1})."],\n',
+            path=ROOT / "ContractFixtures/reference_module/frontend/Localization/reference_fixture.en.json",
+            old='    "referenceFixture.error.failed": "Fixture request failed ({0}, {1}).",\n',
             new="",
             test="tests/test_reference_fixture_session_integration.py",
         ),

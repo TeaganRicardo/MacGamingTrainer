@@ -21,7 +21,7 @@ Create `Backend/games/<id>/module.json` and `Sources/<Game>/`. Use a safe module
 | `buildRequirements` | The integration needs an LLDB bridge or debugger entitlement | Its actual selected build/bridge path; the base reference fixture proves these dependencies remain optional |
 | `appResources` | Runtime code needs bundled reference data | Source path from the owning manifest, package inventory and provenance |
 
-The base reference fixture requires no LLDB, Lua, sidecar, Save provider or editor. Optional capability variants prove only their declared chains: the reference session fixture generates and consumes a suffix-only descriptor against temporary processes; the existing multi-module revision and provenance owner tests cover resident declarations and packaged source identity. These fixtures do not certify a game's native ABI.
+The base reference fixture exercises the Host service seams (session status, `feedback`, `diagnostics`, `management`, packaged `TrainerModuleStringTable` localization tables via `appResources`, `TrainerShortcutStore` hotkeys, `ProfileStore`, and generated `commandContract` commands) with no LLDB, Lua, sidecar, Save provider, editor, or Core edits. Optional capability variants prove only their declared chains: the reference session fixture generates and consumes a suffix-only descriptor against temporary processes; the existing multi-module revision and provenance owner tests cover resident declarations and packaged source identity. These fixtures do not certify a game's native ABI.
 
 Call the Host-facing model and module UI factories on Swift's main actor. Swift harnesses that exercise these APIs use a main-actor entry point.
 
@@ -80,10 +80,11 @@ When a gap in this table is a product defect, fix its production owner and neare
 
 The contract above is the goal; these shared files still need edits or attention when a module is added. The [pre-module debt program (#766)](https://github.com/TeaganRicardo/MacGamingTrainer/issues/766) removes them; delete a row here when its owning change lands.
 
-| Shared file | When | Removal owner |
+| Shared file | When | Removal owner / disposition |
 | --- | --- | --- |
 | `.github/workflows/module-build-matrix.yml`, `.github/workflows/build2-macos.yml` | Isolated diagnostic build and packaged-resource checks name the Hades modules | #772 (matrix from `app.json`, generic resource verification) |
 | `tests/test_app_identity_contract.py` | Breaks when the module declares `supportedBuild` (copies only the Hades reference directories) | #772 |
+| `tests/fixture_budgets/<domain>.py` | Recording permanent budgets once hosted CI runs exist for new native journeys | Deliberate (`provisional=True` covers new journeys beforehand) |
 
 ## Run the owning lanes
 
