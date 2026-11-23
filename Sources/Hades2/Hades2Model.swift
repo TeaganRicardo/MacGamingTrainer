@@ -45,7 +45,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let requestID: UUID
         let enabled: Bool
     }
-    private var pendingFeatureIntents: [Hades2FeatureKey: PendingFeatureIntent] = [:]
+    @Published private var pendingFeatureIntents: [Hades2FeatureKey: PendingFeatureIntent] = [:]
     private var pendingBoonRarityRequestID: UUID?
     private var pendingGameSpeedRequestID: UUID?
     private let services: TrainerModuleServices
@@ -230,7 +230,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var acquisitionRarity = "Heroic"
     @Published var acquisitionLevel = "1"
     @Published private(set) var acquisitionTarget: Hades2AcquisitionTarget = .exact
-    @Published private(set) var acquisitionRarityAdjustment: TrainerAcquisitionRarityResolution.Adjustment = .none
+    @Published private(set) var acquisitionRarityAdjustment: TrainerOrderedOptionResolution.Adjustment = .none
     @Published private(set) var nativeRarityOrder: [String] = []
     private var resolvedAcquisitionSignature: String?
     private var acquisitionLevelIdentity: String?
@@ -284,8 +284,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
     private var pendingRunReadySignal = false
     private var launchAttachGate = Hades2LaunchAttachGate()
-    private var activationGraceWorkItems: [Hades2FeatureKey: DispatchWorkItem] = [:]
-    @Published private var activationGraceFeatures: Set<Hades2FeatureKey> = []
     private var hotkeys: GlobalHotkeys?
     private var presentedActionReceipt: Hades2ActionReceipt?
     var canSetFeature: Bool { connected && capabilities["setFeature"] == true && !exiting }
@@ -422,7 +420,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSetStats: Bool { connected && capabilities["setStats"] == true && !exiting }
     var canSetElements: Bool { connected && capabilities["setElements"] == true && !exiting }
     func supportsFeature(_ key: Hades2FeatureKey) -> Bool { featureSupport[key.rawValue] ?? true }
-    func isFeatureActivationPending(_ key: Hades2FeatureKey) -> Bool { activationGraceFeatures.contains(key) }
+    func isFeatureActivationPending(_ key: Hades2FeatureKey) -> Bool { pendingFeatureIntents[key] != nil }
     var ready: Bool { canSetFeature }
     /// Language-neutral status key. The Host renders it, so switching language
     /// updates the connection card without a backend round trip.
@@ -577,9 +575,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             capabilities = capabilities.mapValues { _ in false }
             capabilities["diagnostics"] = true
             statAvailable = statAvailable.mapValues { _ in false }
-            activationGraceWorkItems.values.forEach { $0.cancel() }
-            activationGraceWorkItems = [:]
-            activationGraceFeatures = []
             if event == .runtimeReset {
                 send(.runtimeReset, title: "hades2.op.recordRuntimeReset", announceSuccess: false)
             }
@@ -694,9 +689,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         worldOccurrence = nil
         selectedWorldExitToken = ""
         selectedWorldExitTarget = ""
-        activationGraceWorkItems.values.forEach { $0.cancel() }
-        activationGraceWorkItems = [:]
-        activationGraceFeatures = []
         invalidateTextEdits()
         pid = nil
         // Empty means "not detected yet"; the connection detail resolves that as
@@ -780,7 +772,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         )
         let wasConnected = connected
         let oldPID = pid
-        let desiredBeforeApply = Dictionary(uniqueKeysWithValues: Hades2FeatureKey.allCases.map { ($0, desiredFeatureEnabled($0)) })
 
         if let value = patch.connected, wasConnected && !value { invalidateTextEdits() }
         if patch.pid.isPresent, oldPID != patch.pid.value { invalidateTextEdits() }
@@ -876,23 +867,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
         if payload["checks"] != nil { diagnosticsReport = payload }
         applyManagementPatch(patch)
-
-        for (rawKey, active) in activeFeatures where active {
-            if let key = Hades2FeatureKey(rawValue: rawKey) { clearFeatureActivationGrace(key) }
-        }
-        for key in Hades2FeatureKey.allCases where desiredFeatureEnabled(key)
-            && desiredBeforeApply[key] != true
-            && activeFeatures[key.rawValue] != true
-            && dormantFeatures[key.rawValue] != true {
-            beginFeatureActivationGrace(key)
-        }
-        if !wasConnected && connected {
-            for key in Hades2FeatureKey.allCases where desiredFeatureEnabled(key)
-                && activeFeatures[key.rawValue] != true
-                && dormantFeatures[key.rawValue] != true {
-                beginFeatureActivationGrace(key)
-            }
-        }
 
         applyLockProjection(patch, includesRuntime: true)
         if patch.spellCharge.isPresent { spellCharge = patch.spellCharge.value }
@@ -1207,24 +1181,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         self[keyPath: key.modelKeyPath]
     }
 
-    private func beginFeatureActivationGrace(_ key: Hades2FeatureKey, duration: TimeInterval = 0.9) {
-        activationGraceWorkItems[key]?.cancel()
-        activationGraceFeatures.insert(key)
-        let work = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
-            self.activationGraceWorkItems[key] = nil
-            self.activationGraceFeatures.remove(key)
-        }
-        activationGraceWorkItems[key] = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
-    }
-
-    private func clearFeatureActivationGrace(_ key: Hades2FeatureKey) {
-        activationGraceWorkItems[key]?.cancel()
-        activationGraceWorkItems[key] = nil
-        activationGraceFeatures.remove(key)
-    }
-
     // Runtime observations refresh through explicit user requests and lifecycle
     // synchronization. Keep this event-driven policy with the default mailbox
     // transport as well as the debugger transport; background status polling is
@@ -1248,8 +1204,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     func feature(_ key: Hades2FeatureKey, value: Bool, completion: ((Bool) -> Void)? = nil) {
         guard canEditDesired else { return }
-        if value { beginFeatureActivationGrace(key) }
-        else { clearFeatureActivationGrace(key) }
         // Desired state belongs to the trainer profile, not to the debugger
         // connection. Keep the UI intent editable while detached and let the
         // backend apply/replay it whenever the required resident owner becomes available.
@@ -1816,14 +1770,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             acquisitionLevelIdentity = levelIdentity
         }
         let showingAnotherTarget = previousTarget != target || resolvedAcquisitionSignature != signature
-        let resolution = TrainerAcquisitionRarity.resolve(
+        let resolution = TrainerOrderedOptionReconciler.resolve(
             previous: acquisitionRarity.isEmpty ? nil : acquisitionRarity,
             supported: option.rarities,
-            nativeOrder: nativeRarityOrder
+            preferredOrder: nativeRarityOrder
         )
         // A game-controlled rarity displays N/A but retains the last user's
         // meaningful choice for when another supported target is selected.
-        if let rarity = resolution.rarity { acquisitionRarity = rarity }
+        if let rarity = resolution.option { acquisitionRarity = rarity }
         acquisitionRarityAdjustment = showingAnotherTarget ? resolution.adjustment : acquisitionRarityAdjustment
         resolvedAcquisitionSignature = signature
         return !(confirmationRequired && showingAnotherTarget && resolution.requiresVisibleConfirmation)

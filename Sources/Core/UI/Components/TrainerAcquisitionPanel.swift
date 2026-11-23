@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Shared visual structure for game-owned exact acquisition controls.
+/// Shared visual structure for searchable catalog selection panels.
 /// The Host owns chrome, spacing and the search field; each game supplies
-/// its native target choices and validated acquisition settings.
+/// its selectable targets and validated settings controls.
 package struct TrainerAcquisitionPanel<Settings: View, Rows: View>: View {
     @Environment(\.trainerTheme) private var theme
     let title: String

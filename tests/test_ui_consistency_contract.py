@@ -29,13 +29,13 @@ management_view = (HADES / "Views/Hades2ManagementViews.swift").read_text()
 # Module rows adopt the shared secondary action and Core trait layout.
 assert "TrainerSecondaryActionButton(" in occurrence
 assert view.count("TrainerSecondaryActionButton(") >= 6
-assert "TrainerTraitManagerLayout.commonControlsWidth(" in view
+assert "TrainerManagedRowLayout.trailingControlsWidth(" in view
 assert "hasTemporaryContextualControls(for: trait)" not in view
 assert "trait.hasTemporaryContextualControls" in view
 assert "trait.hasContextualControls" in view
 assert "var hasTemporaryContextualControls: Bool" in types
 assert "var hasContextualControls: Bool" in types
-assert ".padding(.trailing, TrainerTraitManagerLayout.commonControlsWidth + TrainerTraitManagerLayout.rowSpacing)" not in view
+assert ".padding(.trailing, TrainerManagedRowLayout.trailingControlsWidth + TrainerManagedRowLayout.rowSpacing)" not in view
 assert ".minimumScaleFactor(0.65)" not in view
 assert ".minimumScaleFactor(0.85)" in view
 assert "helpText: generateHelp" in occurrence

@@ -80,7 +80,7 @@ The App/Host supplies the common shell, sidebar, header, connection status, per-
 
 ## Architecture evolution
 
-Apply the causal scope and review process in `AGENTS.md`. Module isolation protects ownership while allowing corrections across Core/game interfaces. Two real adapters or independently demonstrated game-agnostic behavior justify a shared contract; Hades-only repetition belongs in the Hades owner. When responsibility moves, migrate its callers and verify both Hades and the reference fixture. A shared contract preserves each adapter's native execution lifecycle.
+Apply the causal scope and review process in `AGENTS.md`. Module isolation protects ownership while allowing corrections across Core/game interfaces. A shared Core contract requires two real non-sibling adapters, an independently demonstrated game-agnostic need (including the reference fixture), or an explicit documented game-family exception where sibling games share neutral mechanics without leaking game vocabulary into Core; unabstracted Hades-only repetition belongs in a Hades owner. When responsibility moves, migrate its callers and verify both Hades and the reference fixture. A shared contract preserves each adapter's native execution lifecycle.
 
 ## Protocol and timeout rules
 

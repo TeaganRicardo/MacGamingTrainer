@@ -8,7 +8,10 @@ enum Hades2WorkbenchIcon {
     static let spellCharge = "moonphase.waxing.crescent"
     static let sprintSpeed = "hare.fill"
     static let occurrence = "figure.walk.motion"
-    static let specialReward = TrainerSemanticIcon.Context.characterReward
+    static let fishing = "fish.fill"
+    static let portal = "circle.hexagongrid.fill"
+    static let doorway = TrainerSemanticIcon.Section.navigation
+    static let specialReward = "moon.stars.fill"
     static let purge = "arrow.left.arrow.right.circle"
     static let flora = "leaf.fill"
     static let garden = "tree.fill"
@@ -61,9 +64,9 @@ enum Hades2WorkbenchIcon {
         case "hades2.gathering.title": return TrainerSemanticIcon.Section.inventory
         case "hades2.gathering.restoreNative": return TrainerSemanticIcon.Action.restore
         case "hades2.facility.title": return TrainerSemanticIcon.Action.generate
-        case "hades2.chaosGate.title": return TrainerSemanticIcon.Context.portal
+        case "hades2.chaosGate.title": return portal
         case "hades2.chaosGate.probability": return chaosProbability
-        case "hades2.worldActions.modifyExit": return TrainerSemanticIcon.Context.doorway
+        case "hades2.worldActions.modifyExit": return doorway
         case "hades2.occurrence.title": return occurrence
         case "hades2.spawn.olympianBoons": return TrainerSemanticIcon.Section.effects
         case "hades2.spawn.pickupRewards": return TrainerSemanticIcon.Section.inventory
@@ -92,7 +95,7 @@ extension Hades2GatheringFamily {
         case .mining: Hades2WorkbenchIcon.mining
         case .digging: Hades2WorkbenchIcon.digging
         case .shades: Hades2WorkbenchIcon.shades
-        case .fishing: TrainerSemanticIcon.Context.fishing
+        case .fishing: Hades2WorkbenchIcon.fishing
         }
     }
 }
@@ -115,7 +118,7 @@ extension ShortcutAction {
         case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
         case .forceLegendary: Hades2WorkbenchIcon.legendary
         case .forceDuo: Hades2WorkbenchIcon.duo
-        case .acquireChaosPair: TrainerSemanticIcon.Context.portal
+        case .acquireChaosPair: Hades2WorkbenchIcon.portal
         case .acquireExactBoon: TrainerSemanticIcon.Concept.precision
         case .openSellTraits: Hades2WorkbenchIcon.purge
         case .moneyMultiplierEnabled: TrainerSemanticIcon.Concept.currency
@@ -124,12 +127,12 @@ extension ShortcutAction {
         case .generateMining: Hades2WorkbenchIcon.mining
         case .generateDigging: Hades2WorkbenchIcon.digging
         case .generateShades: Hades2WorkbenchIcon.shades
-        case .generateFishing: TrainerSemanticIcon.Context.fishing
+        case .generateFishing: Hades2WorkbenchIcon.fishing
         case .matureGarden: Hades2WorkbenchIcon.garden
-        case .applyWorldExit: TrainerSemanticIcon.Context.doorway
+        case .applyWorldExit: Hades2WorkbenchIcon.doorway
         case .applyNextOccurrence: Hades2WorkbenchIcon.occurrence
         case .generateChamberFacility: TrainerSemanticIcon.Action.generate
-        case .generateChaosGate: TrainerSemanticIcon.Context.portal
+        case .generateChaosGate: Hades2WorkbenchIcon.portal
         case .spawnOlympian: TrainerSemanticIcon.Section.effects
         case .spawnPickup: TrainerSemanticIcon.Section.inventory
         case .spawnSpecial: Hades2WorkbenchIcon.specialReward

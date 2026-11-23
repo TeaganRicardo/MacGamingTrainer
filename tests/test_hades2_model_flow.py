@@ -53,10 +53,17 @@ for raw in sys.stdin:
         result = {'connected': False, 'pid': 5151}
     if req['command'] == 'set_desired':
         feature = req['params']['feature']; value = req['params']['value']
+        hold_feature = pathlib.Path(__file__).with_suffix('.hold_feature')
+        if hold_feature.exists():
+            release_feature = pathlib.Path(__file__).with_suffix('.release_feature')
+            deadline = time.monotonic() + 5
+            while not release_feature.exists() and time.monotonic() < deadline:
+                time.sleep(0.005)
         if feature == 'gameSpeed': result['gameSpeed'] = value
         else:
             result.setdefault('desiredFeatures', {})[feature] = value
-            result.setdefault('activeFeatures', {})[feature] = value
+            if not (pathlib.Path(__file__).with_suffix('.no_activate').exists()):
+                result.setdefault('activeFeatures', {})[feature] = value
         if observation.exists(): observation.write_text(json.dumps(result))
     print(json.dumps({
         'type':'result','id':req['id'],'protocolVersion':6,
@@ -470,7 +477,35 @@ struct Main {
         waitFor("desired/active feature receipt was not delivered") { featureDone != nil && !observedModel.busy }
         check(featureDone == true && observedModel.invincibility && observedModel.activeFeatures["invincibility"] == true,
               "desired state and runtime observation diverged")
+        check(!observedModel.isFeatureActivationPending(.invincibility),
+              "completed feature intent stayed pending")
         check(commands(at: commandLog).count == featureBefore + 1, "feature intent was replayed")
+        // Request-scoped activationPending: while an enable intent is in flight,
+        // the presentation is pending; on reply without active confirmation,
+        // it flips immediately to mismatch instead of holding a 0.9 s timer.
+        let holdFeature = worker.deletingPathExtension().appendingPathExtension("hold_feature")
+        let releaseFeature = worker.deletingPathExtension().appendingPathExtension("release_feature")
+        let noActivate = worker.deletingPathExtension().appendingPathExtension("no_activate")
+        try Data().write(to: holdFeature)
+        try Data().write(to: noActivate)
+        var unconfirmedDone: Bool? = nil
+        observedModel.feature(.infiniteHealth, value: true, completion: { unconfirmedDone = $0 })
+        check(observedModel.isFeatureActivationPending(.infiniteHealth),
+              "in-flight feature enable did not mark activationPending")
+        check(observedModel.featurePresentation(.infiniteHealth, enabled: true).phase == .pending,
+              "in-flight feature phase did not resolve to .pending")
+        try Data().write(to: releaseFeature)
+        waitFor("unconfirmed feature reply did not complete") { unconfirmedDone != nil && !observedModel.busy }
+        check(unconfirmedDone == true && !observedModel.isFeatureActivationPending(.infiniteHealth),
+              "completed feature intent kept activationPending beyond reply")
+        check(observedModel.featurePresentation(.infiniteHealth, enabled: true).phase == .mismatch,
+              "unconfirmed feature enable did not immediately enter .mismatch on reply")
+        try? FileManager.default.removeItem(at: holdFeature)
+        try? FileManager.default.removeItem(at: releaseFeature)
+        try? FileManager.default.removeItem(at: noActivate)
+        var disableDone: Bool? = nil
+        observedModel.feature(.infiniteHealth, value: false, completion: { disableDone = $0 })
+        waitFor("feature reset did not complete") { disableDone != nil && !observedModel.busy }
         try writeObservation(speed: 2.3)
         observedModel.refreshFromHost()
         waitFor("external observation did not refresh") { observedModel.gameSpeed == 2.3 && !observedModel.busy }

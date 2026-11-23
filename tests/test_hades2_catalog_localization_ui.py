@@ -152,7 +152,7 @@ assert 'nameFallback' not in exact_label
 # #346: Exact Boons is a compact two-level navigation surface. Source/group
 # identity stays language-neutral and distinct from item identity, so language
 # switches and same-name effects cannot cause selection jumps.
-assert '@ViewState<String> private var exactSourceSelection = ""' in view
+assert '@State private var exactSourceSelection = ""' in view
 assert 'private var genericExactCatalog: [BoonOption]' in view
 assert 'private var genericExactBoons: [BoonOption]' in view
 assert 'genericExactCatalog.filter' in view
@@ -669,10 +669,10 @@ assert 'currentRunTraitContextualControls' in trait_manager
 assert 'currentRunTraitCommonControls' in trait_manager
 assert 'TextField(text("hades2.traits.targetRarity")' not in trait_manager
 assert 'Picker(text("hades2.traits.targetRarity")' in trait_manager
-assert 'TraitManagerLayout.commonControlsWidth' in trait_manager
-assert 'TraitManagerLayout.levelControlsWidth' in trait_manager
-assert 'TraitManagerLayout.rarityControlsWidth' in trait_manager
-assert 'TraitManagerLayout.removeControlWidth' in trait_manager
+assert 'TrainerManagedRowLayout.trailingControlsWidth' in trait_manager
+assert 'TrainerManagedRowLayout.numericAdjustmentWidth' in trait_manager
+assert 'TrainerManagedRowLayout.pickerAdjustmentWidth' in trait_manager
+assert 'TrainerManagedRowLayout.trailingActionWidth' in trait_manager
 assert 'traitLimitationRows' not in trait_manager
 assert 'deferredIssue' not in trait_manager
 assert 'model.advanceTraitLifecycle(trait)' in trait_manager
@@ -685,7 +685,7 @@ assert 'if let trait = managedCurrentRunTrait, trait.hasContextualControls {' in
 assert 'if trait.hasTemporaryContextualControls {' in trait_manager
 assert 'currentRunTraitContextualControls(trait)' in trait_manager
 assert '.overlay(alignment: .leading)' not in trait_manager
-assert '.padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)' not in trait_manager
+assert '.padding(.trailing, TrainerManagedRowLayout.trailingControlsWidth + TrainerManagedRowLayout.rowSpacing)' not in trait_manager
 
 contextual_controls = trait_manager[
     trait_manager.index('private func currentRunTraitContextualControls'):

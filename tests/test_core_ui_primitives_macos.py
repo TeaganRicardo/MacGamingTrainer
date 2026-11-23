@@ -272,6 +272,20 @@ private func exerciseTogglesAndFeatures(localization: TrainerLocalizationStore) 
 
     let waitingState = waiting.trainerControlState(using: theme, localization: localization)
     let activeState = active.trainerControlState(using: theme, localization: localization)
+    enum DraftField: Hashable { case health, mana, bonus }
+    var observedDrafts = TrainerObservedDrafts<DraftField>([.bonus: "100"])
+    observedDrafts.observe([.health: "50", .mana: "20"], focused: nil, force: true)
+    check(observedDrafts[.health] == "50" && observedDrafts[.mana] == "20" && observedDrafts[.bonus] == "100",
+          "TrainerObservedDrafts failed initial population")
+    observedDrafts[.health] = "999"
+    observedDrafts.observe([.health: "12", .mana: "34"], focused: .health)
+    check(observedDrafts[.health] == "999" && observedDrafts[.mana] == "34",
+          "TrainerObservedDrafts replaced focused draft or missed unfocused refresh")
+    observedDrafts.observe(.health, value: "75", focused: .health, force: true)
+    check(observedDrafts[.health] == "75", "TrainerObservedDrafts force observe failed")
+    observedDrafts.reset(to: [.bonus: "100"])
+    check(observedDrafts[.health].isEmpty && observedDrafts[.bonus] == "100",
+          "TrainerObservedDrafts reset failed")
     var multText = "2.5"
     let view = VStack(alignment: .leading, spacing: 8) {
         TrainerToggleControl(title: "DefaultSwitch", isOn: true, action: {})

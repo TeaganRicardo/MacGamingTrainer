@@ -34,15 +34,15 @@ extension HadesShortcutAction {
         case .forceRerolls: TrainerSemanticIcon.Concept.refresh
         case .decreaseGameSpeed, .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale
         case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
-        case .generateFishing: TrainerSemanticIcon.Context.fishing
-        case .applyWorldExit: TrainerSemanticIcon.Context.doorway
-        case .applyWorldOccurrence: TrainerSemanticIcon.Context.characterReward
+        case .generateFishing: HadesWorkbenchIcon.fishing
+        case .applyWorldExit: HadesWorkbenchIcon.doorway
+        case .applyWorldOccurrence: HadesWorkbenchIcon.characterReward
         case .generateChamberObject: HadesWorkbenchIcon.chamberObject
-        case .generateChaosGate: TrainerSemanticIcon.Context.portal
+        case .generateChaosGate: HadesWorkbenchIcon.portal
         case .spawnOlympian: TrainerSemanticIcon.Section.effects
         case .spawnPickup: TrainerSemanticIcon.Section.inventory
-        case .spawnSpecial: TrainerSemanticIcon.Context.characterReward
-        case .acquireChaosPair: TrainerSemanticIcon.Context.portal
+        case .spawnSpecial: HadesWorkbenchIcon.characterReward
+        case .acquireChaosPair: HadesWorkbenchIcon.portal
         case .acquireExactBoon: TrainerSemanticIcon.Action.acquire
         case .disableAll: TrainerSemanticIcon.Tool.disableAll
         }
@@ -84,6 +84,10 @@ enum HadesWorkbenchIcon {
     static let level = TrainerSemanticIcon.Concept.level
     static let route = "arrow.triangle.branch"
     static let chamberObject = "shippingbox"
+    static let fishing = "fish.fill"
+    static let portal = "circle.hexagongrid.fill"
+    static let characterReward = "moon.stars.fill"
+    static let doorway = TrainerSemanticIcon.Section.navigation
     static let refreshStatus = TrainerSemanticIcon.Tool.refreshStatus
 
     static func worldObject(for id: String) -> String {
@@ -91,8 +95,8 @@ enum HadesWorkbenchIcon {
         case "trove": return "shippingbox.fill"
         case "well": return "drop.circle.fill"
         case "purge": return "arrow.left.arrow.right.circle"
-        case "fishing": return TrainerSemanticIcon.Context.fishing
-        case "chaos", "chaosGate": return TrainerSemanticIcon.Context.portal
+        case "fishing": return fishing
+        case "chaos", "chaosGate": return portal
         default: return chamberObject
         }
     }
@@ -110,7 +114,7 @@ enum HadesWorkbenchIcon {
         case "hades.level", "hades.setLevel": return level
         case "hades.apply": return TrainerSemanticIcon.Action.apply
         case "hades.remove", "hades.cancelCurse": return TrainerSemanticIcon.Action.remove
-        case "hades.chaosPair": return TrainerSemanticIcon.Context.portal
+        case "hades.chaosPair": return portal
         case "hades.chaosBlessing", "hades.chaosCurse": return TrainerSemanticIcon.Section.effects
         case "hades.remainingUses", "hades.expireEffect": return TrainerSemanticIcon.Concept.duration
         case "hades.activateBlessing": return TrainerSemanticIcon.Concept.actionSpeed
@@ -119,9 +123,9 @@ enum HadesWorkbenchIcon {
         case "hades.gainResource": return TrainerSemanticIcon.Action.acquire
         case "hades.spawn.olympianBoons": return TrainerSemanticIcon.Section.effects
         case "hades.spawn.pickupRewards": return TrainerSemanticIcon.Section.inventory
-        case "hades.spawn.characterRewards": return TrainerSemanticIcon.Context.characterReward
-        case "hades.worldActions.modifyExit": return TrainerSemanticIcon.Context.doorway
-        case "hades.occurrence.title": return TrainerSemanticIcon.Context.characterReward
+        case "hades.spawn.characterRewards": return characterReward
+        case "hades.worldActions.modifyExit": return doorway
+        case "hades.occurrence.title": return characterReward
         case "hades.chamberObject": return chamberObject
         case "host.refreshStatus": return refreshStatus
         case "hades.saveEditor.title": return TrainerSemanticIcon.Tool.saveEditor

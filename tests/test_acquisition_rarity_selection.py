@@ -11,43 +11,43 @@ if SWIFTC is None:
     print("acquisition_rarity_swiftc_unavailable")
     raise SystemExit(0)
 
-SOURCE = ROOT / "Sources/Core/UI/TrainerAcquisitionRarity.swift"
+SOURCE = ROOT / "Sources/Core/UI/TrainerOrderedOptionReconciler.swift"
 HARNESS = r"""
 import Foundation
 
 @main struct CheckRarity {
     static func main() {
         let order = ["Common", "Rare", "Epic", "Heroic", "Duo", "Legendary", "Perfect"]
-        typealias Adjustment = TrainerAcquisitionRarityResolution.Adjustment
+        typealias Adjustment = TrainerOrderedOptionResolution.Adjustment
         func check(_ previous: String?, _ supported: [String], expected: String?, change: Adjustment) {
-            let result = TrainerAcquisitionRarity.resolve(
-                previous: previous, supported: supported, nativeOrder: order
+            let result = TrainerOrderedOptionReconciler.resolve(
+                previous: previous, supported: supported, preferredOrder: order
             )
-            precondition(result.rarity == expected,
-                "bad rarity fallback for \(String(describing: previous)) -> \(supported)")
+            precondition(result.option == expected,
+                "bad option fallback for \(String(describing: previous)) -> \(supported)")
             precondition(result.adjustment == change, "bad adjustment state")
         }
-        check("Heroic", ["Common", "Rare", "Epic"], expected: "Epic", change: .targetRestricted)
-        check("Heroic", ["Common", "Legendary"], expected: "Common", change: .targetRestricted)
-        check("Rare", ["Common", "Legendary"], expected: "Common", change: .targetRestricted)
-        check("Common", ["Legendary"], expected: "Legendary", change: .targetRestricted)
+        check("Heroic", ["Common", "Rare", "Epic"], expected: "Epic", change: .constrainedToSupported)
+        check("Heroic", ["Common", "Legendary"], expected: "Common", change: .constrainedToSupported)
+        check("Rare", ["Common", "Legendary"], expected: "Common", change: .constrainedToSupported)
+        check("Common", ["Legendary"], expected: "Legendary", change: .constrainedToSupported)
         check("Epic", ["Epic"], expected: "Epic", change: .none)
-        check(nil, ["Perfect", "Epic"], expected: "Epic", change: .targetRestricted)
-        check("Heroic", [], expected: nil, change: .gameControlled)
+        check(nil, ["Perfect", "Epic"], expected: "Epic", change: .constrainedToSupported)
+        check("Heroic", [], expected: nil, change: .externallyControlled)
         check(nil, [], expected: nil, change: .none)
-        let defined = TrainerAcquisitionRarity.resolve(
+        let defined = TrainerOrderedOptionReconciler.resolve(
             previous: "Heroic", supported: ["Common", "Legendary"],
-            nativeOrder: order, declaredDefault: "Legendary"
+            preferredOrder: order, declaredDefault: "Legendary"
         )
-        precondition(defined.rarity == "Legendary" && defined.requiresVisibleConfirmation)
-        let unknown = TrainerAcquisitionRarity.resolve(
-            previous: "Heroic", supported: ["NativeOnly"], nativeOrder: order
+        precondition(defined.option == "Legendary" && defined.requiresVisibleConfirmation)
+        let unknown = TrainerOrderedOptionReconciler.resolve(
+            previous: "Heroic", supported: ["NativeOnly"], preferredOrder: order
         )
-        precondition(unknown.rarity == "NativeOnly")
-        let repeated = TrainerAcquisitionRarity.resolve(
-            previous: "Rare", supported: ["Common", "Rare", "Rare"], nativeOrder: order
+        precondition(unknown.option == "NativeOnly")
+        let repeated = TrainerOrderedOptionReconciler.resolve(
+            previous: "Rare", supported: ["Common", "Rare", "Rare"], preferredOrder: order
         )
-        precondition(repeated.rarity == "Rare" && !repeated.requiresVisibleConfirmation)
+        precondition(repeated.option == "Rare" && !repeated.requiresVisibleConfirmation)
         print("acquisition_rarity_contract_ok")
     }
 }

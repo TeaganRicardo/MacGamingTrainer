@@ -41,7 +41,7 @@ struct HadesGatheringPanel: View {
                 )
                 TrainerSecondaryActionButton(title: text("hades.gain"), enabled: model.canMutate, action: gain)
             }
-            TrainerLabeledControlRow(title: text("hades.generateFishing"), icon: TrainerSemanticIcon.Context.fishing, tint: model.canMutate && model.world?.canFish == true ? theme.accent : theme.inactive, emphasized: false) {
+            TrainerLabeledControlRow(title: text("hades.generateFishing"), icon: HadesWorkbenchIcon.fishing, tint: model.canMutate && model.world?.canFish == true ? theme.accent : theme.inactive, emphasized: false) {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.generateFishing))
                 TrainerSecondaryActionButton(
                     title: text("hades.generate"),
@@ -128,7 +128,7 @@ struct HadesRoomsPanel: View {
         let leaseSelection = exit?.activeLease.map { $0.kind + ":" + $0.target }
         return TrainerDualPickerActionRow(
             title: text("hades.worldActions.modifyExit"),
-            icon: TrainerSemanticIcon.Context.doorway,
+            icon: HadesWorkbenchIcon.doorway,
             tint: model.canSelectWorldExit ? theme.accent : theme.inactive,
             emphasized: model.selectedWorldExitLease != nil
         ) {
@@ -214,7 +214,7 @@ struct HadesRoomsPanel: View {
         let pending = model.worldOccurrenceLease != nil
         return TrainerLabeledControlRow(
             title: text("hades.occurrence.title"),
-            icon: TrainerSemanticIcon.Context.characterReward,
+            icon: HadesWorkbenchIcon.characterReward,
             tint: model.canSelectWorldOccurrence ? theme.accent : theme.inactive,
             emphasized: pending,
             layout: .pickerAction
@@ -283,7 +283,7 @@ struct HadesRoomsPanel: View {
     private var chaosGateRow: some View {
         TrainerLabeledControlRow(
             title: text("hades.generateChaosGate"),
-            icon: TrainerSemanticIcon.Context.portal,
+            icon: HadesWorkbenchIcon.portal,
             tint: model.canMutate && model.world?.canChaos == true ? theme.accent : theme.inactive,
             emphasized: false
         ) {
@@ -313,7 +313,7 @@ struct HadesRoomsPanel: View {
             VStack(spacing: 1) {
                 spawnRow(.olympian, title: "hades.spawn.olympianBoons", icon: TrainerSemanticIcon.Section.effects)
                 spawnRow(.pickup, title: "hades.spawn.pickupRewards", icon: TrainerSemanticIcon.Section.inventory)
-                spawnRow(.special, title: "hades.spawn.characterRewards", icon: TrainerSemanticIcon.Context.characterReward)
+                spawnRow(.special, title: "hades.spawn.characterRewards", icon: HadesWorkbenchIcon.characterReward)
             }
             .trainerGroupedRows()
         }

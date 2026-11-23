@@ -14,6 +14,9 @@ enum TrainerFeaturePhase: Equatable {
 /// supplies its own observations (support, activity, dormancy, an in-flight
 /// intent and whether its runtime can apply one now); Core derives the shared
 /// phase, tint and help so the same state reads the same in every game.
+///
+/// `activationPending` is request-scoped: true only while an explicit desired
+/// intent request is in flight awaiting reply/observation (never a wall-clock timer).
 package struct TrainerFeaturePresentation: Equatable {
     let enabled: Bool
     let supported: Bool
