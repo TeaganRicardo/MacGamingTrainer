@@ -1,7 +1,7 @@
 """Hades I typed payloads, native numeric drafts and captured-hero requests."""
 
 MGT_PLATFORM = "macos"
-MGT_INPUTS = ("Backend/core/save_restore.py", "Resources/Localization/")
+MGT_INPUTS = ("Backend/core/save_restore.py", "Resources/Localization/", "Tools/generate_module_commands.py")
 
 import json
 import os
