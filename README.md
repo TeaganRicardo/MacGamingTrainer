@@ -17,7 +17,7 @@ chmod +x build.sh
 ./build.sh
 ```
 
-The bundled module list is declared in `app.json`; `Info.plist` owns the product version and build identity. `./build.sh <game-id>` produces an isolated diagnostic App for module verification. Hades includes live combat/resource, trait/effect, room/world and management controls, Profiles, diagnostics, and an offline semantic Save Editor with explicit source/target selection. Automated checks cover the implementation. See `PROJECT_STATUS.md` for supported game identities and operational limits.
+The bundled module list is declared in `app.json`; `Info.plist` owns the product version and build identity. `./build.sh <game-id>` produces an isolated diagnostic App for module verification. Hades includes live combat/resource, trait/effect, room/world and management controls, Profiles, diagnostics, and an offline semantic Save Editor with explicit source/target selection. Automated checks cover the implementation. Each module's `module.json` declares its supported game build.
 
 The packaged app is written under `dist/`; the exact path is printed by the build script. For a repository in a cloud-synced directory, use `MGT_BUILD_OUTPUT_DIR=/absolute/local/path ./build.sh` to keep the signed App on a local filesystem.
 
@@ -40,11 +40,6 @@ xcrun lldb -P
 - `docs/reference/hades2/` — versioned Hades II research/reference data.
 - `Tools/` and `tests/` — build, validation, and executable contracts.
 
-## Development references
+## Development
 
-- [AGENTS.md](AGENTS.md) — coding-agent entrypoint and verification routing.
-- [PROJECT_STATUS.md](PROJECT_STATUS.md) — compatibility, operating limits and manual-acceptance evidence.
-- [ENGINEERING_INVARIANTS.md](ENGINEERING_INVARIANTS.md) — stable ownership, lifecycle, replay, and Save-safety rules.
-- [GAME_MODULES.md](GAME_MODULES.md) — Core/game-module contract.
-- [VERSIONING.md](VERSIONING.md) — release and versioning policy.
-- [docs/development/ci.md](docs/development/ci.md) — CI routing, toolchain pinning and build provenance policy.
+See [AGENTS.md](AGENTS.md) for the development guide: layout, build, tests, CI, adding a game, versions and the hard rules.

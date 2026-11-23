@@ -22,14 +22,7 @@ from core.protocol import APP_BACKEND_VERSION
 
 assert APP_BACKEND_VERSION == version
 
-versioning = (ROOT / 'VERSIONING.md').read_text(encoding='utf-8')
-modules = (ROOT / 'GAME_MODULES.md').read_text(encoding='utf-8')
 fixture = (ROOT / 'ContractFixtures/host_protocol_v6.json').read_text(encoding='utf-8')
-
-# Policy documents describe rules, not a second copy of current release values.
-for stale in ('Current product version:', 'Current development build:', 'Latest released build:'):
-    assert stale not in versioning
-assert 'Game module contract — 0.1 baseline' not in modules
 
 # CI's release identity step (Info.plist SemVer and positive-integer build,
 # checkout source identity) is executed in test_ci_workflow_contract.py.
