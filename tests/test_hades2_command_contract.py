@@ -24,8 +24,10 @@ class ProbeAdapter:
     def __init__(self):
         self.calls = []
         self.runtime = TransportProbe()
-        self.context = SimpleNamespace(steam_launch_url="steam://run/2300")
-        self.legacy_data_dir = Path("/tmp/synthetic-trainer-data")
+        self.context = SimpleNamespace(
+            steam_launch_url="steam://run/2300",
+            data_dir=Path("/tmp/synthetic-trainer-data/hades2"),
+        )
 
     def _record(self, name, *args):
         self.calls.append((name, *copy.deepcopy(args)))
@@ -588,10 +590,10 @@ try:
     probe.runtime.live = False
     probe.calls.clear()
     prepared = contract.dispatch("prepare", {}, "prepare")
-    assert prepared == {"route": "scan", "args": (), "operation": {"prepared": True, "dataDir": probe.legacy_data_dir}}
+    assert prepared == {"route": "scan", "args": (), "operation": {"prepared": True, "dataDir": probe.context.data_dir}}
     probe.calls.clear()
     restored = contract.dispatch("restore", {}, "restore")
-    assert restored == {"route": "scan", "args": (), "operation": {"restored": True, "dataDir": probe.legacy_data_dir}}
+    assert restored == {"route": "scan", "args": (), "operation": {"restored": True, "dataDir": probe.context.data_dir}}
     probe.runtime.live = True
     expect_error("prepare", {}, "请断开连接并退出游戏后操作。")
 finally:

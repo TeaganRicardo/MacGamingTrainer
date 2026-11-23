@@ -351,9 +351,8 @@ struct HadesShortcutStore {
             defaultLayout: Self.defaultLayout(),
             lockedActions: [.disableAll: TrainerHotkeyLayout.disableAllChord],
             storage: TrainerShortcutStorage(
-                read: { defaults.object(forKey: Self.key($0)) },
-                write: { defaults.set($1, forKey: Self.key($0)) },
-                remove: { defaults.removeObject(forKey: Self.key($0)) }
+                moduleID: "hades",
+                defaults: defaults
             ),
             cleanupLegacy: {
                 defaults.removeObject(forKey: "hades.shortcut.heal")
@@ -380,9 +379,5 @@ struct HadesShortcutStore {
     @discardableResult
     mutating func applyProfile(_ values: [String: Any]) -> TrainerShortcutProfileApplyResult {
         core.applyProfile(values)
-    }
-
-    private static func key(_ action: HadesShortcutAction) -> String {
-        "hades.shortcut.\(action.rawValue)"
     }
 }

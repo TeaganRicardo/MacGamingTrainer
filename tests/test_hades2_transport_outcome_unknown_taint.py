@@ -363,7 +363,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
             raise AssertionError('decoded asynchronous unknown action did not stop transport trust')
         assert async_transport.tainted
         assert len(async_transport.calls) == 1, 'unknown status automatically crossed another Lua boundary'
-        assert not (context.data_dir.parent / 'desired-state.json').exists(), 'unknown status adopted preferences'
+        assert not (context.data_dir / 'desired-state.json').exists(), 'unknown status adopted preferences'
         assert adapter.state['status'] == 'restart_required'
         assert adapter.state['rerolls'] == 4
         assert adapter.state['lastAction']['requestId'] == 'async-special-choice'
@@ -379,7 +379,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
         # receipts are observation only and must never be promoted to persistence.
         desired = Hades2PreferenceStore.defaults()
         desired.update(invincibility=True)
-        store = Hades2PreferenceStore(context.data_dir.parent / 'desired-state.json')
+        context.data_dir.mkdir(parents=True, exist_ok=True); store = Hades2PreferenceStore(context.data_dir / 'desired-state.json')
         store.save(desired)
         dirty_transport = AsyncUnknownTransport()
         dirty_transport.payload.update(nextRoomReward=None, runtimeDiagnostics={'lastConsumedNextRoomRewardToken': 'consumed-room'})

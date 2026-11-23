@@ -26,9 +26,11 @@ defaults.set(legacy.payload, forKey: "shortcut.action.godMode")
 
 let store = Hades2ShortcutStore(defaults: defaults)
 precondition(store.chord(.invincibility) == legacy)
-precondition(defaults.integer(forKey: "shortcut.layoutVersion") == 6)
+precondition(defaults.integer(forKey: "hades2.shortcut.layoutVersion") == 7)
+precondition(defaults.object(forKey: "shortcut.layoutVersion") == nil)
 precondition(defaults.object(forKey: "shortcut.action.godMode") == nil)
-precondition(defaults.object(forKey: "shortcut.action.invincibility") != nil)
+precondition(defaults.object(forKey: "shortcut.action.invincibility") == nil)
+precondition(defaults.object(forKey: "hades2.shortcut.action.invincibility") != nil)
 precondition(store.payload()["invincibility"] != nil)
 precondition(store.payload()["godMode"] == nil)
 

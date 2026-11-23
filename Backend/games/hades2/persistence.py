@@ -38,9 +38,54 @@ __all__ = [
     'PersistenceError',
     'UnsupportedSchemaVersionError',
     'atomic_write_text',
+    'migrate_legacy_root_data_dir',
     'os',
     'quarantine_corrupt_file',
 ]
+
+_LEGACY_ROOT_FILES = ('desired-state.json',)
+_LEGACY_ROOT_DIRS = ('profiles', 'backups', 'diagnostics')
+
+
+def migrate_legacy_root_data_dir(data_dir):
+    """Migrate pre-WP4.2 flat root Hades II files and directories into `MacGamingTrainer/hades2/`."""
+    target_dir = Path(data_dir)
+    if target_dir.name != 'hades2' or target_dir.is_symlink():
+        return
+    legacy_root = target_dir.parent
+    if not legacy_root.is_dir() or legacy_root.is_symlink():
+        return
+    for filename in _LEGACY_ROOT_FILES:
+        legacy_file = legacy_root / filename
+        target_file = target_dir / filename
+        if (legacy_file.is_file() or legacy_file.is_symlink()) and not (
+            target_file.exists() or target_file.is_symlink()
+        ):
+            target_dir.mkdir(parents=True, exist_ok=True)
+            os.replace(legacy_file, target_file)
+        for corrupt in sorted(legacy_root.glob(f'{filename}.corrupt-*')):
+            dest_corrupt = target_dir / corrupt.name
+            if not (dest_corrupt.exists() or dest_corrupt.is_symlink()):
+                target_dir.mkdir(parents=True, exist_ok=True)
+                os.replace(corrupt, dest_corrupt)
+    for dirname in _LEGACY_ROOT_DIRS:
+        legacy_sub = legacy_root / dirname
+        target_sub = target_dir / dirname
+        if not legacy_sub.is_dir() or legacy_sub.is_symlink():
+            continue
+        if not (target_sub.exists() or target_sub.is_symlink()):
+            target_dir.mkdir(parents=True, exist_ok=True)
+            os.replace(legacy_sub, target_sub)
+        elif target_sub.is_dir() and not target_sub.is_symlink():
+            for entry in sorted(legacy_sub.iterdir()):
+                dest = target_sub / entry.name
+                if not (dest.exists() or dest.is_symlink()):
+                    os.replace(entry, dest)
+            try:
+                if not any(legacy_sub.iterdir()):
+                    legacy_sub.rmdir()
+            except OSError:
+                pass
 
 
 def atomic_write_text(path, text, *, encoding='utf-8'):

@@ -90,8 +90,8 @@ try:
     # therefore must not fail merely because the durable file is newer.
     adapter_base = base/'future-adapter'
     context = hades2_adapter_context(adapter_base)
-    context.data_dir.parent.mkdir(parents=True)
-    adapter_desired = context.data_dir.parent/'desired-state.json'
+    context.data_dir.mkdir(parents=True)
+    adapter_desired = context.data_dir/'desired-state.json'
     adapter_desired.write_text(json.dumps(future_doc, sort_keys=True), encoding='utf-8')
     adapter_desired_bytes = adapter_desired.read_bytes()
 
@@ -240,6 +240,50 @@ try:
     profiles.list()
     assert not null_profile_path.exists()
     assert len(list(profiles.root.glob('null-schema.json.corrupt-*'))) == 1
+
+    # WP4.2 root-to-hades2/ migration: pre-WP4.2 flat root desired-state.json,
+    # profiles/, backups/, and diagnostics/ migrate into MacGamingTrainer/hades2/
+    # without losing content or weakening newer/older schema refusal.
+    mig_context = hades2_adapter_context(base / 'root-migration')
+    legacy_root = mig_context.data_dir.parent
+    legacy_root.mkdir(parents=True, exist_ok=True)
+    legacy_desired = dict(loaded, invincibility=True)
+    (legacy_root / 'desired-state.json').write_text(json.dumps(legacy_desired), encoding='utf-8')
+    legacy_profiles = Hades2ProfileService(legacy_root / 'profiles')
+    legacy_profiles.save('migrated-preset', legacy_desired, {'invincibility': {'keyCode': 18, 'modifiers': 6144, 'keyLabel': '1'}})
+    old_root_profile = legacy_profiles.path('old-root-v1')
+    old_root_profile.write_text(json.dumps({'schemaVersion': 1, 'name': 'old-root-v1', 'desired': {}}), encoding='utf-8')
+    future_root_profile = legacy_profiles.path('future-root')
+    future_root_profile.write_text(
+        json.dumps({'schemaVersion': PROFILE_SCHEMA_VERSION + 1, 'name': 'future-root', 'desired': {}}),
+        encoding='utf-8',
+    )
+    (legacy_root / 'backups/sig-1').mkdir(parents=True)
+    (legacy_root / 'backups/sig-1/manifest.json').write_text('{"status":"prepared"}\n', encoding='utf-8')
+    (legacy_root / 'diagnostics').mkdir(parents=True)
+    (legacy_root / 'diagnostics/report.json').write_text('{"ok":true}\n', encoding='utf-8')
+
+    mig_adapter = Hades2Adapter(context=mig_context, transport=FutureSchemaTransport())
+    assert mig_adapter.preferences['invincibility'] is True
+    assert not (legacy_root / 'desired-state.json').exists()
+    assert (mig_context.data_dir / 'desired-state.json').is_file()
+    assert not (legacy_root / 'profiles').exists()
+    assert [row['name'] for row in mig_adapter.profile_service.list()] == ['migrated-preset']
+    assert (mig_context.data_dir / 'backups/sig-1/manifest.json').is_file()
+    assert (mig_context.data_dir / 'diagnostics/report.json').is_file()
+    for refused_name in ('old-root-v1', 'future-root'):
+        try:
+            mig_adapter.profile_service.load(refused_name)
+        except UnsupportedSchemaVersionError as error:
+            assert error.code == 'unsupported_schema'
+        else:
+            raise AssertionError(f'migrated unsupported profile {refused_name} was accepted')
+
+    # Existing namespaced files under MacGamingTrainer/hades2/ take precedence
+    # over any stale root file left behind.
+    (legacy_root / 'desired-state.json').write_text(json.dumps(dict(loaded, invincibility=False)), encoding='utf-8')
+    mig_adapter_reload = Hades2Adapter(context=mig_context, transport=FutureSchemaTransport())
+    assert mig_adapter_reload.preferences['invincibility'] is True
 finally:
     logging.disable(logging.NOTSET)
 

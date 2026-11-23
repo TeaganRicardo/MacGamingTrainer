@@ -65,7 +65,7 @@ def handle_occurrence(resident, record):
 
 with tempfile.TemporaryDirectory(prefix="mgt-occurrence-world-action-") as temporary:
     context = hades2_adapter_context(temporary)
-    data_dir = context.data_dir.parent
+    data_dir = context.data_dir
     data_dir.mkdir(parents=True)
     desired_path = data_dir / "desired-state.json"
     desired_path.write_text(json.dumps({

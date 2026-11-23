@@ -125,8 +125,8 @@ try:
 
     adapter_base = base/'blocked-adapter'
     context = hades2_adapter_context(adapter_base)
-    context.data_dir.parent.mkdir(parents=True)
-    blocked_path = context.data_dir.parent/'desired-state.json'
+    context.data_dir.mkdir(parents=True)
+    blocked_path = context.data_dir/'desired-state.json'
     blocked_path.write_text('{broken', encoding='utf-8')
     blocked_bytes = blocked_path.read_bytes()
 

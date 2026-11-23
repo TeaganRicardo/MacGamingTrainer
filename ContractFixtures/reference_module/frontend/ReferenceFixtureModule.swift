@@ -54,9 +54,8 @@ struct ReferenceFixtureShortcutStore {
             defaultLayout: Self.defaultLayout(),
             lockedActions: [.disableAll: TrainerHotkeyLayout.disableAllChord],
             storage: TrainerShortcutStorage(
-                read: { defaults.object(forKey: Self.key($0)) },
-                write: { defaults.set($1, forKey: Self.key($0)) },
-                remove: { defaults.removeObject(forKey: Self.key($0)) }
+                moduleID: ReferenceFixtureGameModule.descriptor.id,
+                defaults: defaults
             )
         )
     }
@@ -80,10 +79,6 @@ struct ReferenceFixtureShortcutStore {
     @discardableResult
     mutating func applyProfile(_ values: [String: Any]) -> TrainerShortcutProfileApplyResult {
         core.applyProfile(values)
-    }
-
-    private static func key(_ action: ReferenceFixtureShortcutAction) -> String {
-        "reference_fixture.shortcut.\(action.rawValue)"
     }
 }
 
