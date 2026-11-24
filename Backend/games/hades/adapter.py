@@ -74,10 +74,6 @@ class HadesAdapter(GameAdapter):
             ),
         )
 
-    def bind_save_service(self, save_service):
-        super().bind_save_service(save_service)
-        self.save_workspaces.clear()
-
     @staticmethod
     def _hades_save_inventory(save_service, snapshot_id=None):
         from .save_workspace import HadesSaveWorkspace
@@ -361,28 +357,7 @@ class HadesAdapter(GameAdapter):
 
     def _save_editor(self, command, params):
         try:
-            if command == 'open':
-                return self.save_workspaces.open(params, language=params.get('language', 'en'))
-            if command in ('inventory', 'close'):
-                return self.save_workspaces.handle(command, params)
-            workspace = self.save_workspaces.require(params.get('workspaceId'))
-            if command == 'target':
-                return workspace.set_target(
-                    params['target'],
-                    baseline_generation=params.get('baselineGeneration'),
-                )
-            if command == 'query':
-                return workspace.query(**{key: value for key, value in params.items() if key != 'workspaceId'})
-            language = params.get('language', 'en')
-            if command == 'detail': return workspace.detail(params['entryId'], language)
-            if command == 'stage': return workspace.stage(params['entryId'], params['operation'], params.get('value'), language,
-                                                         baseline_generation=params.get('baselineGeneration'))
-            if command == 'unstage': return workspace.unstage(params['entryId'], language,
-                                                             baseline_generation=params.get('baselineGeneration'))
-            if command == 'review': return workspace.review(language)
-            if command == 'cancel': return workspace.cancel(language, baseline_generation=params.get('baselineGeneration'))
-            if command == 'apply': return workspace.apply(baseline_generation=params.get('baselineGeneration'))
-            raise ValueError('Unknown Save Editor operation.')
+            return self.save_workspaces.handle(command, params, language=params.get('language', 'en'))
         except PresentableError:
             raise
         except (ValueError, KeyError, TypeError, OSError) as error:

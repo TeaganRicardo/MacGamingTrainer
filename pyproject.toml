@@ -14,6 +14,7 @@ quote-style = "preserve"
 
 [tool.mypy]
 files = [
+    "Backend/core/save_editor.py",
     "Backend/core/save_resolution.py",
     "Backend/core/structured_save_edit.py",
     "Backend/games/hades/save_provider.py",
@@ -23,6 +24,11 @@ follow_imports = "silent"
 python_version = "3.10"
 disallow_any_generics = true
 disallow_incomplete_defs = true
+
+[[tool.mypy.overrides]]
+module = "core.save_editor"
+disallow_untyped_defs = true
+warn_return_any = true
 
 [[tool.mypy.overrides]]
 module = "core.structured_save_edit"

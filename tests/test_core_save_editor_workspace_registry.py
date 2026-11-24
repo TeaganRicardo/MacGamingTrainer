@@ -285,6 +285,117 @@ def main():
         )
         assert targeted["target"] == {"rootId": "main", "relativePath": "Profile2.sav"}
 
+        # Expanded registry handle() routes query, detail, stage, unstage, review, cancel, apply.
+        class _DispatchWorkspace(_DummyWorkspace):
+            def __init__(self, sess):
+                super().__init__(sess)
+                self.calls = []
+
+            def set_target(self, target, *, baseline_generation):
+                assert baseline_generation == self.baseline_generation
+                self.calls.append(("target", target, baseline_generation))
+                return super().set_target(target)
+
+            def query(self, **kwargs):
+                self.calls.append(("query", kwargs))
+                return {"rows": [], "total": 0}
+
+            def detail(self, entry_id, language="en"):
+                self.calls.append(("detail", entry_id, language))
+                return {"row": {"id": entry_id}}
+
+            def stage(self, entry_id, operation, value=None, language="en", *, baseline_generation):
+                self.calls.append(("stage", entry_id, operation, value, language, baseline_generation))
+                return {"count": 1}
+
+            def unstage(self, entry_id, language="en", *, baseline_generation):
+                self.calls.append(("unstage", entry_id, language, baseline_generation))
+                return {"count": 0}
+
+            def review(self, language="en"):
+                self.calls.append(("review", language))
+                return {"count": 0}
+
+            def cancel(self, language="en", *, baseline_generation):
+                self.calls.append(("cancel", language, baseline_generation))
+                return {"count": 0}
+
+            def apply(self, *, baseline_generation):
+                self.calls.append(("apply", baseline_generation))
+                return {"applied": True}
+
+        dispatch_registry = sse.SaveEditorWorkspaceRegistry(
+            lambda: service,
+            inventory=lambda _svc, _snap=None: {"sources": [], "targets": [], "defaultSource": None},
+            open_workspace=lambda svc, *, snapshot_id=None, source=None, target=None: _DispatchWorkspace(
+                StructuredSaveEditSession.open_selected(
+                    svc,
+                    CODEC,
+                    eligibility,
+                    source=source,
+                    snapshot_id=snapshot_id,
+                    target=target,
+                    default_target=True,
+                )
+            ),
+            max_open=2,
+        )
+        opened_dispatch = dispatch_registry.handle(
+            "save_editor_open",
+            {"source": {"rootId": "main", "relativePath": "Profile1.sav"}},
+        )
+        dw_id = opened_dispatch["workspaceId"]
+        dw_gen = opened_dispatch["baselineGeneration"]
+        dw_obj = dispatch_registry[dw_id]
+        assert dispatch_registry.handle(
+            "save_editor_target",
+            {"workspaceId": dw_id, "baselineGeneration": dw_gen, "target": {"rootId": "main", "relativePath": "Profile2.sav"}},
+        )["target"] == {"rootId": "main", "relativePath": "Profile2.sav"}
+        assert dispatch_registry.handle(
+            "save_editor_query",
+            {"workspaceId": dw_id, "baselineGeneration": dw_gen, "domain": "general", "language": "zh-CN"},
+        ) == {"rows": [], "total": 0}
+        assert dispatch_registry.handle(
+            "save_editor_detail",
+            {"workspaceId": dw_id, "entryId": "gold", "language": "zh-CN"},
+        ) == {"row": {"id": "gold"}}
+        assert dispatch_registry.handle(
+            "save_editor_stage",
+            {"workspaceId": dw_id, "baselineGeneration": dw_gen, "entryId": "gold", "operation": "set", "value": 99},
+        ) == {"count": 1}
+        assert dispatch_registry.handle(
+            "save_editor_unstage",
+            {"workspaceId": dw_id, "baselineGeneration": dw_gen, "entryId": "gold", "language": "zh-CN"},
+        ) == {"count": 0}
+        assert dispatch_registry.handle("save_editor_review", {"workspaceId": dw_id, "language": "zh-CN"}) == {"count": 0}
+        assert dispatch_registry.handle(
+            "save_editor_cancel",
+            {"workspaceId": dw_id, "baselineGeneration": dw_gen, "language": "en"},
+        ) == {"count": 0}
+        assert dispatch_registry.handle("save_editor_apply", {"workspaceId": dw_id, "baselineGeneration": dw_gen}) == {
+            "applied": True
+        }
+        try:
+            dispatch_registry.handle(
+                "save_editor_stage",
+                {"workspaceId": dw_id, "baselineGeneration": "stale", "entryId": "gold", "operation": "set", "value": 1},
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("stale baseline passed registry stage handler")
+        try:
+            dispatch_registry.handle(
+                "save_editor_apply",
+                {"workspaceId": dw_id, "baselineGeneration": "stale"},
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("stale baseline passed registry apply handler")
+        assert [c[0] for c in dw_obj.calls] == ["target", "query", "detail", "stage", "unstage", "review", "cancel", "apply"]
+        dispatch_registry.clear()
+
         assert registry.handle("close", {"workspaceId": id1}) == {"closed": True}
         assert id1 not in registry
         registry.clear()
