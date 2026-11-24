@@ -4,17 +4,17 @@ import TrainerCore
 /// Hades II-specific presentation icons. Shared visual roles live in Core;
 /// these names describe concepts unique to this module.
 enum Hades2WorkbenchIcon {
-    static let grasp = "brain.head.profile"
-    static let spellCharge = "moonphase.waxing.crescent"
-    static let sprintSpeed = "hare.fill"
-    static let occurrence = "figure.walk.motion"
-    static let fishing = "fish.fill"
-    static let portal = "circle.hexagongrid.fill"
-    static let doorway = TrainerSemanticIcon.Section.navigation
-    static let specialReward = "moon.stars.fill"
-    static let purge = "arrow.left.arrow.right.circle"
-    static let flora = "leaf.fill"
-    static let garden = "tree.fill"
+    static let grasp = Hades2CheatIcon.grasp
+    static let spellCharge = Hades2CheatIcon.spellCharge
+    static let sprintSpeed = Hades2CheatIcon.sprintSpeed
+    static let occurrence = Hades2CheatIcon.occurrence
+    static let fishing = Hades2CheatIcon.fishing
+    static let portal = Hades2CheatIcon.portal
+    static let doorway = Hades2CheatIcon.doorway
+    static let specialReward = Hades2CheatIcon.specialReward
+    static let purge = Hades2CheatIcon.purge
+    static let flora = Hades2CheatIcon.flora
+    static let garden = Hades2CheatIcon.garden
     static let targetLevel = TrainerSemanticIcon.Concept.level
     static let exactBoons = TrainerSemanticIcon.Concept.precision
     static let chaosAdvance = "arrow.right.circle"
@@ -22,13 +22,13 @@ enum Hades2WorkbenchIcon {
     static let prepareSigning = "signature"
     static let restoreSigning = "arrow.uturn.backward.circle"
     static let refreshStatus = TrainerSemanticIcon.Tool.refreshStatus
-    static let miniGames = "gamecontroller.fill"
-    static let hexReady = "moon.fill"
-    static let legendary = "star.fill"
-    static let duo = "person.2.fill"
-    static let mining = "hammer.fill"
-    static let digging = "mountain.2.fill"
-    static let shades = "person.3.fill"
+    static let miniGames = Hades2CheatIcon.miniGames
+    static let hexReady = Hades2CheatIcon.hexReady
+    static let legendary = Hades2CheatIcon.legendary
+    static let duo = Hades2CheatIcon.duo
+    static let mining = Hades2CheatIcon.mining
+    static let digging = Hades2CheatIcon.digging
+    static let shades = Hades2CheatIcon.shades
 
     static func icon(for titleKey: String) -> String? {
         if let family = Hades2GatheringFamily.allCases.first(where: { $0.titleKey == titleKey }) {
@@ -102,51 +102,21 @@ extension Hades2GatheringFamily {
 
 extension ShortcutAction {
     var icon: String {
-        switch self {
-        case .invincibility: TrainerSemanticIcon.Concept.protection
-        case .infiniteHealth: TrainerSemanticIcon.Concept.vitality
-        case .infiniteMana: TrainerSemanticIcon.Concept.energy
-        case .infiniteMoney: TrainerSemanticIcon.Concept.currency
-        case .infiniteRerolls: TrainerSemanticIcon.Concept.randomize
-        case .forceEnableRerolls: TrainerSemanticIcon.Concept.refresh
-        case .instantCastCooldown: TrainerSemanticIcon.Concept.timer
-        case .hexAlwaysReady: Hades2WorkbenchIcon.hexReady
-        case .infiniteAmmo: TrainerSemanticIcon.Concept.capacity
-        case .autoMiniGames: Hades2WorkbenchIcon.miniGames
-        case .decreaseGameSpeed: TrainerSemanticIcon.Concept.timeScale
-        case .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale
-        case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
-        case .forceLegendary: Hades2WorkbenchIcon.legendary
-        case .forceDuo: Hades2WorkbenchIcon.duo
-        case .acquireChaosPair: Hades2WorkbenchIcon.portal
+        if let definition = Hades2CheatCatalog.definition(id: rawValue) {
+            return definition.icon
+        }
+        return switch self {
+        case .decreaseGameSpeed, .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale
         case .acquireExactBoon: TrainerSemanticIcon.Concept.precision
-        case .openSellTraits: Hades2WorkbenchIcon.purge
-        case .moneyMultiplierEnabled: TrainerSemanticIcon.Concept.currency
-        case .resourceMultiplierEnabled: TrainerSemanticIcon.Section.inventory
-        case .generateFlora: Hades2WorkbenchIcon.flora
-        case .generateMining: Hades2WorkbenchIcon.mining
-        case .generateDigging: Hades2WorkbenchIcon.digging
-        case .generateShades: Hades2WorkbenchIcon.shades
-        case .generateFishing: Hades2WorkbenchIcon.fishing
-        case .matureGarden: Hades2WorkbenchIcon.garden
-        case .applyWorldExit: Hades2WorkbenchIcon.doorway
-        case .applyNextOccurrence: Hades2WorkbenchIcon.occurrence
-        case .generateChamberFacility: TrainerSemanticIcon.Action.generate
-        case .generateChaosGate: Hades2WorkbenchIcon.portal
         case .spawnOlympian: TrainerSemanticIcon.Section.effects
         case .spawnPickup: TrainerSemanticIcon.Section.inventory
         case .spawnSpecial: Hades2WorkbenchIcon.specialReward
-        case .disableAll: TrainerSemanticIcon.Tool.disableAll
+        default: TrainerSemanticIcon.Concept.controls
         }
     }
 
     var commonFeatureIcon: String? {
-        switch self {
-        case .invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney, .infiniteRerolls,
-             .forceEnableRerolls, .instantCastCooldown, .hexAlwaysReady, .infiniteAmmo, .autoMiniGames:
-            icon
-        default: nil
-        }
+        Hades2CheatCatalog.commonToggleDefinitions.first { $0.id == rawValue }?.icon
     }
 }
 

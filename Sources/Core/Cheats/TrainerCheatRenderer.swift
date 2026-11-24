@@ -85,72 +85,45 @@ package struct TrainerCheatMultiplierRow: View {
     }
 }
 
-package struct TrainerCheatValueFieldRow<Trailing: View>: View {
+package struct TrainerCheatMultiplierCard<FocusValue: Hashable>: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let definition: TrainerCheatDefinition
-    let tint: Color
-    let emphasized: Bool
-    let opacity: Double
-    let enabled: Bool
     @Binding var text: String
-    let placeholder: String
-    let fieldWidth: CGFloat
-    let accessibilityIdentifier: String?
-    let onEditingChanged: (Bool) -> Void
+    let focus: Binding<FocusValue?>
+    let focusValue: FocusValue
+    let suffix: String
+    let editable: Bool
     let onCommit: (TrainerTextField.Completion) -> String
-    let trailing: Trailing
 
     package init(
         definition: TrainerCheatDefinition,
-        tint: Color,
-        emphasized: Bool = false,
-        opacity: Double = 1,
-        enabled: Bool = true,
         text: Binding<String>,
-        placeholder: String = "host.value",
-        fieldWidth: CGFloat = 90,
-        accessibilityIdentifier: String? = nil,
-        onEditingChanged: @escaping (Bool) -> Void = { _ in },
-        onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text },
-        @ViewBuilder trailing: () -> Trailing
+        focus: Binding<FocusValue?>,
+        focusValue: FocusValue,
+        suffix: String,
+        editable: Bool,
+        onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }
     ) {
         self.definition = definition
-        self.tint = tint
-        self.emphasized = emphasized
-        self.opacity = opacity
-        self.enabled = enabled
         self._text = text
-        self.placeholder = placeholder
-        self.fieldWidth = fieldWidth
-        self.accessibilityIdentifier = accessibilityIdentifier
-        self.onEditingChanged = onEditingChanged
+        self.focus = focus
+        self.focusValue = focusValue
+        self.suffix = suffix
+        self.editable = editable
         self.onCommit = onCommit
-        self.trailing = trailing()
     }
 
     package var body: some View {
-        let title = definition.label.resolve(using: localization)
-        TrainerLabeledControlRow(
-            title: title,
+        TrainerMultiplierMetricCard(
+            title: definition.label.resolve(using: localization),
             icon: definition.icon,
-            tint: tint,
-            emphasized: emphasized,
-            opacity: opacity,
-            helpText: definition.help?.resolve(using: localization) ?? ""
-        ) {
-            TrainerNumberField(
-                text: $text,
-                placeholder: placeholder,
-                accessibilityLabel: title,
-                accessibilityIdentifier: accessibilityIdentifier,
-                width: fieldWidth,
-                enabled: enabled,
-                alignment: .trailing,
-                onEditingChanged: onEditingChanged,
-                onCommit: onCommit
-            )
-            trailing
-        }
+            text: $text,
+            focus: focus,
+            focusValue: focusValue,
+            suffix: suffix,
+            editable: editable,
+            onCommit: onCommit
+        )
     }
 }
 

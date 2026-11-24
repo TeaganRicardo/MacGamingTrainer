@@ -33,10 +33,12 @@ struct Hades2BoonRarityPanel: View {
     }
 
     var body: some View {
+        let definition = Hades2CheatCatalog.definition(id: "boonRarityEnabled")!
+        let title = definition.label.resolve(using: localization)
         let state = model.featurePresentation(.boonRarityEnabled, enabled: model.boonRarityEnabled)
             .trainerControlState(using: theme, localization: localization)
         return TrainerLabeledControlRow(
-            title: text("hades2.rarity.title"), icon: TrainerSemanticIcon.Concept.quality,
+            title: title, icon: definition.icon,
             tint: state.indicatorColor, emphasized: state.isOn, opacity: state.opacity
         ) {
             // Side by side when the row has room; stacked in the same row at
@@ -58,7 +60,7 @@ struct Hades2BoonRarityPanel: View {
             .trainerPicker(.compactValue, state: model.canEditDesired ? .interactive : .unavailable)
             TrainerShortcutBadgeSlot(text: model.shortcutText(.boonRarityEnabled))
             TrainerToggleControl(
-                title: text("hades2.rarity.title"), isOn: model.boonRarityEnabled,
+                title: title, isOn: model.boonRarityEnabled,
                 enabled: state.isInteractive, helpText: state.helpText,
                 tint: state.indicatorColor,
                 onChange: { model.feature(.boonRarityEnabled, value: $0) }

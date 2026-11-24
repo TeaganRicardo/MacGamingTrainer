@@ -25,6 +25,16 @@ from games.hades.command_contract import COMMAND_SPECS  # noqa: E402
 from games.hades.preferences import HadesPreferenceStore  # noqa: E402
 from games.hades.profiles import HadesProfileStore  # noqa: E402
 from games.hades.schema import DEFAULT_FEATURES, DEFAULT_PREFERENCES, PREFERENCE_SCHEMA_VERSION  # noqa: E402
+from games.hades2.cheats import HADES2_CHEAT_CATALOG  # noqa: E402
+from games.hades2.command_contract import COMMAND_SPECS as HADES2_COMMAND_SPECS  # noqa: E402
+from games.hades2.profile_service import (  # noqa: E402
+    PROFILE_SCHEMA_VERSION as HADES2_PROFILE_SCHEMA_VERSION,
+    Hades2ProfileService,
+)
+from games.hades2.schema import MULTIPLIER_RULES as HADES2_MULTIPLIER_RULES  # noqa: E402
+from games.hades2.schema import STAT_RULES as HADES2_STAT_RULES  # noqa: E402
+from games.hades2.schema import TOGGLES as HADES2_TOGGLES  # noqa: E402
+from games.hades2.persistence import UnsupportedSchemaVersionError  # noqa: E402
 from swift_test_compiler import SWIFT_CORE_MODULE, SwiftModule, compile_swift_test  # noqa: E402
 
 
@@ -447,16 +457,92 @@ else:
     raise AssertionError("ambiguous canonical+alias feature document was accepted")
 
 
-# 3. Portable Foundation-only Swift cheat definitions and Python parity check.
+# 3. Hades II catalog validation, profile migration, and bilingual label resolution.
+HADES2_CHEAT_CATALOG.validate_commands(HADES2_COMMAND_SPECS)
+hades2_protocol = json.loads((ROOT / "Backend/games/hades2/module.json").read_text(encoding="utf-8"))["protocolVersion"]
+assert hades2_protocol == 24
+assert HADES2_PROFILE_SCHEMA_VERSION == 7
+
+for hades2_def in HADES2_CHEAT_CATALOG.definitions:
+    assert hades2_def.label.zh_cn and "{term:" not in hades2_def.label.zh_cn, hades2_def.id
+    assert hades2_def.label.en and "{term:" not in hades2_def.label.en, hades2_def.id
+    if hades2_def.help_label is not None:
+        assert hades2_def.help_label.zh_cn and "{term:" not in hades2_def.help_label.zh_cn, hades2_def.id
+        assert hades2_def.help_label.en and "{term:" not in hades2_def.help_label.en, hades2_def.id
+
+assert {
+    d.id for d in HADES2_CHEAT_CATALOG.definitions if d.kind == "toggle" and d.action.command == "set_desired"
+} == set(HADES2_TOGGLES)
+assert (
+    set(HADES2_MULTIPLIER_RULES)
+    | set(HADES2_STAT_RULES)
+    | {"gameSpeed", "health", "mana", "armor", "runGold", "rerolls", "spellCharge", "biomeTime"}
+) == set(HADES2_CHEAT_CATALOG.ids_for_kind("value"))
+assert HADES2_CHEAT_CATALOG.resolve_id("godMode") == "invincibility"
+assert HADES2_CHEAT_CATALOG.resolve_id("applyNextRoomReward") == "applyWorldExit"
+assert HADES2_CHEAT_CATALOG.resolve_shortcut_id("applyNextRoomReward") == "applyWorldExit"
+assert HADES2_CHEAT_CATALOG.resolve_id("gardenQoL") is None
+assert HADES2_CHEAT_CATALOG.resolve_id("damageEnabled") is None
+
+with tempfile.TemporaryDirectory(prefix="mgt-hades2-cheat-defs-") as td2:
+    hades2_service = Hades2ProfileService(Path(td2))
+    v6_profile_path = hades2_service.path("LegacyWorldExit")
+    v6_profile_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 6,
+                "desiredSchemaVersion": 13,
+                "name": "LegacyWorldExit",
+                "updatedAt": "2026-11-24T12:00:00+0000",
+                "desired": {"invincibility": True},
+                "shortcuts": {
+                    "_layoutVersion": 1,
+                    "applyNextRoomReward": {"keyCode": 13, "modifiers": 6144, "keyLabel": "W"},
+                    "damageEnabled": {"keyCode": 19, "modifiers": 6144, "keyLabel": "2"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    migrated_hades2 = hades2_service.load("LegacyWorldExit")
+    assert migrated_hades2["shortcuts"] == {
+        "_layoutVersion": 1,
+        "applyWorldExit": {"keyCode": 13, "modifiers": 6144, "keyLabel": "W"},
+    }
+    future_v8_path = hades2_service.path("FutureV8")
+    future_v8_payload = json.dumps(
+        {
+            "schemaVersion": HADES2_PROFILE_SCHEMA_VERSION + 1,
+            "desiredSchemaVersion": 13,
+            "name": "FutureV8",
+            "updatedAt": "2026-11-24T12:00:00+0000",
+            "desired": {"invincibility": False},
+        },
+        sort_keys=True,
+    ).encode("utf-8")
+    future_v8_path.write_bytes(future_v8_payload)
+    try:
+        hades2_service.load("FutureV8")
+    except UnsupportedSchemaVersionError as error:
+        assert error.kind == "Profile"
+    else:
+        raise AssertionError("future Hades II v8 profile was loaded")
+    assert future_v8_path.read_bytes() == future_v8_payload
+
+
+# 4. Portable Foundation-only Swift cheat definitions and Python parity check (Hades I + Hades II).
 with tempfile.TemporaryDirectory(prefix="mgt-cheat-swift-") as td:
     root = Path(td)
     catalog_json = root / "python_catalog.json"
     catalog_json.write_text(json.dumps(HADES_CHEAT_CATALOG.to_list()), encoding="utf-8")
+    hades2_catalog_json = root / "hades2_python_catalog.json"
+    hades2_catalog_json.write_text(json.dumps(HADES2_CHEAT_CATALOG.to_list()), encoding="utf-8")
 
     harness = """
 import Foundation
 import TrainerCore
 import HadesCheatsFixture
+import Hades2CheatsFixture
 
 struct PythonCheatSpec: Decodable {
     struct ActionSpec: Decodable {
@@ -485,6 +571,12 @@ struct CheatDefinitionHarness {
     static func main() throws {
         // Validate error cases in Core Swift catalog validator.
         check(HadesCheatCatalog.catalog.validationErrors().isEmpty, "Hades catalog reported validation errors")
+        check(Hades2CheatCatalog.catalog.validationErrors().isEmpty, "Hades2 catalog reported validation errors")
+        check(Hades2CheatCatalog.catalog.resolveID("godMode") == "invincibility", "Hades2 godMode alias did not resolve")
+        check(Hades2CheatCatalog.catalog.resolveID("applyNextRoomReward") == "applyWorldExit", "Hades2 applyNextRoomReward alias did not resolve")
+        check(Hades2CheatCatalog.catalog.resolveShortcutID("applyNextRoomReward") == "applyWorldExit", "Hades2 applyNextRoomReward shortcut alias did not resolve")
+        check(Hades2CheatCatalog.catalog.resolveID("gardenQoL") == nil, "Hades2 retired gardenQoL resolved")
+        check(Hades2CheatCatalog.catalog.resolveID("damageEnabled") == nil, "Hades2 retired damageEnabled resolved")
         let valid = try TrainerCheatCatalog.validated(definitions: [
             TrainerCheatDefinition(
                 id: "alpha",
@@ -536,7 +628,7 @@ struct CheatDefinitionHarness {
         check(issues.contains(.retiredIDCollision("oldRetired")), "missing retired collision")
         check(issues.contains(.duplicateAlias("sharedAlias")), "missing duplicate alias issue")
 
-        // Verify 1:1 parity between Python HADES_CHEAT_CATALOG and Swift HadesCheatCatalog.
+        // Verify 1:1 parity between Python and Swift catalogs (Hades I + Hades II).
         let data = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
         let pythonDefs = try JSONDecoder().decode([PythonCheatSpec].self, from: data)
         check(pythonDefs.count == HadesCheatCatalog.catalog.definitions.count, "cheat definition count drifted")
@@ -546,6 +638,17 @@ struct CheatDefinitionHarness {
             check(py.action.command == sw.action.command, "command drifted for \\(py.id)")
             check(py.shortcutId == sw.shortcutID, "shortcutID drifted for \\(py.id)")
             check((py.aliases ?? []) == sw.aliases, "aliases drifted for \\(py.id)")
+        }
+
+        let data2 = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[2]))
+        let pythonDefs2 = try JSONDecoder().decode([PythonCheatSpec].self, from: data2)
+        check(pythonDefs2.count == Hades2CheatCatalog.catalog.definitions.count, "hades2 cheat definition count drifted")
+        for (py, sw) in zip(pythonDefs2, Hades2CheatCatalog.catalog.definitions) {
+            check(py.id == sw.id, "hades2 id drifted: \\(py.id) vs \\(sw.id)")
+            check(py.kind == sw.kind.rawValue, "hades2 kind drifted for \\(py.id)")
+            check(py.action.command == sw.action.command, "hades2 command drifted for \\(py.id)")
+            check(py.shortcutId == sw.shortcutID, "hades2 shortcutID drifted for \\(py.id)")
+            check((py.aliases ?? []) == sw.aliases, "hades2 aliases drifted for \\(py.id)")
         }
 
         // Verify Core TrainerShortcutStore legacy alias profile import + locked chord preservation.
@@ -612,12 +715,17 @@ struct CheatDefinitionHarness {
                 [ROOT / "Sources/Hades/HadesCheats.swift"],
                 (SWIFT_CORE_MODULE,),
             ),
+            SwiftModule(
+                "Hades2CheatsFixture",
+                [ROOT / "Sources/Hades2/Hades2Cheats.swift"],
+                (SWIFT_CORE_MODULE,),
+            ),
         ],
         harness_sources=[ROOT / "tests/fixtures/swift/InMemoryDefaults.swift", main_swift],
         output=binary,
         cwd=ROOT,
     )
-    proc = subprocess.run([str(binary), str(catalog_json)], cwd=ROOT, text=True, capture_output=True)
+    proc = subprocess.run([str(binary), str(catalog_json), str(hades2_catalog_json)], cwd=ROOT, text=True, capture_output=True)
     assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
     assert "core_cheat_definitions_ok" in proc.stdout, proc.stdout
     print(proc.stdout.strip())

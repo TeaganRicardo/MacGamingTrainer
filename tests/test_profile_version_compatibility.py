@@ -16,7 +16,7 @@ from games.hades2.profile_service import (
 )
 
 FIXTURES = ROOT / "tests/fixtures/hades2/profiles"
-assert PROFILE_SCHEMA_VERSION == 6
+assert PROFILE_SCHEMA_VERSION == 7
 assert PROFILE_COMPATIBILITY_FLOOR == 3
 assert DESIRED_STATE_SCHEMA_VERSION == 13
 
@@ -58,7 +58,7 @@ for fixture_path in fixture_paths:
         source_desired_schema = 3
     elif payload["schemaVersion"] == 4:
         source_desired_schema = 4 if "nextRoomRewardToken" in payload["desired"] else 3
-    elif payload["schemaVersion"] == 5:
+    elif payload["schemaVersion"] in (5, 6):
         source_desired_schema = payload["desiredSchemaVersion"]
     else:
         raise AssertionError(f"unexpected historical fixture version: {payload['schemaVersion']}")
@@ -69,7 +69,13 @@ for fixture_path in fixture_paths:
     )
 
 rows = {row["name"]: row for row in service.list()}
-assert {"release-0.1-v3", "profile-v4-desired-v3", "profile-v4-desired-v4", "profile-v5-desired-v4"} <= set(rows)
+assert {
+    "release-0.1-v3",
+    "profile-v4-desired-v3",
+    "profile-v4-desired-v4",
+    "profile-v5-desired-v4",
+    "profile-v6-desired-v13",
+} <= set(rows)
 
 v3_shortcuts = loaded_by_name["release-0.1-v3"]["shortcuts"]
 assert v3_shortcuts["invincibility"] == {"keyCode": 18, "modifiers": 6144, "keyLabel": "1"}
@@ -86,6 +92,12 @@ assert loaded_by_name["profile-v5-desired-v4"]["desired"]["invincibility"] is Tr
 assert "godMode" not in loaded_by_name["profile-v5-desired-v4"]["desired"]
 assert loaded_by_name["profile-v5-desired-v4"]["shortcuts"]["invincibility"]["keyLabel"] == "X"
 assert "godMode" not in loaded_by_name["profile-v5-desired-v4"]["shortcuts"]
+assert loaded_by_name["profile-v6-desired-v13"]["shortcuts"]["applyWorldExit"] == {
+    "keyCode": 13,
+    "modifiers": 6144,
+    "keyLabel": "W",
+}
+assert "applyNextRoomReward" not in loaded_by_name["profile-v6-desired-v13"]["shortcuts"]
 
 v3_desired = loaded_by_name["release-0.1-v3"]["desired"]
 assert v3_desired["damageMultiplier"] == 2.0
@@ -93,15 +105,15 @@ assert "damageEnabled" not in v3_desired
 assert "damageEnabled" not in v3_shortcuts
 assert "gardenQoL" not in v3_desired
 
-service.save("current-v6", {"invincibility": True}, {})
-current_path = service.path("current-v6")
+service.save("current-v7", {"invincibility": True}, {})
+current_path = service.path("current-v7")
 current_doc = json.loads(current_path.read_text(encoding="utf-8"))
 assert current_doc["schemaVersion"] == PROFILE_SCHEMA_VERSION
 assert current_doc["desiredSchemaVersion"] == DESIRED_STATE_SCHEMA_VERSION
 assert set(current_doc) == {
     "schemaVersion", "desiredSchemaVersion", "name", "updatedAt", "desired", "shortcuts"
 }
-assert service.load("current-v6")["desired"] == canonical_desired(
+assert service.load("current-v7")["desired"] == canonical_desired(
     current_doc["desired"], DESIRED_STATE_SCHEMA_VERSION, base
 )
 
