@@ -162,7 +162,10 @@ for raw in sys.stdin:
     if command.startswith('save_editor_'):
         try:result=save_command(command,params,state)
         except (ValueError,OSError) as error:
-            failure={'code':'fixture_editor','presentation':'hades.saveEditor.error.invalidMutation','diagnostic':str(error)}
+            if isinstance(error,OSError):key='hades.saveEditor.error.operationFailed'
+            elif 'allocation counts' in str(error):key='hades.saveEditor.error.invalidTypedValue'
+            else:key='hades.saveEditor.error.invalidMutation'
+            failure={'code':'fixture_editor','presentation':key,'diagnostic':str(error)}
             if isinstance(error,OSError):failure['recoveryPath']=str(folder/'recovery-copy')
             emit({'type':'result','id':request['id'],'protocolVersion':HOST_VERSION,'moduleProtocolVersion':MODULE_VERSION,'gameID':args.game,'ok':False,'error':failure})
             continue
@@ -1592,7 +1595,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(editor.review.count == 4 && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedValue == .number(9)
             && editor.review.actions.first(where:{$0.id=="entry:advanced"})?.typedKey == .string("new-key"),
             "typed rejection replaced acknowledged Changes")
-        check(accessibilityText(in:rejectedContent).contains(where:{$0.contains("matching allocation counts")}),
+        let expectedTypedError=HadesPresentation.text("hades.saveEditor.error.invalidTypedValue",language:.en)
+        check(accessibilityText(in:rejectedContent).contains(where:{$0.contains(expectedTypedError)}),
             "the typed sheet hid its asynchronous rejection reason")
         recordPhase("native typed correction: replace JSON")
         let correctedJSON=HadesSaveValue.number(10).json
@@ -1842,7 +1846,9 @@ func pump(_ seconds: TimeInterval = 0.1) {
         try JSONSerialization.data(withJSONObject:saveState).write(to:stateURL,options:.atomic)
         backup.apply(baseline:backup.baselineGeneration);wait("backup save_editor_apply failure: visible recovery path, editor idle") { !backup.busy && backup.recoveryPath != nil }
         check(backup.review.count == 1 && !backup.canApply,"uncertain Apply lost edits or allowed automatic replay")
-        check(backup.failures["apply"]?.arguments.first == "Fixture recovery required","failure did not carry actionable detail")
+        check(backup.failures["apply"]?.key == "hades.saveEditor.error.operationFailed"
+            && backup.failures["apply"]?.arguments.isEmpty == true,
+            "failure did not carry typed apply error key")
         let editorRequests=commands().filter { ($0["command"] as? String)?.hasPrefix("save_editor_") == true }
         check(editorRequests.allSatisfy { $0["fixtureGame"] as? String == "hades" },"Save Editor crossed its game context")
         backup.close();check(backup.workspaceID == nil,"closing a backup retained its workspace identity")
