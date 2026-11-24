@@ -287,6 +287,9 @@ try:
     Hades2ResidentSession(ledger_transport, bootstrap='').status()
 except AdapterError as error:
     assert error.code == 'outcome_unknown', error.code
+    assert error.presentation == 'hades2.error.outcomeUnknownGeneric', error.presentation
+    assert not error.arguments, error.arguments
+    assert error.diagnostic, error.diagnostic
 else:
     raise AssertionError('decode failure should raise')
 assert ledger_transport.tainted is True, 'decode failure left transport untainted'
@@ -296,6 +299,9 @@ try:
     Hades2ResidentSession(read_only_transport, bootstrap='').observe_status()
 except AdapterError as error:
     assert error.code == 'outcome_unknown', error.code
+    assert error.presentation == 'hades2.error.outcomeUnknownGeneric', error.presentation
+    assert not error.arguments, error.arguments
+    assert error.diagnostic, error.diagnostic
 else:
     raise AssertionError('decode failure should raise')
 assert read_only_transport.tainted is True, 'read_only decode failure left transport reusable'

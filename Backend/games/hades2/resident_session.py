@@ -563,8 +563,9 @@ class Hades2ResidentSession:
             if crossed:
                 raise ResidentSessionError(
                     "outcome_unknown",
-                    "游戏调用结果不明，未自动重试；请检查游戏并重启。",
+                    "hades2.error.outcomeUnknownGeneric",
                     metrics,
+                    diagnostic="游戏调用结果不明，未自动重试；请检查游戏并重启。",
                 ) from error
             if isinstance(error, AdapterError):
                 raise ResidentSessionError.from_adapter_error(error, metrics) from error

@@ -123,6 +123,11 @@ _TYPED_ERROR_NAMES = frozenset({
     "Hades2ValueError",
     "Hades2RuntimeError",
     "SaveBatchValidationError",
+    "SaveEquipmentBatchValidationError",
+    "_SaveEditorActionValidationError",
+    "PersistenceError",
+    "ResidentSessionError",
+    "ResidentConnectionError",
     "TransportError",
     "AdapterError",
     "HostPresentationError",
@@ -135,18 +140,36 @@ def _call_name(call: ast.Call) -> str:
         return call.func.attr
     return ""
 
+def _string_constants(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node.value]
+    if isinstance(node, ast.IfExp):
+        return _string_constants(node.body) + _string_constants(node.orelse)
+    return []
+
+def _kwarg(call: ast.Call, name: str):
+    return next((kw.value for kw in call.keywords if kw.arg == name), None)
+
 def _key_and_args(call: ast.Call, fn: str):
-    if fn in ("Hades2ValueError", "Hades2RuntimeError", "SaveBatchValidationError"):
-        key_node = call.args[0] if call.args else None
-        args_node = call.args[2] if len(call.args) > 2 else None
-    elif fn in ("Hades2PresentationError",):
-        key_node = call.args[1] if len(call.args) > 1 else None
-        args_node = call.args[2] if len(call.args) > 2 else None
-    else:
-        # AdapterError / TransportError / HostPresentationError
-        key_node = call.args[1] if len(call.args) > 1 else None
-        args_node = next((kw.value for kw in call.keywords if kw.arg == "arguments"), None)
-    return key_node, args_node
+    if fn in ("Hades2ValueError", "Hades2RuntimeError"):
+        key_node = call.args[0] if call.args else _kwarg(call, "key")
+        args_node = call.args[2] if len(call.args) > 2 else _kwarg(call, "arguments")
+        return key_node, args_node, True
+    if fn in ("SaveBatchValidationError", "SaveEquipmentBatchValidationError"):
+        key_node = call.args[0] if call.args else _kwarg(call, "key")
+        return key_node, None, False
+    if fn in ("Hades2PresentationError", "_SaveEditorActionValidationError"):
+        key_node = call.args[1] if len(call.args) > 1 else _kwarg(call, "presentation")
+        args_node = call.args[2] if len(call.args) > 2 else _kwarg(call, "arguments")
+        return key_node, args_node, True
+    if fn == "PersistenceError":
+        key_node = _kwarg(call, "presentation")
+        args_node = _kwarg(call, "arguments")
+        return key_node, args_node, True
+    # AdapterError / TransportError / HostPresentationError / ResidentSessionError / ResidentConnectionError
+    key_node = call.args[1] if len(call.args) > 1 else _kwarg(call, "presentation")
+    args_node = _kwarg(call, "arguments")
+    return key_node, args_node, True
 
 raw_cjk_raises = []
 bad_typed_keys = []
@@ -155,20 +178,19 @@ for path in sorted((ROOT / "Backend/games/hades2").glob("*.py")):
         continue
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Raise) or not isinstance(node.exc, ast.Call):
+        if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
+            if _call_name(node.exc) in ("ValueError", "RuntimeError"):
+                text = ast.unparse(node.exc)
+                if CJK.search(text):
+                    raw_cjk_raises.append(f"{path.name}:{node.lineno}: {text}")
             continue
-        call = node.exc
-        fn = _call_name(call)
-        if fn in ("ValueError", "RuntimeError"):
-            text = ast.unparse(call)
-            if CJK.search(text):
-                raw_cjk_raises.append(f"{path.name}:{node.lineno}: {text}")
+        if not isinstance(node, ast.Call):
             continue
+        fn = _call_name(node)
         if fn not in _TYPED_ERROR_NAMES:
             continue
-        key_node, args_node = _key_and_args(call, fn)
-        if isinstance(key_node, ast.Constant) and isinstance(key_node.value, str):
-            key = key_node.value
+        key_node, args_node, check_arg_count = _key_and_args(node, fn)
+        for key in _string_constants(key_node):
             if CJK.search(key):
                 raw_cjk_raises.append(f"{path.name}:{node.lineno}: {key!r}")
                 continue
@@ -178,6 +200,8 @@ for path in sorted((ROOT / "Backend/games/hades2").glob("*.py")):
             template = table.get(key)
             if template is None:
                 bad_typed_keys.append(f"{path.name}:{node.lineno}: missing key {key}")
+                continue
+            if not check_arg_count:
                 continue
             needed = len(set(re.findall(r"\{(\d+)\}", template)))
             if isinstance(args_node, (ast.Tuple, ast.List)):
