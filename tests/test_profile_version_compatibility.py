@@ -18,7 +18,7 @@ from games.hades2.profile_service import (
 FIXTURES = ROOT / "tests/fixtures/hades2/profiles"
 assert PROFILE_SCHEMA_VERSION == 6
 assert PROFILE_COMPATIBILITY_FLOOR == 3
-assert DESIRED_STATE_SCHEMA_VERSION == 12
+assert DESIRED_STATE_SCHEMA_VERSION == 13
 
 fixture_paths = sorted(FIXTURES.glob("profile-v*.json"))
 fixture_versions = {
@@ -86,6 +86,12 @@ assert loaded_by_name["profile-v5-desired-v4"]["desired"]["invincibility"] is Tr
 assert "godMode" not in loaded_by_name["profile-v5-desired-v4"]["desired"]
 assert loaded_by_name["profile-v5-desired-v4"]["shortcuts"]["invincibility"]["keyLabel"] == "X"
 assert "godMode" not in loaded_by_name["profile-v5-desired-v4"]["shortcuts"]
+
+v3_desired = loaded_by_name["release-0.1-v3"]["desired"]
+assert v3_desired["damageMultiplier"] == 2.0
+assert "damageEnabled" not in v3_desired
+assert "damageEnabled" not in v3_shortcuts
+assert "gardenQoL" not in v3_desired
 
 service.save("current-v6", {"invincibility": True}, {})
 current_path = service.path("current-v6")

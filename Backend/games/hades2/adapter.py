@@ -20,11 +20,7 @@ from .operation_budgets import PROCESS_QUERY_TIMEOUT_SECONDS
 from .vital_state import normalize_vital_locks, observed_vital_lock, observed_vital_values
 from .config import DISPLAY_NAME, GAME_EXECUTABLE_NAME, MODULE_MANIFEST
 from .persistence import PersistenceError, migrate_legacy_root_data_dir
-from .preferences import (
-    LEGACY_DAMAGE_MULTIPLIER,
-    Hades2PreferenceStore,
-    canonicalize_damage,
-)
+from .preferences import Hades2PreferenceStore
 from .profile_service import Hades2ProfileService
 from .reply_projection import ACTION_RESULT_FIELDS, Hades2ReplyProjection
 from .resident_session import Hades2ResidentSession, ResidentConnectionError, ResidentGenerationInvalidated, ResidentSessionError
@@ -63,7 +59,7 @@ def clear_active(state,preserve_desired=False):
     if isinstance(stats,dict):
         for item in stats.values():
             if isinstance(item,dict):item['locked']=False;item['target']=None
-    state['activeFeatures']={key:False for key in TOGGLES};state['activeFeatures']['gameSpeed']=False
+    state['activeFeatures']={key:False for key in TOGGLES};state['activeFeatures']['damageMultiplier']=False;state['activeFeatures']['gameSpeed']=False
     state['dormantFeatures']={}
     state['capabilities']=disconnected_capabilities()
     for resource in state.get('resources',[]):resource['locked']=False
@@ -75,7 +71,7 @@ def mark_disconnected(state):
     state.update(connected=False, scene='unknown')
     state['gatheringTargets']={}
     state['gardenScopeToken']=None
-    state['activeFeatures']={key:False for key in TOGGLES}; state['activeFeatures']['gameSpeed']=False
+    state['activeFeatures']={key:False for key in TOGGLES}; state['activeFeatures']['damageMultiplier']=False; state['activeFeatures']['gameSpeed']=False
     state['dormantFeatures']={}
     state['featureErrors']={}
     state['featureErrorPresentations']={}
@@ -150,7 +146,7 @@ class Hades2Adapter(GameAdapter):
                     **desired_defaults,
                     'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':default_boon_rarity(), 'worldActions':{'exits':[]}, 'gatheringProbabilities':{}, 'gatheringTargets':{}, 'gardenScopeToken':None,
                     'desiredFeatures':{key:desired_defaults[key] for key in TOGGLES},
-                    'activeFeatures':{key:False for key in TOGGLES},
+                    'activeFeatures':{**{key:False for key in TOGGLES}, 'damageMultiplier':False, 'gameSpeed':False},
                     'dormantFeatures':{},
                     'featureErrorPresentations':{},
                     'capabilities':disconnected_capabilities()}
@@ -452,7 +448,6 @@ class Hades2Adapter(GameAdapter):
         self.preferences['rerollsLock']=decoded.get('rerolls') if decoded.get('rerollsLocked') else None
         self.preferences['biomeTimerFrozen']=decoded.get('biomeTimeLocked') is True
         self.preferences['elementLocks']={str(item['id']):item.get('count',0) for item in decoded.get('elements',[]) if isinstance(item,dict) and item.get('locked') and isinstance(item.get('id'),str)}
-        self.preferences=canonicalize_damage(self.preferences,legacy_toggle_veto=False)
 
     def _adopt_lua_preferences(self,decoded):
         self._adopt_runtime_preferences(decoded)
@@ -580,29 +575,9 @@ class Hades2Adapter(GameAdapter):
         return False
 
     def set_desired(self,feature,value):
+        if feature in MULTIPLIERS:
+            value=float(value)
         preferences=dict(self.preferences);preferences[feature]=value
-        # The multiplier owns damage. An explicit multiplier write is
-        # authoritative and drops the derived toggle, otherwise the stale
-        # projection would veto it.
-        if feature=='damageMultiplier':
-            preferences.pop('damageEnabled',None)
-        elif feature=='damageEnabled':
-            # A legacy toggle write is translated here, where the intent is
-            # unambiguous. 1x is defined as off, so enabling must produce an
-            # effective value: keep an existing multiplier above 1x or restore
-            # the historical default.
-            preferences.pop('damageEnabled',None)
-            if value is False:
-                preferences['damageMultiplier']=1.0
-            else:
-                current=preferences.get('damageMultiplier')
-                if not (isinstance(current,(int,float)) and not isinstance(current,bool) and current>1):
-                    preferences['damageMultiplier']=LEGACY_DAMAGE_MULTIPLIER
-        preferences=canonicalize_damage(preferences,legacy_toggle_veto=False)
-        # Either half of the pair reaches the resident as one multiplier write.
-        if feature in ('damageEnabled','damageMultiplier'):
-            feature='damageMultiplier'
-            value=preferences['damageMultiplier']
         if feature=='infiniteMoney' and value is True:
             locks=dict(preferences.get('resourceLocks',{}))
             locks.pop('Money',None)
@@ -688,9 +663,6 @@ class Hades2Adapter(GameAdapter):
 
     def _replay_preferences(self,observed_state,force_full=False):
         if not self.runtime.has_attachment:return dict(self.state)
-        # Desired damage is one value even when a caller mutated the retired
-        # toggle directly; canonicalize before it reaches the resident diff.
-        self.preferences=canonicalize_damage(self.preferences,legacy_toggle_veto=False)
         if self._preference_persistence_dirty:
             # Current in-memory desired is authoritative. Retry its failed
             # durable write before crossing another runtime mutation boundary.

@@ -219,10 +219,12 @@ CurrentHubRoom = {}
 -- Durable global hooks should arm immediately instead of waiting for the
 -- combat-ready aggregate predicate.
 do
-  -- The multiplier is the durable damage intent; the toggle is its projection.
   local state = setFeature("damageMultiplier", 2)
-  check(state.desiredFeatures.damageEnabled, "damage desired state was not retained")
-  check(state.activeFeatures.damageEnabled, "global damage hook did not arm in Crossroads")
+  eq(state.damageMultiplier, 2, "damage desired multiplier was not retained")
+  check(state.desiredFeatures.damageEnabled == nil, "retired damage toggle leaked into desiredFeatures")
+  check(state.activeFeatures.damageMultiplier, "global damage hook did not arm in Crossroads")
+  local retiredOk = pcall(function() setFeature("damageEnabled", true) end)
+  check(not retiredOk, "retired damageEnabled toggle was accepted by set_feature")
 
   state = setFeature("infiniteHealth", true)
   check(state.desiredFeatures.infiniteHealth, "health desired state was not retained")
@@ -491,7 +493,7 @@ CurrentHubRoom = nil
 CurrentRun = nil
 CurrentHubRoom = {}
 local hub = status()
-check(hub.desiredFeatures.damageEnabled and hub.activeFeatures.damageEnabled,
+check(hub.damageMultiplier == 2 and hub.activeFeatures.damageMultiplier,
   "global damage hook did not survive the Hero-less Crossroads")
 check(hub.desiredFeatures.infiniteAmmo and hub.activeFeatures.infiniteAmmo,
   "global ammo hook did not survive the Hero-less Crossroads")
@@ -523,6 +525,37 @@ for _, call in ipairs(unitPropertyCalls) do
 end
 check(reapplied, "movement target was not reapplied to replacement Hero")
 check(timerCalls > 0, "scene guard did not run")
+
+-- Disabling damageMultiplier (1x) must release the native hook cleanly.
+local offDamage = setFeature("damageMultiplier", 1)
+eq(offDamage.damageMultiplier, 1, "damageMultiplier failed to reset to 1x")
+check(not offDamage.activeFeatures.damageMultiplier, "damageMultiplier stayed active at 1x")
+eq(CalculateDamageMultipliers(CurrentRun.Hero), 1, "damageMultiplier hook remained wrapped after reset")
+
+-- Missing CalculateDamageMultipliers keeps damageMultiplier dormant until loaded.
+local originalDamageFn = CalculateDamageMultipliers
+CalculateDamageMultipliers = nil
+local dormantDamage = setFeature("damageMultiplier", 3)
+eq(dormantDamage.damageMultiplier, 3, "missing damage fn discarded desired multiplier")
+check(not dormantDamage.featureSupport.damageMultiplier, "missing damage fn reported supported")
+check(not dormantDamage.activeFeatures.damageMultiplier, "missing damage fn reported active")
+check(dormantDamage.dormantFeatures.damageMultiplier, "missing damage fn was not marked dormant")
+CalculateDamageMultipliers = originalDamageFn
+UpdateTimers(0)
+local armedDamage = status()
+check(armedDamage.featureSupport.damageMultiplier, "restored damage fn remained unsupported")
+check(armedDamage.activeFeatures.damageMultiplier, "restored damage fn did not arm on UpdateTimers")
+eq(CalculateDamageMultipliers(CurrentRun.Hero), 3, "armed damageMultiplier hook did not multiply damage")
+
+-- Failed reconciliation on damageMultiplier rolls back both the multiplier and hook.
+M.dispatch("disable_all", { includeCatalogs = false })
+local originalUpdateTimers = UpdateTimers
+UpdateTimers = nil
+local rollbackOk = pcall(function() setFeature("damageMultiplier", 4) end)
+check(not rollbackOk, "damageMultiplier succeeded when guard install failed")
+eq(M.damageMultiplier, 1, "damageMultiplier failed to roll back after guard error")
+UpdateTimers = originalUpdateTimers
+eq(CalculateDamageMultipliers(CurrentRun.Hero), 1, "failed damageMultiplier install left hook wrapped")
 
 print("hades2_scene_owner_availability_ok")
 '''

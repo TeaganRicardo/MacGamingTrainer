@@ -132,7 +132,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-occurrence-world-action-") as tempo
         nextOccurrenceToken="should-drop",
     ))
     persisted = json.loads(desired_path.read_text(encoding="utf-8"))
-    assert persisted["schemaVersion"] == 12
+    assert persisted["schemaVersion"] == 13
     assert "nextOccurrenceTarget" not in persisted
     assert "nextOccurrenceToken" not in persisted
 

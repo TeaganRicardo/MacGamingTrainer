@@ -56,7 +56,7 @@ assert {"apply_world_occurrence", "cancel_world_occurrence"} <= names
 assert "set_next_occurrence_once" not in names
 assert "set_next_occurrence_desired" not in names
 
-assert DESIRED_STATE_SCHEMA_VERSION == 12
+assert DESIRED_STATE_SCHEMA_VERSION == 13
 for raw in (
     {
         "nextOccurrenceTarget": "npc:Nemesis",

@@ -7,7 +7,6 @@ enum Hades2FeatureKey: String, CaseIterable, Hashable {
     case infiniteMana
     case infiniteMoney
     case infiniteRerolls
-    case damageEnabled
     case instantCastCooldown
     case hexAlwaysReady
     case infiniteAmmo

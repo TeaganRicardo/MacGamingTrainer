@@ -16,8 +16,8 @@ from games.hades2.preferences import (
 from games.hades2.profile_service import Hades2ProfileService
 from runtime_revision_support import runtime_revision
 
-assert DESIRED_STATE_SCHEMA_VERSION == 12
-for old_version in (3, 4, 11, 12):
+assert DESIRED_STATE_SCHEMA_VERSION == 13
+for old_version in (3, 4, 11, 12, 13):
     normalized = normalize_persisted_desired(
         {
             "schemaVersion": old_version,
@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-retired-next-room-") as temporary:
         nextRoomRewardToken="must-drop",
     ))
     persisted = json.loads((data_dir / "desired-state.json").read_text(encoding="utf-8"))
-    assert persisted["schemaVersion"] == 12
+    assert persisted["schemaVersion"] == 13
     assert "nextRoomReward" not in persisted
     assert "nextRoomRewardToken" not in persisted
 

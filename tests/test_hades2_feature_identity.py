@@ -13,7 +13,7 @@ harness = r'''
 import Foundation
 
 let durableShortcutFeatures = Set(ShortcutAction.allCases.compactMap(\.featureKey))
-precondition(durableShortcutFeatures == Set(Hades2FeatureKey.allCases.filter { $0 != .damageEnabled }))
+precondition(durableShortcutFeatures == Set(Hades2FeatureKey.allCases))
 
 precondition(ShortcutAction.invincibility.featureKey == .invincibility)
 precondition(ShortcutAction.infiniteHealth.featureKey == .infiniteHealth)
@@ -29,6 +29,7 @@ let patch = Hades2StatePatch([
     "desiredFeatures": [
         "invincibility": true,
         "gardenQoL": false,
+        "damageEnabled": true,
         "infiniteMoney": false,
         "unknownFeature": true,
     ],

@@ -175,7 +175,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var gardenScopeToken: String?
     @Published var boonRarityEnabled = false
     @Published var forceEnableRerolls = false
-    @Published var damageEnabled = false
     @Published var damageMultiplier = Hades2MultiplierKey.damageMultiplier.defaultValue
     @Published var gameSpeed = Hades2MultiplierKey.gameSpeed.defaultValue
     /// Verified Process Time Warp observation; nil is unknown, not 1×.
@@ -1993,9 +1992,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .gameSpeed: return
         }
         if abs(current - value) < 0.0001 {
-            if feature == .damageMultiplier && damageEnabled != (value != 1) {
-                sendEdit(request: .setDesired(feature: feature.rawValue, value: value), title: "hades2.op.updateMultiplier")
-            }
             return
         }
         switch feature {
@@ -2324,7 +2320,6 @@ private extension Hades2FeatureKey {
         case .infiniteMana: return \.infiniteMana
         case .infiniteMoney: return \.infiniteMoney
         case .infiniteRerolls: return \.infiniteRerolls
-        case .damageEnabled: return \.damageEnabled
         case .instantCastCooldown: return \.instantCastCooldown
         case .hexAlwaysReady: return \.hexAlwaysReady
         case .infiniteAmmo: return \.infiniteAmmo

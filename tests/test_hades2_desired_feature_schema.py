@@ -4,7 +4,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from games.hades2.preferences import Hades2PreferenceStore, normalize_persisted_desired
+from games.hades2.persistence import UnsupportedSchemaVersionError
+from games.hades2.preferences import (
+    DESIRED_STATE_SCHEMA_VERSION,
+    Hades2PreferenceStore,
+    normalize_persisted_desired,
+)
 from games.hades2.schema import (
     MULTIPLIERS,
     TOGGLES,
@@ -14,13 +19,14 @@ from games.hades2.schema import (
     validate_desired_feature_value,
 )
 
+assert DESIRED_STATE_SCHEMA_VERSION == 13
+
 EXPECTED_DEFAULTS = {
     "invincibility": False,
     "infiniteHealth": False,
     "infiniteMana": False,
     "infiniteMoney": False,
     "infiniteRerolls": False,
-    "damageEnabled": False,
     "instantCastCooldown": False,
     "hexAlwaysReady": False,
     "infiniteAmmo": False,
@@ -43,6 +49,7 @@ assert set(defaults) == set(TOGGLES) | set(MULTIPLIERS)
 # become durable feature intent.
 assert normalize_desired_feature_value("invincibility", True) is True
 assert normalize_desired_feature_value("invincibility", False) is False
+assert normalize_desired_feature_value("damageEnabled", True) is None
 for value in (1, 0, "true", None):
     assert normalize_desired_feature_value("invincibility", value) is None
 
@@ -82,6 +89,7 @@ assert validate_desired_feature_value("gameSpeed", 1.5) == 1.5
 
 cases = (
     ("unknown", True, "未知功能。"),
+    ("damageEnabled", True, "未知功能。"),
     ("invincibility", 1, "开关值必须为布尔值。"),
     ("damageMultiplier", float("nan"), "倍率必须为有限数值。"),
     ("gameSpeed", 11, "游戏速度范围为 0–10。"),
@@ -116,23 +124,62 @@ assert normalized["gameSpeed"] == 2.0
 
 print("hades2_desired_feature_schema_ok")
 
-# Damage multiplier is the only durable source of truth; old toggle profiles migrate once.
-legacy_disabled = Hades2PreferenceStore.normalize({"damageEnabled": False, "damageMultiplier": 3.0})
-assert legacy_disabled["damageMultiplier"] == 1.0
-assert legacy_disabled["damageEnabled"] is False
-legacy_enabled = Hades2PreferenceStore.normalize({"damageEnabled": True, "damageMultiplier": 3.0})
-assert legacy_enabled["damageMultiplier"] == 3.0
-assert legacy_enabled["damageEnabled"] is True
-legacy_default = Hades2PreferenceStore.normalize({"damageEnabled": True})
-assert legacy_default["damageMultiplier"] == 2.0
-assert legacy_default["damageEnabled"] is True
-# An explicit 1x is normal damage even when an old profile left the toggle on:
-# migration must not silently upgrade it to the historical 2x default.
-legacy_explicit_one = Hades2PreferenceStore.normalize({"damageEnabled": True, "damageMultiplier": 1.0})
-assert legacy_explicit_one["damageMultiplier"] == 1.0
-assert legacy_explicit_one["damageEnabled"] is False
-assert Hades2PreferenceStore.normalize({"damageMultiplier": 1.0})["damageEnabled"] is False
-assert Hades2PreferenceStore.normalize({"damageMultiplier": 4.0})["damageEnabled"] is True
-versioned_legacy = normalize_persisted_desired({"schemaVersion": 10, "damageEnabled": False, "damageMultiplier": 2.0}, 10)
-assert versioned_legacy["damageMultiplier"] == 1.0
-assert versioned_legacy["damageEnabled"] is False
+# Damage multiplier is the only durable source of truth; historical schema < 13
+# migrates old damageEnabled / gardenQoL documents once and drops those keys.
+for legacy_version in (10, 12):
+    legacy_disabled = normalize_persisted_desired(
+        {"damageEnabled": False, "damageMultiplier": 3.0, "gardenQoL": True},
+        legacy_version,
+    )
+    assert legacy_disabled["damageMultiplier"] == 1.0
+    assert "damageEnabled" not in legacy_disabled
+    assert "gardenQoL" not in legacy_disabled
+
+    legacy_enabled = normalize_persisted_desired(
+        {"damageEnabled": True, "damageMultiplier": 3.0},
+        legacy_version,
+    )
+    assert legacy_enabled["damageMultiplier"] == 3.0
+    assert "damageEnabled" not in legacy_enabled
+
+    legacy_default = normalize_persisted_desired(
+        {"damageEnabled": True},
+        legacy_version,
+    )
+    assert legacy_default["damageMultiplier"] == 2.0
+    assert "damageEnabled" not in legacy_default
+
+    # An explicit 1x is normal damage even when an old profile left the toggle on:
+    # migration must not silently upgrade it to the historical 2x default.
+    legacy_explicit_one = normalize_persisted_desired(
+        {"damageEnabled": True, "damageMultiplier": 1.0},
+        legacy_version,
+    )
+    assert legacy_explicit_one["damageMultiplier"] == 1.0
+    assert "damageEnabled" not in legacy_explicit_one
+
+# Current-schema normalization treats damageEnabled as a retired unknown key:
+# it neither vetoes an explicit multiplier nor resurrects a 2x default.
+current_veto_ignored = Hades2PreferenceStore.normalize({"damageEnabled": False, "damageMultiplier": 3.0})
+assert current_veto_ignored["damageMultiplier"] == 3.0
+assert "damageEnabled" not in current_veto_ignored
+current_enable_ignored = Hades2PreferenceStore.normalize({"damageEnabled": True})
+assert current_enable_ignored["damageMultiplier"] == 1.0
+assert "damageEnabled" not in current_enable_ignored
+current_v13 = normalize_persisted_desired(
+    {"schemaVersion": DESIRED_STATE_SCHEMA_VERSION, "damageEnabled": False, "damageMultiplier": 4.0},
+    DESIRED_STATE_SCHEMA_VERSION,
+)
+assert current_v13["damageMultiplier"] == 4.0
+assert "damageEnabled" not in current_v13
+
+# Future desired schema versions must be refused rather than coerced.
+try:
+    normalize_persisted_desired(
+        {"schemaVersion": DESIRED_STATE_SCHEMA_VERSION + 1, "damageMultiplier": 5.0},
+        DESIRED_STATE_SCHEMA_VERSION + 1,
+    )
+except UnsupportedSchemaVersionError as error:
+    assert error.found == DESIRED_STATE_SCHEMA_VERSION + 1
+else:
+    raise AssertionError("future desired schema version was accepted")

@@ -1,7 +1,7 @@
 import math
 
 TOGGLES = (
-    'invincibility','infiniteHealth','infiniteMana','infiniteMoney','infiniteRerolls','damageEnabled','instantCastCooldown',
+    'invincibility','infiniteHealth','infiniteMana','infiniteMoney','infiniteRerolls','instantCastCooldown',
     'hexAlwaysReady','infiniteAmmo','autoMiniGames','boonRarityEnabled',
     'forceEnableRerolls','moneyMultiplierEnabled','resourceMultiplierEnabled',
 )

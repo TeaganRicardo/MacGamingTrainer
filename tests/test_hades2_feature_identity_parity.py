@@ -76,6 +76,10 @@ economy_toggles = {
 # than installing competing hooks from the independent-feature registry.
 shared_currency_toggles = {"infiniteMoney", "infiniteRerolls"}
 expected_registry_order = [key for key in TOGGLES if key not in economy_toggles | shared_currency_toggles]
+expected_registry_order.extend(
+    key for key in MULTIPLIER_RULES
+    if key in resident_multipliers and f"{key}Enabled" not in TOGGLES
+)
 assert registry_keys == set(expected_registry_order), (
     f"resident feature registry lost a durable behavior route: "
     f"missing={sorted(set(expected_registry_order) - registry_keys)}, "
@@ -209,11 +213,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-feature-preferences-") as temporary
         capabilities={"setFeature": True},
     )
 
-    # `damageEnabled` is a derived projection of `damageMultiplier`, so the
-    # adapter translates a write to it instead of forwarding the retired
-    # name; the translation is asserted on its own below.
-    derived_toggles = {"damageEnabled"}
-    resident_cases = [(key, True) for key in TOGGLES if key not in derived_toggles]
+    resident_cases = [(key, True) for key in TOGGLES]
     resident_cases.extend(
         (key, MULTIPLIER_RULES[key]["default"])
         for key in MULTIPLIER_RULES
@@ -234,13 +234,18 @@ with tempfile.TemporaryDirectory(prefix="mgt-feature-preferences-") as temporary
         assert not time_warp.calls
 
     before = len(session.calls)
-    adapter.dispatch(
-        "set_desired",
-        {"feature": "damageEnabled", "value": True},
-        "resident-damage-toggle",
-    )
-    assert len(session.calls) == before + 1
-    assert session.calls[-1]["params"] == {"feature": "damageMultiplier", "value": 2.0}
+    try:
+        adapter.dispatch(
+            "set_desired",
+            {"feature": "damageEnabled", "value": True},
+            "retired-damage-toggle",
+        )
+    except Exception as error:
+        assert (getattr(error, "diagnostic", None) or str(error)) == "未知功能。"
+        assert getattr(error, "presentation", None) == "hades2.error.unknownFeature"
+    else:
+        raise AssertionError("retired damageEnabled toggle remained a live current-protocol alias")
+    assert len(session.calls) == before
 
     before = len(session.calls)
     speed = MULTIPLIER_RULES["gameSpeed"]["default"] + 1.0
