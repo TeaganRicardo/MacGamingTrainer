@@ -1582,6 +1582,23 @@ struct Hades2TrainerView: View {
         }
     }
 
+    private static let exactBoonCaptionKeys = [
+        "hades2.spawn.chaosBlessing", "hades2.spawn.chaosCurse",
+        "hades2.spawn.exactSource", "hades2.spawn.exactTarget",
+    ]
+
+    /// Each dual-picker row splits what its two captions leave between its
+    /// pickers. Sizing every caption to the widest of the four, in the current
+    /// language, keeps all four pickers the same width and aligned.
+    private func exactBoonCaption(_ key: String) -> some View {
+        ZStack(alignment: .leading) {
+            ForEach(Self.exactBoonCaptionKeys, id: \.self) { Text(text($0)).hidden() }
+            Text(text(key))
+        }
+        .font(.caption).foregroundStyle(.secondary)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
     private var boonAcquisitionPanel: some View {
         TrainerAcquisitionPanel(
             title: text("hades2.spawn.exactBoons"),
@@ -1599,9 +1616,7 @@ struct Hades2TrainerView: View {
                     minimumShortcutWidth: theme.shortcutBadgeMinimumWidth,
                     minimumActionWidth: theme.compactActionWidth
                 ) {
-                    Text(text("hades2.spawn.chaosBlessing"))
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: true, vertical: false)
+                    exactBoonCaption("hades2.spawn.chaosBlessing")
                     Picker(text("hades2.spawn.chaosBlessing"), selection: $model.selectedChaosBlessing) {
                         if chaosBlessingOptions.isEmpty {
                             Text(text("hades2.spawn.noItems")).tag("")
@@ -1613,9 +1628,7 @@ struct Hades2TrainerView: View {
                     .labelsHidden()
                     .trainerPicker(.layoutAllocated, state: model.canAcquireChaosPair && !chaosBlessingOptions.isEmpty ? .interactive : .unavailable)
 
-                    Text(text("hades2.spawn.chaosCurse"))
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: true, vertical: false)
+                    exactBoonCaption("hades2.spawn.chaosCurse")
                     Picker(text("hades2.spawn.chaosCurse"), selection: $model.selectedChaosCurse) {
                         if chaosCurseOptions.isEmpty {
                             Text(text("hades2.spawn.noItems")).tag("")
@@ -1650,9 +1663,7 @@ struct Hades2TrainerView: View {
                     minimumShortcutWidth: theme.shortcutBadgeMinimumWidth,
                     minimumActionWidth: theme.compactActionWidth
                 ) {
-                    Text(text("hades2.spawn.exactSource"))
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: true, vertical: false)
+                    exactBoonCaption("hades2.spawn.exactSource")
                     Picker(
                         text("hades2.spawn.exactSource"),
                         selection: Binding(
@@ -1670,9 +1681,7 @@ struct Hades2TrainerView: View {
                     .labelsHidden()
                     .trainerPicker(.layoutAllocated, state: model.canAcquireExactReward && !exactBoonSourceGroups.isEmpty ? .interactive : .unavailable)
 
-                    Text(text("hades2.spawn.exactTarget"))
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: true, vertical: false)
+                    exactBoonCaption("hades2.spawn.exactTarget")
                     Picker(text("hades2.spawn.exactTarget"), selection: exactItemSelection) {
                         if selectedExactItems.isEmpty || exactItemSelection.wrappedValue.isEmpty {
                             Text(text("hades2.spawn.noItems")).tag("")
