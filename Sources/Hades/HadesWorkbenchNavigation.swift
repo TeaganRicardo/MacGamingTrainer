@@ -1,50 +1,26 @@
-import SwiftUI
+import Foundation
 import TrainerCore
 
 extension HadesFeature {
-    var icon: String {
-        switch self {
-        case .invincibility: TrainerSemanticIcon.Concept.protection
-        case .fullHealth: TrainerSemanticIcon.Concept.vitality
-        case .infiniteAmmo: TrainerSemanticIcon.Concept.capacity
-        case .forceRerolls: TrainerSemanticIcon.Concept.refresh
-        case .incomingDamageMultiplier: TrainerSemanticIcon.Concept.defense
-        case .moneyNoDecrease: TrainerSemanticIcon.Concept.currency
-        case .rerollsNoDecrease: TrainerSemanticIcon.Concept.randomize
-        case .fullGodGauge: HadesWorkbenchIcon.godGauge
-        case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
-        case .gameSpeed: TrainerSemanticIcon.Concept.timeScale
-        case .damageMultiplier: TrainerSemanticIcon.Concept.impact
-        case .moveSpeedMultiplier: TrainerSemanticIcon.Concept.movement
-        case .attackSpeedMultiplier: TrainerSemanticIcon.Concept.actionSpeed
-        case .dashBonus: TrainerSemanticIcon.Concept.dash
-        }
-    }
+    var icon: String { cheatDefinition.icon }
 }
 
 extension HadesShortcutAction {
     var icon: String {
-        switch self {
-        case .invincibility: TrainerSemanticIcon.Concept.protection
-        case .fullHealth: TrainerSemanticIcon.Concept.vitality
-        case .moneyNoDecrease: TrainerSemanticIcon.Concept.currency
-        case .rerollsNoDecrease: TrainerSemanticIcon.Concept.randomize
-        case .fullGodGauge: HadesWorkbenchIcon.godGauge
-        case .infiniteAmmo: TrainerSemanticIcon.Concept.capacity
-        case .forceRerolls: TrainerSemanticIcon.Concept.refresh
+        if let definition = HadesCheatCatalog.definition(id: rawValue) {
+            return definition.icon
+        }
+        return switch self {
         case .decreaseGameSpeed, .increaseGameSpeed: TrainerSemanticIcon.Concept.timeScale
-        case .boonRarityEnabled: TrainerSemanticIcon.Concept.quality
-        case .generateFishing: HadesWorkbenchIcon.fishing
         case .applyWorldExit: HadesWorkbenchIcon.doorway
         case .applyWorldOccurrence: HadesWorkbenchIcon.characterReward
         case .generateChamberObject: HadesWorkbenchIcon.chamberObject
-        case .generateChaosGate: HadesWorkbenchIcon.portal
         case .spawnOlympian: TrainerSemanticIcon.Section.effects
         case .spawnPickup: TrainerSemanticIcon.Section.inventory
         case .spawnSpecial: HadesWorkbenchIcon.characterReward
         case .acquireChaosPair: HadesWorkbenchIcon.portal
         case .acquireExactBoon: TrainerSemanticIcon.Action.acquire
-        case .disableAll: TrainerSemanticIcon.Tool.disableAll
+        default: TrainerSemanticIcon.Concept.controls
         }
     }
 }
@@ -79,13 +55,13 @@ enum HadesWorkbenchSection: String, CaseIterable, Identifiable {
 }
 
 enum HadesWorkbenchIcon {
-    static let godGauge = "bolt.heart.fill"
+    static let godGauge = HadesCheatIcon.godGauge
     static let catalog = TrainerSemanticIcon.Concept.precision
     static let level = TrainerSemanticIcon.Concept.level
     static let route = "arrow.triangle.branch"
     static let chamberObject = "shippingbox"
-    static let fishing = "fish.fill"
-    static let portal = "circle.hexagongrid.fill"
+    static let fishing = HadesCheatIcon.fishing
+    static let portal = HadesCheatIcon.portal
     static let characterReward = "moon.stars.fill"
     static let doorway = TrainerSemanticIcon.Section.navigation
     static let refreshStatus = TrainerSemanticIcon.Tool.refreshStatus
@@ -166,12 +142,12 @@ enum HadesWorkbenchCatalog {
     /// Single visible-order owner for shortcut defaults and the settings list.
     static let orderedShortcutActions: [HadesShortcutAction] = [
         .invincibility,
-        .fullHealth,
-        .moneyNoDecrease,
-        .rerollsNoDecrease,
+        .infiniteHealth,
+        .infiniteMoney,
+        .infiniteRerolls,
         .fullGodGauge,
         .infiniteAmmo,
-        .forceRerolls,
+        .forceEnableRerolls,
         .decreaseGameSpeed,
         .increaseGameSpeed,
         .boonRarityEnabled,

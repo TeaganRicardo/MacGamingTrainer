@@ -81,8 +81,8 @@ with tempfile.TemporaryDirectory(prefix='hades-desired-') as directory:
     assert state['features']['invincibility'] is True
     assert state['features']['gameSpeed']['desired'] == 2.0
     assert state['boonRarityTarget'] == 'Epic'
-    fresh.dispatch('set_feature', {'feature': 'fullHealth', 'value': True}, 'detached-edit')
-    assert store.load() == {**saved, 'fullHealth': True}, 'detached edit discarded saved desired state'
+    fresh.dispatch('set_feature', {'feature': 'infiniteHealth', 'value': True}, 'detached-edit')
+    assert store.load() == {**saved, 'infiniteHealth': True}, 'detached edit discarded saved desired state'
 
 # An unreadable document is never overwritten by a merging edit; a deliberate
 # whole-document replacement remains available.
@@ -91,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix='hades-desired-') as directory:
     damaged.write_text('{"schemaVersion": 1, "features": ')
     adapter, _, _, store = adapter_for(directory)
     try:
-        adapter.dispatch('set_feature', {'feature': 'fullHealth', 'value': True}, 'merge-into-unknown')
+        adapter.dispatch('set_feature', {'feature': 'infiniteHealth', 'value': True}, 'merge-into-unknown')
     except AdapterError as error:
         assert error.code == 'preferences_failed'
     else:
@@ -99,8 +99,8 @@ with tempfile.TemporaryDirectory(prefix='hades-desired-') as directory:
     assert damaged.read_text() == '{"schemaVersion": 1, "features": '
     adapter.dispatch('disable_all', {}, 'deliberate-reset')
     assert store.load() == DEFAULT_PREFERENCES
-    adapter.dispatch('set_feature', {'feature': 'fullHealth', 'value': True}, 'after-reset')
-    assert store.load()['fullHealth'] is True
+    adapter.dispatch('set_feature', {'feature': 'infiniteHealth', 'value': True}, 'after-reset')
+    assert store.load()['infiniteHealth'] is True
 
 # A manual detach keeps desired features visible in its own reply.
 with tempfile.TemporaryDirectory(prefix='hades-desired-') as directory:

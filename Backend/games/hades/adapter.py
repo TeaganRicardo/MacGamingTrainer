@@ -15,6 +15,7 @@ from .catalog import catalog, get_entry, resource_catalog, trait_names
 from .preferences import HadesPreferenceStore
 from .recovery import HadesRecoveryJournal
 from .world import WORLD_COMMANDS, mutation_params as world_mutation_params, reward_catalog, world_terms
+from .cheats import from_runtime_feature_map, to_runtime_feature, to_runtime_features
 from .profiles import HadesProfileStore
 from .diagnostics import build_diagnostics
 from .operation_budgets import LAUNCH_TIMEOUT_SECONDS, PROCESS_QUERY_TIMEOUT_SECONDS
@@ -106,7 +107,7 @@ class HadesAdapter(GameAdapter):
             self.features = features
             state = {**self._offline(), 'features': self.features}
             if self.connected:
-                runtime_features = {name: value for name, value in features.items() if name in DEFAULT_FEATURES}
+                runtime_features = to_runtime_features(features, DEFAULT_FEATURES)
                 try:
                     state = self.runtime.command('configure', {'features': runtime_features})
                     state = self._reconcile_locks(state)
@@ -150,7 +151,7 @@ class HadesAdapter(GameAdapter):
             self._preferences_error = None
             self._game_speed_actual = None
             self._game_speed_error = None
-            runtime_features = {name: value for name, value in self.features.items() if name in DEFAULT_FEATURES}
+            runtime_features = to_runtime_features(self.features, DEFAULT_FEATURES)
             state = self.runtime.connect(*target, features=runtime_features)
             self.connected = state['connected']
             if self.connected:
@@ -198,9 +199,9 @@ class HadesAdapter(GameAdapter):
             name = params.get('feature')
             value = preference_value(name, params.get('value')) if name == 'gameSpeed' else feature_value(name, params.get('value'))
             candidate = {**self.features, name: value}
-            if name == 'moneyNoDecrease' and value:
+            if name == 'infiniteMoney' and value:
                 candidate['moneyLock'] = None
-            if name == 'rerollsNoDecrease' and value:
+            if name == 'infiniteRerolls' and value:
                 candidate['rerollsLock'] = None
             self.preferences.save(candidate)
             self.features = candidate
@@ -218,7 +219,9 @@ class HadesAdapter(GameAdapter):
                 return self._observe(self.runtime.status())
             if not self.connected:
                 return self._observe({**self._offline(), 'features': self.features})
-            return self._observe(self.runtime.command(command, {'feature': name, 'value': value}))
+            return self._observe(
+                self.runtime.command(command, {'feature': to_runtime_feature(name), 'value': value})
+            )
         if command in ('lock_vital', 'lock_resource', 'lock_rerolls'):
             if not self.connected:
                 raise AdapterError('not_connected', 'hades.error.notConnected')
@@ -500,18 +503,29 @@ class HadesAdapter(GameAdapter):
     def _observe(self, state):
         self.connected = state['connected']
         observed = state.get('features')
-        features = ({name: value for name, value in observed.items() if name in DEFAULT_FEATURES}
-                    if isinstance(observed, dict) else {})
+        features = (
+            from_runtime_feature_map(observed, DEFAULT_FEATURES)
+            if isinstance(observed, dict)
+            else {}
+        )
         features['gameSpeed'] = self._game_speed_projection()
         state['features'] = features
         # A live resident reply reports what it actually enforces; only a
         # detached projection shows durable desired state.
         live = state.get('connected') is True
+        active = state.get('activeFeatures')
+        if isinstance(active, dict):
+            state['activeFeatures'] = (
+                from_runtime_feature_map(active, DEFAULT_FEATURES) if live else {}
+            )
         # Dormancy is the resident's observation of a desired intent waiting
         # for its native environment. A detached projection observes none.
         dormant = state.get('dormantFeatures')
-        state['dormantFeatures'] = ({name: value for name, value in dormant.items() if name in DEFAULT_FEATURES}
-                                    if live and isinstance(dormant, dict) else {})
+        state['dormantFeatures'] = (
+            from_runtime_feature_map(dormant, DEFAULT_FEATURES)
+            if live and isinstance(dormant, dict)
+            else {}
+        )
         for flag, value in LOCK_FIELDS:
             if live and type(state.get(flag)) is bool:
                 state[value] = state.get(value) if state[flag] else None

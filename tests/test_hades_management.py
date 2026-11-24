@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.adapter import AdapterError, GameAdapterContext
 from games.hades.adapter import HadesAdapter
+from games.hades.cheats import to_runtime_features
 from games.hades.preferences import HadesPreferenceStore
 from games.hades.profiles import HadesProfileStore
 from games.hades.schema import DEFAULT_FEATURES, DEFAULT_PREFERENCES
@@ -95,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-management-') as directory:
     assert runtime.calls == [], 'offline diagnostics must not attach or probe native state'
 
     adapter.dispatch('connect', {}, 'connect')
-    assert runtime.features == {key: value for key, value in desired.items() if key in DEFAULT_FEATURES}
+    assert runtime.features == to_runtime_features(desired, DEFAULT_FEATURES)
     assert runtime.speed == 2 and preferences.load() == desired
     reset = {**DEFAULT_PREFERENCES, 'damageMultiplier': 1.5, 'gameSpeed': 0.5}
     adapter.profiles.save('恢复', reset)
@@ -133,20 +134,39 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-management-') as directory:
 
     path = adapter.profiles.path('战斗')
     document = json.loads(path.read_text())
-    assert document['schemaVersion'] == 2, 'a Profile must identify the current feature set as schema 2'
-    schema_one_set = {key: value for key, value in document['features'].items()
-                      if key not in {'healthLock', 'moneyLock', 'rerollsLock'}}
+    assert document['schemaVersion'] == 3, 'a Profile must identify the current feature set as schema 3'
+    schema_one_set = {
+        {'infiniteHealth': 'fullHealth', 'infiniteMoney': 'moneyNoDecrease',
+         'infiniteRerolls': 'rerollsNoDecrease', 'forceEnableRerolls': 'forceRerolls'}.get(key, key): value
+        for key, value in document['features'].items()
+        if key not in {'healthLock', 'moneyLock', 'rerollsLock'}
+    }
     path.write_text(json.dumps({**document, 'schemaVersion': 1, 'features': schema_one_set}))
     assert adapter.profiles.load('战斗') == document['features'], 'a schema-1 Profile did not migrate'
+    schema_two_set = {
+        {'infiniteHealth': 'fullHealth', 'infiniteMoney': 'moneyNoDecrease',
+         'infiniteRerolls': 'rerollsNoDecrease', 'forceEnableRerolls': 'forceRerolls'}.get(key, key): value
+        for key, value in document['features'].items()
+    }
+    path.write_text(json.dumps({
+        **document,
+        'schemaVersion': 2,
+        'features': schema_two_set,
+        'shortcuts': {'_layoutVersion': 1, 'fullHealth': {'keyCode': 21, 'modifiers': 6144, 'keyLabel': '4'}},
+    }))
+    migrated_record = adapter.profiles.load_record('战斗')
+    assert migrated_record['features'] == document['features'], 'a schema-2 Profile did not migrate'
+    assert migrated_record['shortcuts']['infiniteHealth'] == {'keyCode': 21, 'modifiers': 6144, 'keyLabel': '4'}
+    assert 'fullHealth' not in migrated_record['shortcuts']
     for key, value in [('gameID', 'hades2'), ('schemaVersion', 0), ('schemaVersion', True),
-                       ('features', {'health': 100}), ('features', schema_one_set)]:
+                       ('features', {'health': 100}), ('features', schema_one_set), ('features', schema_two_set)]:
         malformed = {**document, key: value}
         path.write_text(json.dumps(malformed))
         rejected('profile_read_failed', lambda: adapter.profiles.load('战斗'))
         assert json.loads(path.read_text()) == malformed, 'reading modified an invalid profile'
     # A Profile from a newer Trainer is refused, skipped by listing and never
     # replaced by saving the same name; deleting it stays an explicit choice.
-    newer = json.dumps({**document, 'schemaVersion': 3, 'features': {'futureFeature': True}})
+    newer = json.dumps({**document, 'schemaVersion': 4, 'features': {'futureFeature': True}})
     path.write_text(newer)
     try:
         adapter.dispatch('load_profile', {'name': '战斗'}, 'load-newer')

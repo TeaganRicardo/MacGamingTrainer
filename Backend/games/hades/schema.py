@@ -3,15 +3,16 @@ import sys
 
 from core.adapter import AdapterError
 
+from .cheats import HADES_CHEAT_CATALOG
 
 DEFAULT_FEATURES = {
     'invincibility': False,
-    'moneyNoDecrease': False,
-    'rerollsNoDecrease': False,
+    'infiniteMoney': False,
+    'infiniteRerolls': False,
     'fullGodGauge': False,
-    'fullHealth': False,
+    'infiniteHealth': False,
     'infiniteAmmo': False,
-    'forceRerolls': False,
+    'forceEnableRerolls': False,
     'boonRarityEnabled': False,
     'damageMultiplier': 1,
     'incomingDamageMultiplier': 1,
@@ -31,7 +32,7 @@ DEFAULT_PREFERENCES = {
     'rerollsLock': None,
 }
 # Persisted feature-set format of HadesPreferenceStore and HadesProfileStore.
-PREFERENCE_SCHEMA_VERSION = 2
+PREFERENCE_SCHEMA_VERSION = 3
 RESOURCE_IDS = frozenset(('MetaPoints', 'Gems', 'SuperGems', 'LockKeys',
                           'SuperLockKeys', 'GiftPoints', 'SuperGiftPoints'))
 # Resident status flag and value key for each fixed-value lock.
@@ -111,22 +112,33 @@ def preference_document(values):
     if not isinstance(values, dict) or set(values) != set(DEFAULT_PREFERENCES):
         raise invalid_value()
     normalized = {name: preference_value(name, value) for name, value in values.items()}
-    if normalized['moneyNoDecrease'] and normalized['moneyLock'] is not None:
+    if normalized['infiniteMoney'] and normalized['moneyLock'] is not None:
         raise invalid_value()
-    if normalized['rerollsNoDecrease'] and normalized['rerollsLock'] is not None:
+    if normalized['infiniteRerolls'] and normalized['rerollsLock'] is not None:
         raise invalid_value()
     return normalized
+
+
+_LEGACY_V2_FEATURE_OVERRIDES = {
+    'infiniteHealth': 'fullHealth',
+    'infiniteMoney': 'moneyNoDecrease',
+    'infiniteRerolls': 'rerollsNoDecrease',
+    'forceEnableRerolls': 'forceRerolls',
+}
+_SCHEMA_V2_KEYS = frozenset(_LEGACY_V2_FEATURE_OVERRIDES.get(key, key) for key in DEFAULT_PREFERENCES)
 
 
 def persisted_preference_document(schema_version, values):
     """Interpret a preference or Profile feature document of a supported schema.
 
-    Schema 2 is exactly the current set. Callers refuse a newer schema first.
+    Schema 3 is the current canonical set. Callers refuse a newer schema first.
     """
     if type(schema_version) is not int:
         raise invalid_value()
     if schema_version == 1:
         return _migrate_v1_preference_document(values)
+    if schema_version == 2:
+        return _migrate_v2_preference_document(values)
     if schema_version == PREFERENCE_SCHEMA_VERSION:
         return preference_document(values)
     raise invalid_value()
@@ -145,15 +157,30 @@ def _migrate_v1_preference_document(values):
     original = {'invincibility', 'moneyNoDecrease', 'rerollsNoDecrease',
                 'fullGodGauge', 'damageMultiplier', 'moveSpeedMultiplier',
                 'attackSpeedMultiplier', 'dashBonus'}
-    current_before_locks = set(DEFAULT_PREFERENCES) - {'healthLock', 'moneyLock', 'rerollsLock'}
-    previous_before_rarity_target = current_before_locks - {'boonRarityTarget'}
+    v2_before_locks = set(_SCHEMA_V2_KEYS) - {'healthLock', 'moneyLock', 'rerollsLock'}
+    previous_before_rarity_target = v2_before_locks - {'boonRarityTarget'}
     shipped = (
         original,
         original | {'boonRarityEnabled'},
         original | {'boonRarityEnabled', 'gameSpeed'},
         previous_before_rarity_target,
-        current_before_locks,
+        v2_before_locks,
     )
-    if set(values) in shipped:
-        values = {**DEFAULT_PREFERENCES, **values}
-    return preference_document(values)
+    if set(values) not in shipped and set(values) != _SCHEMA_V2_KEYS:
+        raise invalid_value()
+    return _finalize_migrated_preference_document(values)
+
+
+def _migrate_v2_preference_document(values):
+    """Migrate schema 2 legacy cheat names onto canonical cheat definitions."""
+    if not isinstance(values, dict) or set(values) != _SCHEMA_V2_KEYS:
+        raise invalid_value()
+    return _finalize_migrated_preference_document(values)
+
+
+def _finalize_migrated_preference_document(values):
+    migrated = dict(DEFAULT_PREFERENCES)
+    migrated.update(HADES_CHEAT_CATALOG.migrate_identity_map(values))
+    if 'boonRarityTarget' in values:
+        migrated['boonRarityTarget'] = values['boonRarityTarget']
+    return preference_document(migrated)

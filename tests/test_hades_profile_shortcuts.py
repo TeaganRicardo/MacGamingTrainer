@@ -144,6 +144,41 @@ func wait(_ message: String, timeout: TimeInterval = 4, _ condition: () -> Bool)
         model.clearProfileShortcutWarning()
         check(model.profileShortcutWarning == nil, "warning did not clear")
 
+        // 4. Legacy v1 profile shortcut keys migrate to canonical HadesShortcutAction names.
+        let migratedChord = HotkeyChord(
+            keyCode: 98,
+            modifiers: HotkeyChord.controlModifier | HotkeyChord.commandModifier,
+            keyLabel: "F5"
+        )
+        model.loadProfile("LegacyAliases")
+        wait("legacy alias profile did not migrate") {
+            !model.busy && model.shortcutText(.infiniteHealth) == migratedChord.displayText
+        }
+
+        // 5. HadesShortcutStore migrates v1 UserDefaults keys -> v2 atomically and preserves future versions.
+        let v1Defaults = InMemoryDefaults()
+        let oldFullHealthKey = "hades.shortcut." + "fullHealth"
+        let canonicalInfiniteHealthKey = "hades.shortcut." + "infiniteHealth"
+        v1Defaults.set(migratedChord.payload, forKey: oldFullHealthKey)
+        let migratedStore = HadesShortcutStore(defaults: v1Defaults)
+        check(migratedStore.chord(.infiniteHealth) == migratedChord,
+              "v1 UserDefaults legacy shortcut key did not migrate")
+        check(v1Defaults.object(forKey: canonicalInfiniteHealthKey) != nil,
+              "migrated canonical UserDefaults shortcut key was not persisted")
+        check(v1Defaults.object(forKey: oldFullHealthKey) == nil,
+              "migrated legacy UserDefaults shortcut key was not cleaned up")
+        check(v1Defaults.integer(forKey: HadesShortcutStore.layoutVersionKey) == HadesShortcutStore.currentLayoutVersion,
+              "shortcut layout version was not bumped to v2")
+
+        let futureDefaults = InMemoryDefaults()
+        futureDefaults.set(99, forKey: HadesShortcutStore.layoutVersionKey)
+        futureDefaults.set(migratedChord.payload, forKey: oldFullHealthKey)
+        _ = HadesShortcutStore(defaults: futureDefaults)
+        check(futureDefaults.integer(forKey: HadesShortcutStore.layoutVersionKey) == 99,
+              "future shortcut layout version was overwritten")
+        check(futureDefaults.object(forKey: oldFullHealthKey) != nil,
+              "future shortcut layout store removed keys")
+
         print("hades_profile_shortcuts_ok")
     }
 }
@@ -169,6 +204,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-profile-shortcuts-") as td:
                 },
                 "profiles": {
                     "LegacyEmpty": {"shortcuts": {}},
+                    "LegacyAliases": {
+                        "shortcuts": {
+                            "_layoutVersion": 1,
+                            "fullHealth": {"keyCode": 98, "modifiers": 4352, "keyLabel": "F5"},
+                        }
+                    },
                     "FutureLayout": {
                         "shortcuts": {
                             "_layoutVersion": 9,

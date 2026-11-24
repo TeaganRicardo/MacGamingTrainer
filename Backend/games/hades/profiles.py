@@ -4,11 +4,19 @@ from pathlib import Path
 
 from core.adapter import AdapterError
 from core.persistence import ProfileStore, utc_iso_timestamp
+from .cheats import HADES_CHEAT_CATALOG
 from .schema import (
     PREFERENCE_SCHEMA_VERSION,
     persisted_preference_document,
     preference_document,
 )
+
+
+def _migrate_profile_envelope(raw, version):
+    document = dict(raw)
+    if version < PREFERENCE_SCHEMA_VERSION and isinstance(raw.get('shortcuts'), dict):
+        document['shortcuts'] = HADES_CHEAT_CATALOG.migrate_shortcut_payload(raw['shortcuts'])
+    return document
 
 
 def _invalid_name(*_args):
@@ -44,6 +52,8 @@ class HadesProfileStore:
             timestamp=utc_iso_timestamp,
             quarantine_corrupt=False,
             create_root_dir=False,
+            migrate_envelope=_migrate_profile_envelope,
+            retired_shortcut_actions=HADES_CHEAT_CATALOG.retired_ids,
             include_shortcuts_in_list=False,
             invalid_name_error=_invalid_name,
             corrupt_error=_read_failed,

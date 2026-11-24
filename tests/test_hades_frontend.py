@@ -189,9 +189,9 @@ for raw in sys.stdin:
                 state['features']['gameSpeed']={'desired':params['value'],'actual':params['value'],'active':True}
             else:
                 state['features'][feature]=params['value']
-                if feature=='moneyNoDecrease' and params['value']:
+                if feature=='infiniteMoney' and params['value']:
                     state['moneyLocked']=False;state['moneyLock']=None
-                if feature=='rerollsNoDecrease' and params['value']:
+                if feature=='infiniteRerolls' and params['value']:
                     state['rerollsLocked']=False;state['rerollsLock']=None
             (folder/'state.json').write_text(json.dumps(state))
         if command=='set_boon_rarity':
@@ -615,7 +615,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 speedKey: ["desired": 3.5, "actual": 4.5, "active": true,
                            "errorPresentation": "host.timeWarp.error.verifyFailed", "errorArguments": ["4.5"]]]
             liveReply["activeFeatures"] = ["invincibility": true]
-            liveReply["dormantFeatures"] = ["fullHealth": true]
+            liveReply["dormantFeatures"] = ["infiniteHealth": true]
             liveReply["boonRarityTarget"] = "Common"
             liveReply["invincible"] = true
             model.applyStaleBackendPayload(liveReply)
@@ -647,14 +647,14 @@ func pump(_ seconds: TimeInterval = 0.1) {
             replacementReply["features"] = ["invincibility": true, "damageMultiplier": 6,
                 speedKey: ["desired": 4.0, "actual": 1.0, "active": false,
                            "errorPresentation": "host.timeWarp.error.setFailed", "errorArguments": ["current"]]]
-            replacementReply["activeFeatures"] = ["fullHealth": true]
+            replacementReply["activeFeatures"] = ["infiniteHealth": true]
             replacementReply["dormantFeatures"] = ["infiniteAmmo": true]
             model.applyBackendPayload(replacementReply)
             model.rejectInvalidValue()
             let currentFeedback = model.feedback?.id
             model.applyStaleBackendPayload(liveReply)
             check(model.connected && model.heroReady && model.health == 75 && model.target?.heroId == "run:hero:replacement"
-                  && model.activeFeatures == ["fullHealth": true] && model.dormantFeatures == ["infiniteAmmo": true],
+                  && model.activeFeatures == ["infiniteHealth": true] && model.dormantFeatures == ["infiniteAmmo": true],
                   "a mismatched PID discarded the verified replacement observation")
             check(model.features[speedKey] == .gameSpeed(
                 desired: 3.5, actual: 1, active: false, errorPresentation: "host.timeWarp.error.setFailed",
@@ -756,8 +756,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
         defaults.set(1, forKey:"hades.shortcut.heal")
         var store=HadesShortcutStore(defaults:defaults)
         check(defaults.object(forKey:"hades.shortcut.heal")==nil,"retired Heal shortcut preference was not removed")
-        let clash=store.chord(.fullHealth)
-        check(store.set(.invincibility,chord:HotkeyChord(keyCode:clash.keyCode,modifiers:clash.modifiers,keyLabel:"different label")) == .fullHealth,
+        let clash=store.chord(.infiniteHealth)
+        check(store.set(.invincibility,chord:HotkeyChord(keyCode:clash.keyCode,modifiers:clash.modifiers,keyLabel:"different label")) == .infiniteHealth,
             "physical shortcut conflict depended on display label")
         let custom=HotkeyChord(keyCode:99,modifiers:HotkeyChord.controlModifier | HotkeyChord.commandModifier,keyLabel:"F3")
         check(store.set(.invincibility,chord:custom)==nil,"valid shortcut failed")
@@ -767,21 +767,21 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(store.set(.disableAll,chord:custom) == .disableAll,"Disable All was editable")
         check(store.set(.disableAll,chord:panic)==nil,"reasserting the fixed chord should be harmless")
         let alternateLabel=HotkeyChord(keyCode:51,modifiers:panic.modifiers,keyLabel:"Backspace")
-        check(store.set(.fullHealth,chord:alternateLabel) == .disableAll,
+        check(store.set(.infiniteHealth,chord:alternateLabel) == .disableAll,
               "a display-label change bypassed the panic chord reservation")
         check(HadesShortcutStore(defaults:defaults).chord(.disableAll)==panic,"Disable All chord drifted after reload")
         let saved=InMemoryDefaults()
         saved.set(HotkeyChord(keyCode:98,modifiers:HotkeyChord.commandModifier,keyLabel:"F4").payload,
                   forKey:"hades.shortcut.disableAll")
-        saved.set(alternateLabel.payload,forKey:"hades.shortcut.fullHealth")
+        saved.set(alternateLabel.payload,forKey:"hades.shortcut.infiniteHealth")
         saved.set(custom.payload,forKey:"hades.shortcut.invincibility")
         let reloaded=HadesShortcutStore(defaults:saved)
         check(reloaded.chord(.disableAll)==panic && reloaded.chord(.invincibility)==custom,
               "saved overrides displaced the fixed chord or a valid choice")
-        check(reloaded.chord(.fullHealth)==HadesShortcutAction.fullHealth.defaultChord,
+        check(reloaded.chord(.infiniteHealth)==HadesShortcutAction.infiniteHealth.defaultChord,
               "an invalid reserved override survived reload")
         check(saved.object(forKey:"hades.shortcut.disableAll")==nil
-              && saved.object(forKey:"hades.shortcut.fullHealth")==nil,
+              && saved.object(forKey:"hades.shortcut.infiniteHealth")==nil,
               "invalid panic-key preferences were not retired")
         let identities=HadesWorkbenchCatalog.orderedShortcutActions.map {
             TrainerHotkeyLayout.identity(reloaded.chord($0))
@@ -972,14 +972,14 @@ func pump(_ seconds: TimeInterval = 0.1) {
         }
         check(HadesWorkbenchSection.visible == [.values,.common,.boons,.resources,.rooms,.management],
             "workbench order lost the implemented native rooms panel")
-        check(HadesWorkbenchCatalog.orderedShortcutActions == [.invincibility,.fullHealth,.moneyNoDecrease,
-            .rerollsNoDecrease,.fullGodGauge,.infiniteAmmo,.forceRerolls,.decreaseGameSpeed,.increaseGameSpeed,
+        check(HadesWorkbenchCatalog.orderedShortcutActions == [.invincibility,.infiniteHealth,.infiniteMoney,
+            .infiniteRerolls,.fullGodGauge,.infiniteAmmo,.forceEnableRerolls,.decreaseGameSpeed,.increaseGameSpeed,
              .boonRarityEnabled,.generateFishing,.applyWorldExit,.applyWorldOccurrence,.generateChamberObject,
              .generateChaosGate,.spawnOlympian,.spawnPickup,.spawnSpecial,
              .acquireChaosPair,.acquireExactBoon,.disableAll],
               "shortcut order drifted from the visible workbench")
         check(HadesShortcutAction.invincibility.defaultChord.displayText=="⌃⌥1"
-              && HadesShortcutAction.fullHealth.defaultChord.displayText=="⌃⌥2",
+              && HadesShortcutAction.infiniteHealth.defaultChord.displayText=="⌃⌥2",
               "retiring Heal did not shift derived shortcuts forward")
         // Room shortcuts follow visible room order before Chaos Gate/Generate rows.
         check(HadesShortcutAction.generateFishing.defaultChord.displayText=="⌃⌥Q"
@@ -2141,22 +2141,22 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 return key.map { control.help==localization.localized($0) } ?? true
             }
         }
-        check(phase(.fullHealth) == .off,"a disabled feature did not read as off")
+        check(phase(.infiniteHealth) == .off,"a disabled feature did not read as off")
         try observeFeatures(active:[:],dormant:[:],slow:true)
-        let lifeSwitch=requireNativeControl("Infinite Life native switch",in:host) { _ in featureSwitch(.fullHealth) }
+        let lifeSwitch=requireNativeControl("Infinite Life native switch",in:host) { _ in featureSwitch(.infiniteHealth) }
         check(lifeSwitch.press(),"Infinite Life switch refused native AX input")
-        wait("in-flight enable reads as pending") { model.busy && phase(.fullHealth) == .pending && model.isEnabled(.fullHealth) }
-        waitPhase(.fullHealth,.mismatch,help:"host.feature.phase.mismatch")
-        try observeFeatures(active:["fullHealth":true],dormant:[:]);model.refreshFromHost()
-        waitPhase(.fullHealth,.active,help:nil)
-        try observeFeatures(active:[:],dormant:["fullHealth":true]);model.refreshFromHost()
-        waitPhase(.fullHealth,.waiting,help:"host.feature.phase.waiting")
+        wait("in-flight enable reads as pending") { model.busy && phase(.infiniteHealth) == .pending && model.isEnabled(.infiniteHealth) }
+        waitPhase(.infiniteHealth,.mismatch,help:"host.feature.phase.mismatch")
+        try observeFeatures(active:["infiniteHealth":true],dormant:[:]);model.refreshFromHost()
+        waitPhase(.infiniteHealth,.active,help:nil)
+        try observeFeatures(active:[:],dormant:["infiniteHealth":true]);model.refreshFromHost()
+        waitPhase(.infiniteHealth,.waiting,help:"host.feature.phase.waiting")
         try setConnection(false,heroReady:false);model.refreshFromHost()
-        waitPhase(.fullHealth,.detached,help:"host.feature.phase.detached")
+        waitPhase(.infiniteHealth,.detached,help:"host.feature.phase.detached")
         try setConnection(true,heroReady:true);try observeFeatures(active:[:],dormant:[:]);model.refreshFromHost()
-        waitPhase(.fullHealth,.mismatch,help:"host.feature.phase.mismatch")
-        check(featureSwitch(.fullHealth)!.press(),"Infinite Life switch refused native AX input")
-        waitPhase(.fullHealth,.off,help:nil)
+        waitPhase(.infiniteHealth,.mismatch,help:"host.feature.phase.mismatch")
+        check(featureSwitch(.infiniteHealth)!.press(),"Infinite Life switch refused native AX input")
+        waitPhase(.infiniteHealth,.off,help:nil)
         check(requests("set_feature").suffix(2).compactMap { ($0["params"] as? [String:Any])?["value"] as? Bool } == [true,false],
               "the native switch did not send one enable and one disable intent")
         var worldState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
@@ -2175,7 +2175,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         wait("Hades world actions fixture observed") {
             !model.busy && model.canSelectWorldExit && model.canSelectWorldOccurrence
         }
-        check(featureSwitch(.fullHealth)!.press(),"Infinite Life switch refused slow blocking press")
+        check(featureSwitch(.infiniteHealth)!.press(),"Infinite Life switch refused slow blocking press")
         wait("blocking request leaves canAcceptRuntimeAction false while keeping Hades world pickers interactive") {
             model.busy && !model.canAcceptRuntimeAction
         }
@@ -2185,8 +2185,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
         worldState["slowFeature"]=false
         worldState["world"]=["roomId":"run:room:1","doors":[],"canFish":true,"canChaos":true,"objects":[]]
         try JSONSerialization.data(withJSONObject:worldState).write(to:stateURL,options:.atomic)
-        check(featureSwitch(.fullHealth)!.press(),"Infinite Life restore switch press failed")
-        waitPhase(.fullHealth,.off,help:nil)
+        check(featureSwitch(.infiniteHealth)!.press(),"Infinite Life restore switch press failed")
+        waitPhase(.infiniteHealth,.off,help:nil)
 
         // All seven permanent resources use independent Core numeric inputs.
         // No search or popup may gate direct editing, including while detached.
