@@ -426,8 +426,8 @@ final class Hades2SaveEditorModel: ObservableObject {
     @Published private(set) var sourceSHA256 = ""
     @Published private(set) var hasWriteTarget = false
     let snapshotID: String?
-    @Published private(set) var workspaceID: String?
-    @Published private(set) var baselineGeneration: String?
+    var workspaceID: String? { client.workspaceID }
+    var baselineGeneration: String? { client.baselineGeneration }
     private var selectedTargetIdentity: [String: String]?
     @Published private(set) var availableDomains: [Hades2SaveEditorDomain] = []
     @Published private(set) var coverage: [Hades2SaveEditorCoverage] = []
@@ -462,51 +462,40 @@ final class Hades2SaveEditorModel: ObservableObject {
     @Published private(set) var lastApplyReceipt: Hades2SaveEditorApplyReceipt?
 
     var pendingCount: Int { pendingActions.count }
-    var busy: Bool { !pendingRequests.isEmpty }
-    var documentCurrent: Bool { requests.owns(workspaceID: workspaceID, baselineGeneration: baselineGeneration) }
+    var busy: Bool { client.busy }
+    var documentCurrent: Bool { client.documentCurrent }
 
     /// A pending stage/unstage owns one entry, not another field's native draft.
     /// Command admission and window closure still use the full busy lifetime.
     func canEditText(_ entry: Hades2SaveEditorEntry) -> Bool {
-        guard owns(entry.baselineGeneration) else { return false }
-        return pendingRequests.values.allSatisfy { lock in
-            switch lock {
-            case .workspace: return false
-            case .entry(let identifier, let workspace, let baseline):
-                // An older workspace's completion cannot grant an exemption
-                // to fields in a replacement document, even if IDs repeat.
-                return workspace == workspaceID && baseline == baselineGeneration && identifier != entry.id
-            }
-        }
+        client.canEditEntry(entry.id, baseline: entry.baselineGeneration)
     }
 
-    private let api: Hades2API
-    private let backendSession: TrainerBackendSession
+    private let client: TrainerStructuredSaveEditorClient
+    private var clientObserver: AnyCancellable?
     private var language: TrainerPresentationLanguage = .zhCN
-    private enum TextEditLock {
-        case workspace
-        case entry(String, workspaceID: String?, baseline: String?)
-    }
-    @Published private var pendingRequests: [UUID: TextEditLock] = [:]
     private var knownDisplayNames: [String: String] = [:]
-    private let requests = TrainerSaveEditorReplyCoordinator()
     private var lastRequestedSearch: String?
     private var scheduledSearch: DispatchWorkItem?
-    private var lifecycleObserver: UUID?
 
     init(session: TrainerBackendSession, snapshotID: String? = nil) {
-        backendSession = session
-        api = Hades2API(session: session)
+        client = TrainerStructuredSaveEditorClient(
+            session: session,
+            closeCommand: Hades2Command.saveEditorClose.rawValue,
+            closeTimeout: Hades2Command.saveEditorClose.timeout
+        )
         self.snapshotID = snapshotID
-        requests.observeBackendGeneration(session.lifecycleID)
-        lifecycleObserver = session.observeLifecycle { [weak self] generation in
-            guard let self, self.requests.observeBackendGeneration(generation) else { return }
-            self.scheduledSearch?.cancel(); self.scheduledSearch = nil
-            self.querying = false; self.pendingRequests = [:]
+        clientObserver = client.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+        client.onLifecycleExpired = { [weak self] in
+            guard let self else { return }
+            self.scheduledSearch?.cancel()
+            self.scheduledSearch = nil
+            self.querying = false
             self.operationFailures[.saveEditorOpen] = TrainerTextToken(key: "host.save.error.workspaceExpired")
         }
     }
-    isolated deinit { if let lifecycleObserver { backendSession.removeLifecycleObserver(lifecycleObserver) } }
 
     func open(language: TrainerPresentationLanguage) {
         self.language = language
@@ -548,8 +537,8 @@ final class Hades2SaveEditorModel: ObservableObject {
         invalidateQuery()
         invalidateDetail()
         guard let source = sourceFiles.first(where: { $0.id == selectedSourceID }) else { return }
-        let previousWorkspace = workspaceID
-        let previousGeneration = requests.documentBackendGeneration
+        let previousWorkspace = client.workspaceID
+        let previousGeneration = client.documentBackendGeneration
         perform(.saveEditorOpenSelection(snapshotID: snapshotID, source: source.identity, target: selectedTargetIdentity),
                 operation: "hades2.saveEditor.operation.open") { [weak self] reply in
             guard let self else { return }
@@ -560,16 +549,13 @@ final class Hades2SaveEditorModel: ObservableObject {
             self.continuousDraftEntryIDs = []
             guard self.applySummary(result) else {
                 if let abandoned = result["workspaceId"] as? String,
-                   abandoned != previousWorkspace { self.releaseWorkspace(abandoned) }
+                   abandoned != previousWorkspace { self.client.releaseWorkspace(abandoned) }
                 self.operationFailures[.saveEditorOpen] = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 self.restoreLoadedSourceSelection()
                 return
             }
             self.lastApplyReceipt = nil
-            if previousGeneration == self.backendSession.lifecycleID,
-               let previousWorkspace, previousWorkspace != self.workspaceID {
-                self.releaseWorkspace(previousWorkspace)
-            }
+            self.client.releasePreviousWorkspace(previousWorkspace, capturedGeneration: previousGeneration)
             self.pendingActions = []
             self.retiredDrafts = []
             self.operationFailures = [:]
@@ -592,14 +578,11 @@ final class Hades2SaveEditorModel: ObservableObject {
     /// Queries may still be in flight; invalidate their captured ownership and
     /// release this workspace without affecting any other editor.
     func close() {
-        if let workspaceID, requests.documentBackendGeneration == backendSession.lifecycleID { releaseWorkspace(workspaceID) }
         scheduledSearch?.cancel()
         scheduledSearch = nil
         invalidateQuery()
         invalidateDetail()
-        requests.retire()
-        workspaceID = nil
-        baselineGeneration = nil
+        client.retireAndClose()
         lastRequestedSearch = nil
         continuousDraftEntryIDs = []
         retiredDrafts = []
@@ -608,11 +591,6 @@ final class Hades2SaveEditorModel: ObservableObject {
         textDrafts = [:]
         typedDrafts = [:]
         membershipDrafts = [:]
-    }
-
-    private func releaseWorkspace(_ identifier: String) {
-        api.request(.saveEditorClose, operation: "host.done", announceSuccess: false,
-                    saveWorkspaceID: identifier)
     }
 
     private func restoreLoadedSourceSelection() {
@@ -651,8 +629,8 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     private func invalidateDetail() {
-        requests.invalidate(.detail)
-        requests.invalidate(.advancedDetail)
+        client.invalidate(.detail)
+        client.invalidate(.advancedDetail)
         selectedInvestigationID = nil
         investigationDetail = nil
         detailFailure = nil
@@ -661,7 +639,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     private func invalidateQuery() {
         scheduledSearch?.cancel()
         scheduledSearch = nil
-        requests.invalidate(.query)
+        client.invalidate(.query)
         querying = false
         queryFailure = nil
     }
@@ -1063,7 +1041,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     private func owns(_ baseline: String?) -> Bool {
-        requests.owns(workspaceID: workspaceID, baselineGeneration: baseline)
+        client.owns(baseline: baseline)
     }
 
     func stage(entryID: String, operation: String, value: Any?, baseline: String) {
@@ -1218,8 +1196,7 @@ final class Hades2SaveEditorModel: ObservableObject {
             self.textDrafts = self.textDrafts.filter { continuous.contains($0.key) }
             self.typedDrafts = self.typedDrafts.filter { continuous.contains($0.key) }
             self.membershipDrafts = self.membershipDrafts.filter { continuous.contains($0.key) }
-            self.requests.bind(workspaceID: workspace!, baselineGeneration: nextBaseline)
-            self.baselineGeneration = nextBaseline
+            self.client.bind(workspaceID: workspace!, baselineGeneration: nextBaseline)
             self.items = []
             self.entityResults = []
             self.pendingActions = []
@@ -1233,7 +1210,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     private func applyUnconfirmed() {
-        requests.invalidateDocument()
+        client.invalidateDocument()
         operationFailures[.saveEditorApply] = TrainerTextToken(key: "host.save.error.applyUnconfirmed")
     }
 
@@ -1310,9 +1287,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                 )
             }
         }
-        requests.bind(workspaceID: identifier, baselineGeneration: baseline)
-        workspaceID = identifier
-        baselineGeneration = baseline
+        client.bind(workspaceID: identifier, baselineGeneration: baseline)
         selectedTargetID = targetID
         selectedTargetIdentity = result["target"] as? [String: String]
         hasWriteTarget = targetSelected
@@ -1438,51 +1413,41 @@ final class Hades2SaveEditorModel: ObservableObject {
     ) {
         let ownsWorkspace = request.command != .saveEditorOpen && request.command != .saveEditorInventory
         let requestWorkspaceID = ownsWorkspace ? workspaceID : nil
-        let requestBaseline = ownsWorkspace ? baselineGeneration : nil
-        if ownsWorkspace, !requests.owns(workspaceID: requestWorkspaceID, baselineGeneration: requestBaseline) {
-            operationFailures[.saveEditorOpen] = TrainerTextToken(key: "host.save.error.workspaceExpired")
-            querying = false
-            return
-        }
-        if [.saveEditorStage, .saveEditorUnstage, .saveEditorCancel, .saveEditorApply].contains(request.command) {
-            requests.invalidate(.review)
-        }
-        let ticket = request.command == .saveEditorOpen
-            ? requests.beginNewDocumentRead()
-            : requests.capture(request.command == .saveEditorInventory ? .inventory : lane,
-                               bindsDocument: ownsWorkspace)
-        let backendLifecycle = backendSession.lifecycleID
-        let requestID = UUID()
-        if occupy {
+        let lock: TrainerStructuredSaveEditorClient.LockKind
+        if !occupy {
+            lock = .none
+        } else {
             switch request {
             case .saveEditorStage(let entryID, _, _, _), .saveEditorUnstage(let entryID, _):
-                pendingRequests[requestID] = .entry(entryID, workspaceID: requestWorkspaceID, baseline: requestBaseline)
+                lock = .entry(entryID)
             default:
                 // Reads, target changes, Apply and whole-batch cancellation can
                 // replace a draft's authority. They keep every input disabled.
-                pendingRequests[requestID] = .workspace
+                lock = .workspace
             }
         }
-        api.request(
-            request,
+        client.send(
+            request.command.rawValue,
+            params: request.params,
             operation: operation,
             announceSuccess: announceSuccess,
-            saveWorkspaceID: requestWorkspaceID,
-            saveBaselineGeneration: requestBaseline,
-            saveDraftEntryIDs: draftEntryIDs,
-            reply: { [weak self] backendReply in
+            timeout: request.command.timeout,
+            requiresTrustedTarget: request.command.requiresTrustedTarget(connected: true),
+            bindsWorkspace: ownsWorkspace,
+            explicitWorkspaceID: requestWorkspaceID,
+            sendBaseline: ownsWorkspace,
+            draftEntryIDs: draftEntryIDs,
+            lock: lock,
+            lane: request.command == .saveEditorInventory ? .inventory : lane,
+            isOpenCommand: request.command == .saveEditorOpen,
+            isApplyCommand: request.command == .saveEditorApply,
+            invalidatesReview: [.saveEditorStage, .saveEditorUnstage, .saveEditorCancel, .saveEditorApply].contains(request.command),
+            onExpired: { [weak self] in
+                self?.operationFailures[.saveEditorOpen] = TrainerTextToken(key: "host.save.error.workspaceExpired")
+                self?.querying = false
+            },
+            onReply: { [weak self] backendReply in
                 guard let self else { return }
-                guard self.requests.accepts(ticket) else {
-                    if request.command == .saveEditorOpen, self.backendSession.lifecycleID == backendLifecycle,
-                       backendReply.success,
-                       let abandoned = backendReply.result?["workspaceId"] as? String,
-                       abandoned != self.workspaceID {
-                        self.releaseWorkspace(abandoned)
-                    }
-                    return
-                }
-                guard !ownsWorkspace || (self.workspaceID == requestWorkspaceID
-                    && self.baselineGeneration == requestBaseline) else { return }
                 if presentFailure, (!ownsWorkspace || self.workspaceID == requestWorkspaceID),
                    !backendReply.success,
                    let backendFailure = backendReply.failure {
@@ -1493,20 +1458,14 @@ final class Hades2SaveEditorModel: ObservableObject {
                 }
                 reply(backendReply)
             },
-            failed: { [weak self] failure in
-                guard let self, self.requests.accepts(ticket) else { return }
-                let token = TrainerTextToken(key: failure.outcomeUnknown
-                    ? (request.command == .saveEditorApply ? "host.save.error.applyUnconfirmed" : "host.save.error.incomplete")
-                    : "host.backend.error.notSent")
-                if request.command == .saveEditorQuery { self.queryFailure = token; self.querying = false }
-                else { self.operationFailures[request.command] = token }
-                if request.command == .saveEditorApply, failure.outcomeUnknown { self.requests.invalidateDocument() }
-            },
-            completion: { [weak self] _ in
-                guard let self, occupy else { return }
-                // A superseded reply can finish after a newer document request;
-                // only its own lock retires, even when the backend reused IDs.
-                self.pendingRequests.removeValue(forKey: requestID)
+            onTransportFailure: { [weak self] transport in
+                guard let self else { return }
+                if request.command == .saveEditorQuery {
+                    self.queryFailure = transport.token
+                    self.querying = false
+                } else {
+                    self.operationFailures[request.command] = transport.token
+                }
             }
         )
     }

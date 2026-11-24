@@ -14,9 +14,7 @@ struct HadesSaveEditorView: View {
     private func text(_ key: String) -> String { localization.string(key) }
     private var hasReview: Bool { model.review.count > 0 }
 
-    private enum ResultPhase: Equatable { case source, loading, empty, content }
-
-    private var resultPhase: ResultPhase {
+    private var resultPhase: TrainerSaveEditorResultPhase {
         if model.workspaceID == nil { return model.busy || model.queryLoading ? .loading : .source }
         if model.rows.isEmpty { return model.queryLoading ? .loading : .empty }
         return .content
@@ -28,8 +26,13 @@ struct HadesSaveEditorView: View {
             Divider()
             documentBar
             documentContext
-            failuresNotice
-            recoveryNotice
+            TrainerSaveEditorFailureBanner(
+                failures: model.failures.keys.sorted().compactMap { model.failures[$0] }
+            )
+            TrainerSaveEditorRecoveryBanner(
+                message: text("hades.saveEditor.recovery"),
+                recoveryPath: model.recoveryPath
+            )
             Divider()
             workbenchBar
             saveScopeContext
@@ -64,10 +67,12 @@ struct HadesSaveEditorView: View {
         .onChange(of: localization.language) { _, value in model.setLanguage(value) }
         .onChange(of: model.search) { _, _ in model.searchChanged() }
         .onChange(of: model.review.count) { _, count in
-            if count > 0 || model.receipt == nil { announce(text("hades.saveEditor.changes") + " (\(count))") }
+            if count > 0 || model.receipt == nil {
+                TrainerSaveEditorAccessibility.announce(text("hades.saveEditor.changes") + " (\(count))")
+            }
         }
         .onChange(of: model.receipt?.installedSHA256) { _, receipt in
-            if receipt != nil { announce(text("hades.saveEditor.applied")) }
+            if receipt != nil { TrainerSaveEditorAccessibility.announce(text("hades.saveEditor.applied")) }
         }
         .onChange(of: model.selectedSourceID) { _, identifier in
             guard !identifier.isEmpty, identifier != loadedSourceID else { return }
@@ -96,11 +101,6 @@ struct HadesSaveEditorView: View {
         )) { row in
             HadesSaveTypedEditor(model: model, row: row, workspace: model.workspaceID, forceTyped: model.editingTyped)
         }
-    }
-
-    private func announce(_ message: String) {
-        NSAccessibility.post(element: NSApplication.shared, notification: .announcementRequested,
-            userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
     }
 
     private var loadedSourceID: String { model.source?.id ?? "" }
@@ -179,50 +179,6 @@ struct HadesSaveEditorView: View {
     }
 
     @ViewBuilder
-    private var failuresNotice: some View {
-        if !model.failures.isEmpty {
-            TrainerInlineNotice(color: theme.warning, foreground: theme.warning) {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(model.failures.keys.sorted(), id: \.self) { key in
-                        if let failure = model.failures[key] {
-                            Text(localization.string(failure))
-                                .font(.caption)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .contentTransition(.opacity)
-                                .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: failure)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, theme.rowHorizontalPadding)
-            .padding(.top, theme.controlPadding)
-            .transition(.opacity)
-        }
-    }
-
-    @ViewBuilder
-    private var recoveryNotice: some View {
-        if let recovery = model.recoveryPath {
-            TrainerInlineNotice(color: theme.warning) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(text("hades.saveEditor.recovery"))
-                        .font(.caption)
-                        .foregroundStyle(theme.warning)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(recovery)
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, theme.rowHorizontalPadding)
-            .padding(.top, theme.controlPadding)
-            .transition(.opacity)
-        }
-    }
-
-    @ViewBuilder
     private var documentContext: some View {
         if let source = model.source {
             VStack(alignment: .leading, spacing: 4) {
@@ -296,63 +252,52 @@ struct HadesSaveEditorView: View {
         return found
     }
     private var results: some View {
-        Group {
-            if resultPhase == .source {
-                TrainerEmptyState(text: text("hades.saveEditor.selectSource"))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .transition(.opacity)
-            } else if resultPhase == .loading {
-                TrainerLoadingIndicator()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .transition(.opacity)
-            } else if resultPhase == .empty {
-                TrainerEmptyState(text: text("hades.saveEditor.empty"))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .transition(.opacity)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: theme.pageSpacing) {
-                        TrainerSection(title: text(model.domain.titleKey), icon: model.domain.sectionIcon) {
-                            ForEach(owners, id: \.self) { ownerID in
-                                let owned = model.rows.filter { $0.ownerId == ownerID }
-                                VStack(alignment: .leading, spacing: 0) {
-                                    if let owner = owned.first?.owner, !owner.isEmpty {
-                                        Text(owner)
-                                            .font(.headline)
-                                            .accessibilityAddTraits(.isHeader)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .padding(.horizontal, theme.rowHorizontalPadding)
-                                            .padding(.vertical, theme.sectionSpacing)
-                                            .trainerSurface(.subtle)
-                                    }
-                                    ForEach(Array(owned.enumerated()), id: \.element.id) { index, row in
-                                        if index == 0 || owned[index - 1].groupId != row.groupId {
-                                            if !row.group.isEmpty {
-                                                Text(row.group)
-                                                    .font(.subheadline.weight(.semibold))
-                                                    .foregroundStyle(.secondary)
-                                                    .accessibilityAddTraits(.isHeader)
-                                                    .padding(.horizontal, theme.rowHorizontalPadding)
-                                                    .padding(.top, theme.sectionSpacing)
-                                            }
-                                        }
-                                        if index > 0 {
-                                            Divider().padding(.horizontal, theme.rowHorizontalPadding)
-                                        }
-                                        HadesSaveEditorField(model: model, row: row, workspace: model.workspaceID)
-                                    }
+        TrainerSaveEditorResultContainer(
+            phase: resultPhase,
+            sourcePrompt: text("hades.saveEditor.selectSource"),
+            emptyPrompt: text("hades.saveEditor.empty")
+        ) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: theme.pageSpacing) {
+                    TrainerSection(title: text(model.domain.titleKey), icon: model.domain.sectionIcon) {
+                        ForEach(owners, id: \.self) { ownerID in
+                            let owned = model.rows.filter { $0.ownerId == ownerID }
+                            VStack(alignment: .leading, spacing: 0) {
+                                if let owner = owned.first?.owner, !owner.isEmpty {
+                                    Text(owner)
+                                        .font(.headline)
+                                        .accessibilityAddTraits(.isHeader)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, theme.rowHorizontalPadding)
+                                        .padding(.vertical, theme.sectionSpacing)
+                                        .trainerSurface(.subtle)
                                 }
-                                .trainerSurface(.panel, cornerRadius: theme.panelCornerRadius)
-                                .trainerGroupedRows()
+                                ForEach(Array(owned.enumerated()), id: \.element.id) { index, row in
+                                    if index == 0 || owned[index - 1].groupId != row.groupId {
+                                        if !row.group.isEmpty {
+                                            Text(row.group)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(.secondary)
+                                                .accessibilityAddTraits(.isHeader)
+                                                .padding(.horizontal, theme.rowHorizontalPadding)
+                                                .padding(.top, theme.sectionSpacing)
+                                        }
+                                    }
+                                    if index > 0 {
+                                        Divider().padding(.horizontal, theme.rowHorizontalPadding)
+                                    }
+                                    HadesSaveEditorField(model: model, row: row, workspace: model.workspaceID)
+                                }
                             }
+                            .trainerSurface(.panel, cornerRadius: theme.panelCornerRadius)
+                            .trainerGroupedRows()
                         }
                     }
-                    .padding(.horizontal, theme.rowHorizontalPadding)
-                    .padding(.vertical, theme.sectionSpacing)
                 }
+                .padding(.horizontal, theme.rowHorizontalPadding)
+                .padding(.vertical, theme.sectionSpacing)
             }
         }
-        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: resultPhase)
     }
 
     private var paging: some View {
@@ -369,24 +314,15 @@ struct HadesSaveEditorView: View {
     private var changes: some View {
         let baseline = model.review.baselineGeneration
         return VStack(alignment: .leading, spacing: theme.controlPadding) {
-            HStack {
-                Text(text("hades.saveEditor.changes") + " (\(model.review.count))").font(.headline)
-                Spacer()
-                TrainerSecondaryActionButton(
-                    title: text("hades.saveEditor.discard"),
-                    enabled: !model.busy && model.canEditRows,
-                    widthRole: .sheet
-                ) {
-                    model.cancel(baseline: baseline)
-                }
-                TrainerPrimaryActionButton(
-                    title: text("hades.apply"),
-                    enabled: model.canApply,
-                    widthRole: .sheet
-                ) {
-                    model.apply(baseline: baseline)
-                }
-            }
+            TrainerSaveEditorReviewHeader(
+                title: text("hades.saveEditor.changes") + " (\(model.review.count))",
+                discardTitle: text("hades.saveEditor.discard"),
+                discardEnabled: !model.busy && model.canEditRows,
+                applyTitle: text("hades.apply"),
+                applyEnabled: model.canApply,
+                onDiscard: { model.cancel(baseline: baseline) },
+                onApply: { model.apply(baseline: baseline) }
+            )
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.compactControlSpacing) {
                     ForEach(model.review.actions) { action in
@@ -435,14 +371,11 @@ struct HadesSaveEditorView: View {
         .trainerSurface(.panel)
     }
     private func applied(_ receipt: HadesSaveEditorReceipt) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: theme.compactControlSpacing) {
-                Image(systemName: TrainerSemanticIcon.Feedback.toastSuccess)
-                    .foregroundStyle(theme.success)
-                Text(text("hades.saveEditor.applied"))
-                    .font(.callout.weight(.semibold))
-                Spacer()
-            }
+        TrainerSaveEditorReceiptPanel(
+            title: text("hades.saveEditor.applied"),
+            maintenanceWarning: receipt.maintenanceWarning,
+            namingWarning: receipt.namingWarning
+        ) {
             Text(receipt.target.id).font(.caption).textSelection(.enabled)
             Text("SHA-256 · " + receipt.installedSHA256).font(.caption2.monospaced()).textSelection(.enabled)
             if let backup = receipt.previousSnapshotId {
@@ -450,17 +383,7 @@ struct HadesSaveEditorView: View {
             }
             Text(text(receipt.hot == true ? "hades.saveEditor.hot" : "hades.saveEditor.loadInGame"))
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            if receipt.maintenanceWarning != nil {
-                Text(localization.localized("host.save.warning.maintenance")).font(.caption).foregroundStyle(theme.warning)
-            }
-            if receipt.namingWarning != nil {
-                Text(localization.localized("host.save.warning.providerName")).font(.caption).foregroundStyle(theme.warning)
-            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, theme.rowHorizontalPadding)
-        .padding(.vertical, theme.inlineRowVerticalPadding)
-        .trainerSurface(.panel)
     }
 }
 

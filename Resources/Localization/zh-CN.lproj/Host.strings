@@ -225,3 +225,36 @@
 
 "host.disclosure.expanded" = "已展开";
 "host.disclosure.collapsed" = "已折叠";
+
+"host.saveEditor.title" = "存档编辑器";
+"host.saveEditor.source" = "源存档";
+"host.saveEditor.selectSource" = "选择存档";
+"host.saveEditor.target" = "写入目标";
+"host.saveEditor.selectTarget" = "选择目标";
+"host.saveEditor.read" = "重新读取";
+"host.saveEditor.readConfirm" = "重新读取源存档将放弃当前已暂存的修改。";
+"host.saveEditor.noSources" = "未找到可编辑的存档文件。";
+"host.saveEditor.currentSource" = "当前存档";
+"host.saveEditor.backupSource" = "托管备份";
+"host.saveEditor.domain" = "分类";
+"host.saveEditor.search" = "搜索字段";
+"host.saveEditor.refreshRows" = "刷新字段";
+"host.saveEditor.empty" = "没有匹配的字段。";
+"host.saveEditor.previous" = "上一页";
+"host.saveEditor.next" = "下一页";
+"host.saveEditor.changes" = "待应用修改";
+"host.saveEditor.discard" = "放弃全部";
+"host.saveEditor.apply" = "应用";
+"host.saveEditor.remove" = "移除";
+"host.saveEditor.unset" = "取消设置";
+"host.saveEditor.editJson" = "编辑 JSON";
+"host.saveEditor.jsonHelp" = "输入符合字段格式的合法 JSON 值。";
+"host.saveEditor.applied" = "存档修改已应用并通过校验";
+"host.saveEditor.recoverableBackup" = "可恢复备份";
+"host.saveEditor.loadInGame" = "请在游戏中读取该存档以查看修改后的数值。";
+"host.saveEditor.hot" = "已在游戏运行期间写入目标存档；请在游戏内重新读取后再继续。";
+"host.saveEditor.recovery" = "应用失败且未能完整回滚，恢复证据已保留在：";
+"host.saveEditor.invalidValue" = "请输入符合该字段类型与范围的合法值。";
+"host.saveEditor.invalidResponse" = "Save Editor 后端返回了无法识别的响应。";
+"host.saveEditor.staleBaseline" = "该控件属于较早的文档基线，请刷新后再编辑。";
+"host.saveEditor.error" = "存档编辑器错误：{0}";

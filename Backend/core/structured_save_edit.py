@@ -633,7 +633,10 @@ class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
         workspace.identifier = workspace_id
         workspace.baseline_generation = baseline_generation
         try:
-            summary = workspace.summary(language) if language is not None else workspace.summary()
+            if language is not None and self._accepts_kwarg(workspace.summary, "language"):
+                summary = workspace.summary(language)
+            else:
+                summary = workspace.summary()
         except Exception:
             self._close_workspace(workspace)
             raise

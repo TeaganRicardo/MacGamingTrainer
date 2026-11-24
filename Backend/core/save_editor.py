@@ -122,6 +122,16 @@ def _delete_mapping_path(document: Any, path: tuple[Any, ...]) -> None:
 def _values_equal(left: Any, right: Any) -> bool:
     if (type(left) is bool) != (type(right) is bool):
         return False
+    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
+        return (
+            type(left) is type(right)
+            and len(left) == len(right)
+            and all(_values_equal(a, b) for a, b in zip(left, right))
+        )
+    if isinstance(left, Mapping) and isinstance(right, Mapping):
+        if len(left) != len(right):
+            return False
+        return all(key in right and _values_equal(value, right[key]) for key, value in left.items())
     return bool(left == right)
 
 
@@ -240,6 +250,7 @@ def discover_mapping_fields(
 ) -> tuple[SaveFieldSpec, ...]:
     """Discover round-trippable leaf fields outside `known_paths` with unknown-impact warnings."""
     discovered: list[SaveFieldSpec] = []
+    known_prefixes = {kp[:i] for kp in known_paths for i in range(1, len(kp))}
 
     def walk(node: Mapping[str, Any], prefix: tuple[Any, ...], depth: int) -> None:
         for key, value in node.items():
@@ -248,6 +259,8 @@ def discover_mapping_fields(
                 continue
             if isinstance(value, Mapping) and value and depth < max_depth:
                 walk(value, path, depth + 1)
+                continue
+            if path in known_prefixes:
                 continue
             leaf_label = str(key)
             parent_label = " › ".join(str(part) for part in prefix) if prefix else "Document"
@@ -506,7 +519,17 @@ class CatalogSaveWorkspace(CoreSaveWorkspace[_Document]):
             return curated
         known_paths = frozenset(field.path for field in curated if field.path)
         by_id: OrderedDict[str, SaveFieldSpec] = OrderedDict((field.id, field) for field in curated)
-        for extra in discover(self.document, known_paths):
+        if discover is discover_mapping_fields:
+            if not isinstance(self.document, Mapping):
+                raise TypeError("discover_mapping_fields requires a Mapping document.")
+            extras: Sequence[SaveFieldSpec] = discover_mapping_fields(
+                self.document,
+                known_paths,
+                domain=self.spec.catalog.unknown_domain_id,
+            )
+        else:
+            extras = discover(self.document, known_paths)
+        for extra in extras:
             if extra.id not in by_id:
                 by_id[extra.id] = extra
         return tuple(by_id.values())
@@ -575,9 +598,14 @@ class CatalogSaveWorkspace(CoreSaveWorkspace[_Document]):
                 raise ValueError(f"Field {field.id!r} value exceeds the maximum ({field.max_value}).")
             return value
         if kind == "number":
-            if type(value) is bool or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            if type(value) is bool or not isinstance(value, (int, float)):
                 raise ValueError(f"Field {field.id!r} requires a finite numeric value.")
-            numeric = float(value)
+            try:
+                numeric = float(value)
+            except OverflowError as error:
+                raise ValueError(f"Field {field.id!r} requires a finite numeric value.") from error
+            if not math.isfinite(numeric):
+                raise ValueError(f"Field {field.id!r} requires a finite numeric value.")
             if field.min_value is not None and numeric < field.min_value:
                 raise ValueError(f"Field {field.id!r} value is below the minimum ({field.min_value}).")
             if field.max_value is not None and numeric > field.max_value:
@@ -650,9 +678,8 @@ class CatalogSaveWorkspace(CoreSaveWorkspace[_Document]):
             "effectCount": 0,
         }
 
-    def summary(self, language: str = "en") -> dict[str, Any]:
-        lang = require_editor_language(language)
-        domains = [
+    def _localized_domains(self, lang: str) -> list[dict[str, str]]:
+        return [
             {
                 "id": domain.id,
                 "title": localized_text(domain.names, lang, domain.id),
@@ -660,7 +687,10 @@ class CatalogSaveWorkspace(CoreSaveWorkspace[_Document]):
             }
             for domain in self.spec.catalog.domains
         ]
-        return self.summary_envelope(domains=domains, review=self.review(lang))
+
+    def summary(self, language: str = "en") -> dict[str, Any]:
+        lang = require_editor_language(language)
+        return self.summary_envelope(domains=self._localized_domains(lang), review=self.review(lang))
 
     def set_target(
         self,
@@ -720,6 +750,7 @@ class CatalogSaveWorkspace(CoreSaveWorkspace[_Document]):
             "workspaceId": self.identifier,
             "baselineGeneration": self.baseline_generation,
             "domain": domain,
+            "domains": self._localized_domains(lang),
             "rows": selected,
             "total": len(rows),
             "offset": start,

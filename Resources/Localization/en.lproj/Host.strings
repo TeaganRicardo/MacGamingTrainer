@@ -225,3 +225,36 @@
 
 "host.disclosure.expanded" = "Expanded";
 "host.disclosure.collapsed" = "Collapsed";
+
+"host.saveEditor.title" = "Save Editor";
+"host.saveEditor.source" = "Source";
+"host.saveEditor.selectSource" = "Select Save";
+"host.saveEditor.target" = "Write Target";
+"host.saveEditor.selectTarget" = "Select Target";
+"host.saveEditor.read" = "Read Source";
+"host.saveEditor.readConfirm" = "Reading this source will discard the current staged changes.";
+"host.saveEditor.noSources" = "No editable save files were found.";
+"host.saveEditor.currentSource" = "Current save";
+"host.saveEditor.backupSource" = "Managed backup";
+"host.saveEditor.domain" = "Category";
+"host.saveEditor.search" = "Search fields";
+"host.saveEditor.refreshRows" = "Refresh fields";
+"host.saveEditor.empty" = "No matching fields.";
+"host.saveEditor.previous" = "Previous page";
+"host.saveEditor.next" = "Next page";
+"host.saveEditor.changes" = "Staged Changes";
+"host.saveEditor.discard" = "Discard";
+"host.saveEditor.apply" = "Apply";
+"host.saveEditor.remove" = "Remove";
+"host.saveEditor.unset" = "Unset";
+"host.saveEditor.editJson" = "Edit JSON";
+"host.saveEditor.jsonHelp" = "Enter a valid JSON value that matches the field schema.";
+"host.saveEditor.applied" = "Save changes applied and verified";
+"host.saveEditor.recoverableBackup" = "Recoverable backup";
+"host.saveEditor.loadInGame" = "Load the save in game to see the updated values.";
+"host.saveEditor.hot" = "Applied while the game process is running; reload or continue safely in game.";
+"host.saveEditor.recovery" = "Apply failed and could not roll back cleanly. Recovery evidence is preserved at:";
+"host.saveEditor.invalidValue" = "Enter a valid value within this field's allowed type and range.";
+"host.saveEditor.invalidResponse" = "Received an unexpected response from the Save Editor backend.";
+"host.saveEditor.staleBaseline" = "This field belongs to an earlier document baseline. Refresh before editing.";
+"host.saveEditor.error" = "Save Editor error: {0}";

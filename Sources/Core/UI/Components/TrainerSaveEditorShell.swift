@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 package struct TrainerSaveEditorDocumentOption: Identifiable, Equatable {
@@ -313,5 +314,243 @@ private struct TrainerSaveEditorWindowModifier: ViewModifier {
 extension View {
     package func trainerSaveEditorWindow() -> some View {
         modifier(TrainerSaveEditorWindowModifier())
+    }
+}
+
+package enum TrainerSaveEditorAccessibility {
+    @MainActor
+    package static func announce(_ message: String) {
+        NSAccessibility.post(
+            element: NSApplication.shared,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: message,
+                .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+            ]
+        )
+    }
+}
+
+package enum TrainerSaveEditorResultPhase: Equatable {
+    case source
+    case loading
+    case empty
+    case content
+}
+
+package struct TrainerSaveEditorFailureBanner: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let failures: [TrainerTextToken]
+    let topPadding: CGFloat?
+    let bottomPadding: CGFloat
+
+    package init(
+        failures: [TrainerTextToken],
+        topPadding: CGFloat? = nil,
+        bottomPadding: CGFloat = 0
+    ) {
+        self.failures = failures
+        self.topPadding = topPadding
+        self.bottomPadding = bottomPadding
+    }
+
+    package var body: some View {
+        if !failures.isEmpty {
+            TrainerInlineNotice(color: theme.warning, foreground: theme.warning) {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(failures.enumerated()), id: \.offset) { _, token in
+                        Text(localization.string(token))
+                            .font(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
+                            .animation(
+                                TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion),
+                                value: token
+                            )
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, theme.rowHorizontalPadding)
+            .padding(.top, topPadding ?? theme.controlPadding)
+            .padding(.bottom, bottomPadding)
+            .transition(.opacity)
+        }
+    }
+}
+
+package struct TrainerSaveEditorRecoveryBanner: View {
+    @Environment(\.trainerTheme) private var theme
+
+    let message: String
+    let recoveryPath: String?
+
+    package init(message: String, recoveryPath: String?) {
+        self.message = message
+        self.recoveryPath = recoveryPath
+    }
+
+    package var body: some View {
+        if let recoveryPath, !recoveryPath.isEmpty {
+            TrainerInlineNotice(color: theme.warning) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(recoveryPath)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, theme.rowHorizontalPadding)
+            .padding(.top, theme.controlPadding)
+            .transition(.opacity)
+        }
+    }
+}
+
+package struct TrainerSaveEditorResultContainer<Content: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let phase: TrainerSaveEditorResultPhase
+    let sourcePrompt: String
+    let emptyPrompt: String
+    let content: Content
+
+    package init(
+        phase: TrainerSaveEditorResultPhase,
+        sourcePrompt: String,
+        emptyPrompt: String,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.phase = phase
+        self.sourcePrompt = sourcePrompt
+        self.emptyPrompt = emptyPrompt
+        self.content = content()
+    }
+
+    package var body: some View {
+        Group {
+            switch phase {
+            case .source:
+                TrainerEmptyState(text: sourcePrompt)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity)
+            case .loading:
+                TrainerLoadingIndicator()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity)
+            case .empty:
+                TrainerEmptyState(text: emptyPrompt)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity)
+            case .content:
+                content
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(TrainerMotion.animation(.transientFeedback, reduceMotion: reduceMotion), value: phase)
+    }
+}
+
+package struct TrainerSaveEditorReviewHeader: View {
+    let title: String
+    let discardTitle: String
+    let discardEnabled: Bool
+    let applyTitle: String
+    let applyEnabled: Bool
+    let onDiscard: () -> Void
+    let onApply: () -> Void
+
+    package init(
+        title: String,
+        discardTitle: String,
+        discardEnabled: Bool,
+        applyTitle: String,
+        applyEnabled: Bool,
+        onDiscard: @escaping () -> Void,
+        onApply: @escaping () -> Void
+    ) {
+        self.title = title
+        self.discardTitle = discardTitle
+        self.discardEnabled = discardEnabled
+        self.applyTitle = applyTitle
+        self.applyEnabled = applyEnabled
+        self.onDiscard = onDiscard
+        self.onApply = onApply
+    }
+
+    package var body: some View {
+        HStack {
+            Text(title).font(.headline)
+            Spacer()
+            TrainerSecondaryActionButton(
+                title: discardTitle,
+                enabled: discardEnabled,
+                widthRole: .sheet,
+                action: onDiscard
+            )
+            TrainerPrimaryActionButton(
+                title: applyTitle,
+                enabled: applyEnabled,
+                widthRole: .sheet,
+                action: onApply
+            )
+        }
+    }
+}
+
+package struct TrainerSaveEditorReceiptPanel<Details: View>: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerTheme) private var theme
+
+    let title: String
+    let maintenanceWarning: String?
+    let namingWarning: String?
+    let details: Details
+
+    package init(
+        title: String,
+        maintenanceWarning: String?,
+        namingWarning: String?,
+        @ViewBuilder details: () -> Details
+    ) {
+        self.title = title
+        self.maintenanceWarning = maintenanceWarning
+        self.namingWarning = namingWarning
+        self.details = details()
+    }
+
+    package var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: theme.compactControlSpacing) {
+                Image(systemName: TrainerSemanticIcon.Feedback.toastSuccess)
+                    .foregroundStyle(theme.success)
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                Spacer()
+            }
+            details
+            if maintenanceWarning != nil {
+                Text(localization.localized("host.save.warning.maintenance"))
+                    .font(.caption)
+                    .foregroundStyle(theme.warning)
+            }
+            if namingWarning != nil {
+                Text(localization.localized("host.save.warning.providerName"))
+                    .font(.caption)
+                    .foregroundStyle(theme.warning)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, theme.rowHorizontalPadding)
+        .padding(.vertical, theme.inlineRowVerticalPadding)
+        .trainerSurface(.panel)
     }
 }
