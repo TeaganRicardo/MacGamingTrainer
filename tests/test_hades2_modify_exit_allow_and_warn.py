@@ -196,6 +196,20 @@ assert(introReply.worldActions.exits[1].reward == "ZeusUpgrade"
     and MapState.OfferedExitDoors[1].Room.Name == "Q_Intro",
   "an in-place edit on an intro door changed its room")
 
+-- A door the game swapped to an anomaly room keeps its source region's types.
+RoomData.B_Combat01 = { Name = "B_Combat01", RoomSetName = "Anomaly" }
+RoomSets.Anomaly = { "B_Combat01" }
+setRoomSet("F")
+CurrentRun.CurrentRoom.DoAnomalies = true
+MapState.OfferedExitDoors = { [1] = { ObjectId = 1, ChooseRoomArgs = {}, ForceRoomName = "B_Combat01" } }
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+MapState.OfferedExitDoors[1].ForceRoomName = nil
+row = exitRow()
+assert(row.targetDiagnostics.routes.roomSetName == "F"
+    and target(row, "roomCategory", "story") ~= nil
+    and target(row, "roomCategory", "shop") ~= nil,
+  "an anomaly-swapped door lost its region's room types")
+
 -- 6. Only what cannot be built is refused: a native probe that throws.
 setRoomSet("F")
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
@@ -226,6 +240,9 @@ local broken = target(row, "roomCategory", "combat")
 assert(broken ~= nil and broken.enabled == false
     and broken.reason == "room_eligibility_probe_error",
   "a room type whose every probe threw must be refused")
+local stillCurrent = target(row, "roomCategory", "current")
+assert(stillCurrent ~= nil and stillCurrent.enabled == true and stillCurrent.acceptsReward == true,
+  "a refused own room type removed the in-place reward edit")
 assert(not pcall(function()
   M.dispatch("apply_world_exit", {
     doorToken = row.doorToken, room = "combat",

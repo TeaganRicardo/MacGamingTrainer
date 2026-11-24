@@ -9868,10 +9868,11 @@ if __MacGamingTrainerV1 == nil then
 
     -- An exit's room types come from the region of the room the door already
     -- leads to, so a region transition (native NextRoomSet) offers the next
-    -- region's rooms, as native ChooseNextRoomData would.
+    -- region's rooms. A native anomaly swap (ChooseNextRoomData with
+    -- ForceNextRoomSet "Anomaly") is not the door's region: keep the source's.
     local function regionFor(door, source, args)
       local own = type(door.Room) == "table" and door.Room.RoomSetName or nil
-      if own ~= nil and type(RoomSets[own]) == "table" then return own end
+      if own ~= nil and own ~= "Anomaly" and type(RoomSets[own]) == "table" then return own end
       return args.RoomSetName or source.RoomSetName or "F"
     end
 
@@ -10443,7 +10444,9 @@ if __MacGamingTrainerV1 == nil then
           warning = enabled and routeWarning(bucket, door, diagnostics.routes) or nil,
         }
         if enabled then enabledCount = enabledCount + 1 end
-        if id == currentKind or id == door.Room.Name then currentListed = true end
+        -- An in-place reward edit needs no buildable room, so a refused own
+        -- type still leaves "current" for it.
+        if enabled and (id == currentKind or id == door.Room.Name) then currentListed = true end
       end
       for _, kind in ipairs(type(routes) == "table" and routeOrder or {}) do
         if routes[kind] ~= nil then
