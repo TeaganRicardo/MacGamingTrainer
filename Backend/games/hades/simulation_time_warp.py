@@ -9,7 +9,7 @@ import struct
 import sys
 import time
 
-from core.adapter import AdapterError
+from core.adapter import AdapterError, HostPresentationError
 from .operation_budgets import PROCESS_CONTROL_TIMEOUT_SECONDS
 
 APP_INSTANCE_SYMBOL = '_ZN3sgg3App8INSTANCEE'
@@ -133,7 +133,7 @@ class HadesSimulationTimeWarp:
     def _verify_finite_non_negative(self, time_scale, *, target='0..10'):
         if not math.isfinite(time_scale) or time_scale < self.MINIMUM:
             observed = f'{time_scale:g}' if math.isfinite(time_scale) else str(time_scale)
-            raise AdapterError(
+            raise HostPresentationError(
                 'time_warp_verify_failed',
                 'host.timeWarp.error.verifyFailed',
                 arguments=(target, observed),
@@ -145,7 +145,7 @@ class HadesSimulationTimeWarp:
         self._verify_finite_non_negative(time_scale, target=target)
         if time_scale > self.MAXIMUM:
             observed = f'{time_scale:g}'
-            raise AdapterError(
+            raise HostPresentationError(
                 'time_warp_verify_failed',
                 'host.timeWarp.error.verifyFailed',
                 arguments=(target, observed),
@@ -178,7 +178,7 @@ class HadesSimulationTimeWarp:
                 observed = (
                     f'autoReset={auto_reset_raw[0]}, fixedStep={use_fixed_step_raw[0]}'
                 )
-                raise AdapterError(
+                raise HostPresentationError(
                     'time_warp_verify_failed',
                     'host.timeWarp.error.verifyFailed',
                     arguments=(expected, observed),

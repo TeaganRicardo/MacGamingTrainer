@@ -1,5 +1,7 @@
 import math
 
+from .error_presentation import Hades2ValueError
+
 TOGGLES = (
     'invincibility','infiniteHealth','infiniteMana','infiniteMoney','infiniteRerolls','instantCastCooldown',
     'hexAlwaysReady','infiniteAmmo','autoMiniGames','boonRarityEnabled',
@@ -37,20 +39,20 @@ def normalize_desired_feature_value(feature,value):
 
 def validate_desired_feature_value(feature,value):
     if not isinstance(feature,str):
-        raise ValueError('未知功能。')
+        raise Hades2ValueError('hades2.error.unknownFeature', '未知功能。')
     if feature not in TOGGLES and feature not in MULTIPLIER_RULES:
-        raise ValueError('未知功能。')
+        raise Hades2ValueError('hades2.error.unknownFeature', '未知功能。')
     if feature in TOGGLES:
         if type(value) is not bool:
-            raise ValueError('开关值必须为布尔值。')
+            raise Hades2ValueError('hades2.error.featureToggleBoolean', '开关值必须为布尔值。')
         return value
     if type(value) not in (int,float) or isinstance(value,bool) or not math.isfinite(value):
-        raise ValueError('倍率必须为有限数值。')
+        raise Hades2ValueError('hades2.error.multiplierFinite', '倍率必须为有限数值。')
     rule=MULTIPLIER_RULES[feature]
     if not rule['min']<=value<=rule['max']:
         if feature=='gameSpeed':
-            raise ValueError('游戏速度范围为 0–10。')
-        raise ValueError('倍率范围为 1–100。')
+            raise Hades2ValueError('hades2.error.gameSpeedRange', '游戏速度范围为 0–10。')
+        raise Hades2ValueError('hades2.error.multiplierRange', '倍率范围为 1–100。')
     return value
 
 
@@ -84,12 +86,12 @@ def normalize_gathering_probabilities(raw):
 
 def validate_gathering_desired(family,probability):
     if not isinstance(family,str) or family not in GATHERING_FAMILIES:
-        raise ValueError('请选择采集类型。')
+        raise Hades2ValueError('hades2.error.selectGatheringFamily', '请选择采集类型。')
     if probability is not None and (
         type(probability) not in (int,float) or not 0<=probability<=100
         or not math.isfinite(probability)
     ):
-        raise ValueError('概率必须为 0–100。')
+        raise Hades2ValueError('hades2.error.percentRange', '概率必须为 0–100。')
     return probability
 
 
@@ -101,7 +103,7 @@ def normalize_chaos_gate_probability(value):
 
 def validate_chaos_gate_probability(value):
     if value is not None and normalize_chaos_gate_probability(value) is None:
-        raise ValueError('概率必须为 0–100。')
+        raise Hades2ValueError('hades2.error.percentRange', '概率必须为 0–100。')
     return value
 
 
@@ -125,17 +127,17 @@ def default_boon_rarity():
 
 
 STAT_RULES = {
-    'grasp': {'min':0,'max':999,'integer':True,'error':'悟性上限必须是 0–999 的整数。'},
-    'dodge': {'min':0,'max':100,'error':'概率必须为 0–100。'},
-    'crit': {'min':0,'max':100,'error':'概率必须为 0–100。'},
-    'chargeSpeed': {'min':10,'max':1000,'error':'速度倍率必须为 10–1000%。'},
-    'moveSpeed': {'min':10,'max':1000,'error':'速度倍率必须为 10–1000%。'},
-    'sprintSpeed': {'min':10,'max':1000,'error':'速度倍率必须为 10–1000%。'},
-    'dashSpeed': {'min':10,'max':1000,'error':'速度倍率必须为 10–1000%。'},
-    'attackSpeed': {'min':10,'max':1000,'error':'速度倍率必须为 10–1000%。'},
-    'manaRegen': {'min':0,'max':1000,'error':'额外魔力恢复必须为 0–1000/秒。'},
-    'enemyDamage': {'min':0,'max':1000,'error':'敌人伤害倍率必须为 0–1000%。'},
-    'enemyHealth': {'min':10,'max':1000,'error':'敌人生命倍率必须为 10–1000%。'},
+    'grasp': {'min':0,'max':999,'integer':True,'error':'悟性上限必须是 0–999 的整数。','error_key':'hades2.error.graspRange'},
+    'dodge': {'min':0,'max':100,'error':'概率必须为 0–100。','error_key':'hades2.error.percentRange'},
+    'crit': {'min':0,'max':100,'error':'概率必须为 0–100。','error_key':'hades2.error.percentRange'},
+    'chargeSpeed': {'min':10,'max':1000,'error':'速度倍率必须为 10–1000%。','error_key':'hades2.error.speedMultiplierRange'},
+    'moveSpeed': {'min':10,'max':1000,'error':'速度倍率必须为 10–1000%。','error_key':'hades2.error.speedMultiplierRange'},
+    'sprintSpeed': {'min':10,'max':1000,'error':'速度倍率必须为 10–1000%。','error_key':'hades2.error.speedMultiplierRange'},
+    'dashSpeed': {'min':10,'max':1000,'error':'速度倍率必须为 10–1000%。','error_key':'hades2.error.speedMultiplierRange'},
+    'attackSpeed': {'min':10,'max':1000,'error':'速度倍率必须为 10–1000%。','error_key':'hades2.error.speedMultiplierRange'},
+    'manaRegen': {'min':0,'max':1000,'error':'额外魔力恢复必须为 0–1000/秒。','error_key':'hades2.error.manaRegenRange'},
+    'enemyDamage': {'min':0,'max':1000,'error':'敌人伤害倍率必须为 0–1000%。','error_key':'hades2.error.enemyDamageRange'},
+    'enemyHealth': {'min':10,'max':1000,'error':'敌人生命倍率必须为 10–1000%。','error_key':'hades2.error.enemyHealthRange'},
 }
 
 

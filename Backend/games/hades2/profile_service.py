@@ -5,6 +5,7 @@ from pathlib import Path
 
 from core.persistence import ProfileStore, normalize_shortcut_map
 
+from .error_presentation import Hades2ValueError
 from .persistence import (
     PersistenceError,
     UnsupportedSchemaVersionError,
@@ -74,16 +75,16 @@ def _migrate_profile_payload(payload, version):
 
 def _invalid_name_error(reason):
     if reason == 'non_string':
-        return ValueError('Profile 名称无效。')
+        return Hades2ValueError('hades2.error.profileNameInvalid', 'Profile 名称无效。')
     if reason == 'separator':
-        return ValueError('Profile 名称不能包含路径分隔符。')
-    return ValueError('Profile 名称必须为 1–64 个可见字符。')
+        return Hades2ValueError('hades2.error.profileNameSeparator', 'Profile 名称不能包含路径分隔符。')
+    return Hades2ValueError('hades2.error.profileNameLength', 'Profile 名称必须为 1–64 个可见字符。')
 
 
 def _invalid_payload_input_error(reason):
     if reason == 'shortcuts':
-        return ValueError('Profile shortcuts 字段无效。')
-    return ValueError('Profile desired 字段无效。')
+        return Hades2ValueError('hades2.error.profileShortcutsInvalid', 'Profile shortcuts 字段无效。')
+    return Hades2ValueError('hades2.error.profileDesiredInvalid', 'Profile desired 字段无效。')
 
 
 class Hades2ProfileService:
@@ -108,8 +109,8 @@ class Hades2ProfileService:
             retired_shortcut_actions=_RETIRED_SHORTCUT_ACTIONS,
             include_shortcuts_in_list=True,
             invalid_name_error=_invalid_name_error,
-            corrupt_error=lambda _reason, exc=None: ValueError('Profile 文件已损坏。'),
-            not_found_error=lambda _name: ValueError('未找到该 Profile。'),
+            corrupt_error=lambda _reason, exc=None: Hades2ValueError('hades2.error.profileCorrupt', 'Profile 文件已损坏。'),
+            not_found_error=lambda _name: Hades2ValueError('hades2.error.profileNotFound', '未找到该 Profile。'),
             newer_schema_error=lambda found, supported: UnsupportedSchemaVersionError('Profile', found, supported),
             older_schema_error=lambda found, supported: UnsupportedSchemaVersionError('Profile', found, supported),
             newer_payload_schema_error=lambda found, supported: UnsupportedSchemaVersionError(

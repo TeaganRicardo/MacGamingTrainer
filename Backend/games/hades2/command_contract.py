@@ -12,11 +12,9 @@ import copy
 import math
 import subprocess
 
-from core.errors import PresentableError
-
 from . import preparation, save_advanced, save_container
 from .diagnostics import build_diagnostics
-from .error_presentation import Hades2PresentationError, presentation_for
+from .error_presentation import Hades2ValueError
 from .operation_budgets import (
     CONNECT_ATTACH_HEADROOM_SECONDS,
     CONNECT_OPERATION_BUDGET_SECONDS,
@@ -68,10 +66,10 @@ def _connect(raw):
     params = _params(raw)
     probe_runtime = params.get("probeRuntime", True)
     if type(probe_runtime) is not bool:
-        raise ValueError("probeRuntime 必须为布尔值。")
+        raise Hades2ValueError("hades2.error.probeRuntimeBoolean", "probeRuntime 必须为布尔值。")
     recover_lost_attach = params.get("recoverLostAttach", False)
     if type(recover_lost_attach) is not bool:
-        raise ValueError("recoverLostAttach 必须为布尔值。")
+        raise Hades2ValueError("hades2.error.recoverLostAttachBoolean", "recoverLostAttach 必须为布尔值。")
     return {"probeRuntime": probe_runtime, "recoverLostAttach": recover_lost_attach}
 
 
@@ -85,7 +83,7 @@ def _set_desired(raw):
 def _set_gathering_desired(raw):
     params = _params(raw)
     if "probability" not in params:
-        raise ValueError("概率必须为 0–100。")
+        raise Hades2ValueError("hades2.error.percentRange", "概率必须为 0–100。")
     probability = validate_gathering_desired(params.get("family"), params["probability"])
     return {"family": params["family"], "probability": probability}
 
@@ -93,7 +91,7 @@ def _set_gathering_desired(raw):
 def _set_chaos_gate_desired(raw):
     params = _params(raw)
     if "probability" not in params:
-        raise ValueError("概率必须为 0–100。")
+        raise Hades2ValueError("hades2.error.percentRange", "概率必须为 0–100。")
     return {"probability": validate_chaos_gate_probability(params["probability"])}
 
 
@@ -102,14 +100,14 @@ def _generate_gathering(raw):
     validate_gathering_desired(params.get("family"), None)
     token = params.get("scopeToken")
     if not isinstance(token, str) or not 1 <= len(token) <= 128:
-        raise ValueError("请刷新当前房间后再生成采集点。")
+        raise Hades2ValueError("hades2.gathering.unavailable.stale", "请刷新当前房间后再生成采集点。")
     return {"family": params["family"], "scopeToken": token}
 
 
 def _generate_chaos_gate(raw):
     token = _params(raw).get("scopeToken")
     if not isinstance(token, str) or not 1 <= len(token) <= 128:
-        raise ValueError("请刷新当前房间后再生成混沌之门。")
+        raise Hades2ValueError("hades2.chaosGate.unavailable.stale", "请刷新当前房间后再生成混沌之门。")
     return {"scopeToken": token}
 
 
@@ -120,14 +118,14 @@ def _generate_chamber_facility(raw):
     if (type(facility) is not str or not 1 <= len(facility) <= 48
             or not facility.isascii() or not facility.isidentifier()
             or type(token) is not str or not 1 <= len(token) <= 128):
-        raise ValueError("请刷新当前房间后再生成房间设施。")
+        raise Hades2ValueError("hades2.facility.unavailable.stale", "请刷新当前房间后再生成房间设施。")
     return {"facility": facility, "scopeToken": token}
 
 
 def _mature_garden(raw):
     token = _params(raw).get("scopeToken")
     if not isinstance(token, str) or not 1 <= len(token) <= 128:
-        raise ValueError("hades2.garden.unavailable")
+        raise Hades2ValueError("hades2.garden.unavailable", "hades2.garden.unavailable")
     return {"scopeToken": token}
 
 
@@ -137,25 +135,29 @@ def _set_vital(raw):
     field = params.get("field")
     value = params.get("value")
     if vital not in VITALS or field not in ("current", "max"):
-        raise ValueError("局内数值字段无效。")
+        raise Hades2ValueError("hades2.error.vitalField", "局内数值字段无效。")
     if vital == "armor" and field != "current":
-        raise ValueError("护甲仅提供当前值，不存在可编辑上限。")
+        raise Hades2ValueError("hades2.error.armorNoMaximum", "护甲仅提供当前值，不存在可编辑上限。")
     if (
         type(value) not in (int, float)
         or isinstance(value, bool)
         or not math.isfinite(value)
         or not 0 <= value <= MAX_AMOUNT
     ):
-        raise ValueError(f"局内数值必须为 0–{MAX_AMOUNT}。")
+        raise Hades2ValueError(
+            "hades2.error.vitalRange",
+            f"局内数值必须为 0–{MAX_AMOUNT}。",
+            (str(MAX_AMOUNT),),
+        )
     if vital == "health" and value < 1:
-        raise ValueError("生命值必须至少为 1。")
+        raise Hades2ValueError("hades2.error.healthMinimum", "生命值必须至少为 1。")
     return params
 
 
 def _set_counter(raw):
     params = _params(raw)
     if params.get("counter") not in ("spellCharge", "biomeTime"):
-        raise ValueError("未知局内计数器。")
+        raise Hades2ValueError("hades2.error.unknownCounter", "未知局内计数器。")
     value = params.get("value")
     if (
         type(value) not in (int, float)
@@ -164,26 +166,30 @@ def _set_counter(raw):
         or not 0 <= value <= MAX_AMOUNT
     ):
         if params["counter"] == "biomeTime":
-            raise ValueError("区域限时必须为 0–999999 秒。")
-        raise ValueError(f"巫咒充能必须为 0–{MAX_AMOUNT}。")
+            raise Hades2ValueError("hades2.error.biomeTimeRange", "区域限时必须为 0–999999 秒。")
+        raise Hades2ValueError(
+            "hades2.error.spellChargeRange",
+            f"巫咒充能必须为 0–{MAX_AMOUNT}。",
+            (str(MAX_AMOUNT),),
+        )
     if params["counter"] == "biomeTime" and value % 1 != 0:
-        raise ValueError("区域限时必须使用整数秒。")
+        raise Hades2ValueError("hades2.error.biomeTimeWholeSeconds", "区域限时必须使用整数秒。")
     return params
 
 
 def _lock_biome_time(raw):
     params = _params(raw)
     if type(params.get("locked")) is not bool:
-        raise ValueError("区域限时锁定状态必须为布尔值。")
+        raise Hades2ValueError("hades2.error.biomeTimeLockedBoolean", "区域限时锁定状态必须为布尔值。")
     return {"locked": params["locked"]}
 
 
 def _lock_vital(raw):
     params = _params(raw)
     if params.get("vital") not in VITALS:
-        raise ValueError("未知局内数值。")
+        raise Hades2ValueError("hades2.error.unknownVital", "未知局内数值。")
     if type(params.get("locked")) is not bool:
-        raise ValueError("锁定值必须为布尔值。")
+        raise Hades2ValueError("hades2.error.lockedBoolean", "锁定值必须为布尔值。")
     return params
 
 
@@ -194,71 +200,83 @@ def _set_stat(raw):
     value = params.get("value")
     rule = STAT_RULES.get(stat)
     if rule is None:
-        raise ValueError("未知属性。")
+        raise Hades2ValueError("hades2.error.unknownStat", "未知属性。")
     if type(locked) is not bool:
-        raise ValueError("锁定值必须为布尔值。")
+        raise Hades2ValueError("hades2.error.lockedBoolean", "锁定值必须为布尔值。")
     if locked:
         if (
             type(value) not in (int, float)
             or isinstance(value, bool)
             or not math.isfinite(value)
         ):
-            raise ValueError("属性值必须为有限数值。")
+            raise Hades2ValueError("hades2.error.statFinite", "属性值必须为有限数值。")
         if rule.get("integer") and type(value) is not int:
-            raise ValueError(rule["error"])
+            raise Hades2ValueError(rule["error_key"], rule["error"])
         if not rule["min"] <= value <= rule["max"]:
-            raise ValueError(rule["error"])
+            raise Hades2ValueError(rule["error_key"], rule["error"])
     return params
 
 
 def _set_element(raw):
     params = _params(raw)
     if not is_known_element(params.get("element")):
-        raise ValueError("未知元素。")
+        raise Hades2ValueError("hades2.error.unknownElement", "未知元素。")
     amount = params.get("amount")
     if type(amount) is not int or not 0 <= amount <= MAX_AMOUNT:
-        raise ValueError(f"元素数量必须为 0–{MAX_AMOUNT} 的整数。")
+        raise Hades2ValueError(
+            "hades2.error.elementRange",
+            f"元素数量必须为 0–{MAX_AMOUNT} 的整数。",
+            (str(MAX_AMOUNT),),
+        )
     return params
 
 
 def _lock_element(raw):
     params = _params(raw)
     if not is_known_element(params.get("element")):
-        raise ValueError("未知元素。")
+        raise Hades2ValueError("hades2.error.unknownElement", "未知元素。")
     if type(params.get("locked")) is not bool:
-        raise ValueError("锁定值必须为布尔值。")
+        raise Hades2ValueError("hades2.error.lockedBoolean", "锁定值必须为布尔值。")
     return params
 
 
 def _set_resource(raw):
     params = _params(raw)
     if type(params.get("amount")) is not int or not 0 <= params["amount"] <= MAX_AMOUNT:
-        raise ValueError(f"数量必须是 0–{MAX_AMOUNT} 的整数。")
+        raise Hades2ValueError(
+            "hades2.error.amountRange",
+            f"数量必须是 0–{MAX_AMOUNT} 的整数。",
+            (str(MAX_AMOUNT),),
+        )
     if not isinstance(params.get("resource"), str) or not params["resource"]:
-        raise ValueError("请选择资源。")
+        raise Hades2ValueError("hades2.error.selectResource", "请选择资源。")
     return params
 
 
 def _lock_resource(raw):
     params = _params(raw)
     if not isinstance(params.get("resource"), str) or not params["resource"]:
-        raise ValueError("请选择资源。")
+        raise Hades2ValueError("hades2.error.selectResource", "请选择资源。")
     if type(params.get("locked")) is not bool:
-        raise ValueError("锁定值必须为布尔值。")
+        raise Hades2ValueError("hades2.error.lockedBoolean", "锁定值必须为布尔值。")
     return params
 
 
 def _set_rerolls(raw):
     params = _params(raw)
     if type(params.get("amount")) is not int or not 0 <= params["amount"] <= MAX_AMOUNT:
-        raise ValueError(f"数量必须是 0–{MAX_AMOUNT} 的整数。")
+        raise Hades2ValueError(
+            "hades2.error.amountRange",
+            f"数量必须是 0–{MAX_AMOUNT} 的整数。",
+            (str(MAX_AMOUNT),),
+        )
     return params
 
 
 def _lock_rerolls(raw):
     params = _params(raw)
     if type(params.get("locked")) is not bool:
-        raise ValueError("锁定值必须为布尔值。")
+        raise Hades2ValueError("hades2.error.lockedBoolean", "锁定值必须为布尔值。")
     return params
 
 
@@ -270,18 +288,18 @@ def _acquisition(params):
     if "rarity" in params:
         rarity = params["rarity"]
         if not isinstance(rarity, str) or not rarity:
-            raise ValueError("获取稀有度无效。")
+            raise Hades2ValueError("hades2.error.exactRarityUnsupported", "获取稀有度无效。")
     if "level" in params:
         level = params["level"]
         if type(level) is not int or not 1 <= level <= MAX_TRAIT_LEVEL:
-            raise ValueError("获取等级无效。")
+            raise Hades2ValueError("hades2.error.exactLevelUnsupported", "获取等级无效。")
     return params
 
 
 def _spawn_reward(raw):
     params = _params(raw)
     if not isinstance(params.get("reward"), str) or not params["reward"]:
-        raise ValueError("请选择掉落物或祝福。")
+        raise Hades2ValueError("hades2.error.selectReward", "请选择掉落物或祝福。")
     return _acquisition(params)
 
 
@@ -295,7 +313,7 @@ def _chaos_pair(raw):
         or not isinstance(curse, str)
         or not curse
     ):
-        raise ValueError("请选择掉落物或祝福。")
+        raise Hades2ValueError("hades2.error.selectReward", "请选择掉落物或祝福。")
     return _acquisition(params)
 
 
@@ -303,7 +321,7 @@ def _special_choice(raw):
     params = _params(raw)
     source = params.get("source")
     if not isinstance(source, str) or not source:
-        raise ValueError("请选择支持原生奖励选择界面的角色。")
+        raise Hades2ValueError("hades2.error.selectChoiceSource", "请选择支持原生奖励选择界面的角色。")
     return params
 
 
@@ -315,16 +333,16 @@ def _trait_mutation(command):
             not isinstance(params.get(key), str) or not params[key]
             for key in required_strings
         ):
-            raise ValueError("请选择当前局祝福。")
+            raise Hades2ValueError("hades2.error.selectCurrentTrait", "请选择当前局祝福。")
         level = params.get("expectedLevel")
         if type(level) is not int or level < 1:
-            raise ValueError("请选择当前局祝福。")
+            raise Hades2ValueError("hades2.error.selectCurrentTrait", "请选择当前局祝福。")
         same_count = params.get("expectedSameNameCount")
         if type(same_count) is not int or same_count < 1:
-            raise ValueError("请选择当前局祝福。")
+            raise Hades2ValueError("hades2.error.selectCurrentTrait", "请选择当前局祝福。")
         rarity = params.get("expectedRarity")
         if not isinstance(rarity, str):
-            raise ValueError("请选择当前局祝福。")
+            raise Hades2ValueError("hades2.error.selectCurrentTrait", "请选择当前局祝福。")
         remaining = params.get("expectedRemainingUses")
         if remaining is not None and (
             type(remaining) not in (int, float)
@@ -332,9 +350,9 @@ def _trait_mutation(command):
             or not math.isfinite(remaining)
             or remaining < 0
         ):
-            raise ValueError("请选择当前局效果。")
+            raise Hades2ValueError("hades2.error.selectCurrentTrait", "请选择当前局效果。")
         if command in ("set_trait_remaining_uses", "expire_trait") and remaining is None:
-            raise ValueError("请选择当前局效果。")
+            raise Hades2ValueError("hades2.error.selectCurrentTrait", "请选择当前局效果。")
         if command == "set_trait_level":
             target_level = params.get("targetLevel")
             if (
@@ -342,14 +360,14 @@ def _trait_mutation(command):
                 or target_level <= level
                 or target_level > MAX_TRAIT_LEVEL
             ):
-                raise ValueError("目标等级必须高于当前等级。")
+                raise Hades2ValueError("hades2.error.traitLevelTargetInvalid", "目标等级必须高于当前等级。")
         if command == "set_trait_rarity":
             if params.get("rarity") not in BOON_RARITY_TARGETS:
-                raise ValueError("最低稀有度无效。")
+                raise Hades2ValueError("hades2.error.invalidRarityTarget", "最低稀有度无效。")
         if command == "set_trait_remaining_uses":
             target_uses = params.get("targetRemainingUses")
             if type(target_uses) is not int or not 1 <= target_uses <= 999999:
-                raise ValueError("剩余次数必须为 1–999999 的整数。")
+                raise Hades2ValueError("hades2.error.remainingUsesRange", "剩余次数必须为 1–999999 的整数。")
         return params
 
     return validate
@@ -358,19 +376,19 @@ def _trait_mutation(command):
 def _boon_rarity(raw):
     params = _params(raw)
     if "multiplier" in params:
-        raise ValueError("稀有度倍率参数已弃用。")
+        raise Hades2ValueError("hades2.error.invalidRarityMultiplier", "稀有度倍率参数已弃用。")
     config = {
         "target": params.get("target"),
         "forceLegendary": params.get("forceLegendary"),
         "forceDuo": params.get("forceDuo"),
     }
     if config["target"] not in BOON_RARITY_TARGETS:
-        raise ValueError("最低稀有度无效。")
+        raise Hades2ValueError("hades2.error.invalidRarityTarget", "最低稀有度无效。")
     if (
         type(config["forceLegendary"]) is not bool
         or type(config["forceDuo"]) is not bool
     ):
-        raise ValueError("Legendary / Duo 设置无效。")
+        raise Hades2ValueError("hades2.error.invalidLegendaryDuo", "Legendary / Duo 设置无效。")
     return config
 
 
@@ -378,7 +396,7 @@ def _world_occurrence_apply(raw):
     params = _params(raw)
     target = params.get("target")
     if not isinstance(target, str) or not target or not is_valid_next_occurrence_target(target):
-        raise ValueError("下一次遭遇目标无效。")
+        raise Hades2ValueError("hades2.error.invalidNextOccurrence", "下一次遭遇目标无效。")
     return {"target": target}
 
 
@@ -424,16 +442,16 @@ def _save_editor_selection(raw):
     if "snapshotId" in params:
         snapshot = params["snapshotId"]
         if not isinstance(snapshot, str) or not snapshot or len(snapshot) > 128:
-            raise ValueError("Save Editor snapshot identity is invalid.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor snapshot identity is invalid.")
         result["snapshotId"] = snapshot
     for name in ("source", "target"):
         if name not in params:
             continue
         value = params[name]
         if not isinstance(value, dict) or set(value) != {"rootId", "relativePath"}:
-            raise ValueError("Save Editor file identity is invalid.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor file identity is invalid.")
         if any(not isinstance(part, str) or not part or len(part) > 1024 for part in value.values()):
-            raise ValueError("Save Editor file identity is invalid.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor file identity is invalid.")
         result[name] = value
     return result
 
@@ -441,7 +459,10 @@ def _save_editor_selection(raw):
 def _save_editor_target(raw):
     result = _save_editor_selection(raw)
     if set(result) != {"target"}:
-        raise ValueError("Save Editor target selection requires one declared file identity.")
+        raise Hades2ValueError(
+            "hades2.saveEditor.error.invalidQuery",
+            "Save Editor target selection requires one declared file identity.",
+        )
     return result
 
 
@@ -455,17 +476,17 @@ def _save_editor_query(raw):
     language = params.get("language", "zh-CN")
     state_filter = params.get("stateFilter", "all")
     if state_filter not in SAVE_EDITOR_STATE_FILTERS:
-        raise ValueError("Save Editor state filter is invalid.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor state filter is invalid.")
     if domain not in SAVE_EDITOR_DOMAINS:
-        raise ValueError("Save Editor query domain is invalid.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor query domain is invalid.")
     if not isinstance(search, str) or len(search) > 256:
-        raise ValueError("Save Editor query search is too long.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor query search is too long.")
     if type(offset) is not int or offset < 0:
-        raise ValueError("Save Editor query offset is invalid.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor query offset is invalid.")
     if type(limit) is not int or not 1 <= limit <= 200:
-        raise ValueError("Save Editor query limit must be 1..200.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor query limit must be 1..200.")
     if not isinstance(path, list) or len(path) > save_advanced._MAX_LUABINS_DEPTH + 2:
-        raise ValueError("Save Editor query path is invalid.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor query path is invalid.")
     if save_container.namespace(path) is not None:
         if domain != "advanced":
             raise save_advanced.AdvancedMutationError("Save Editor container paths require Advanced.")
@@ -473,7 +494,7 @@ def _save_editor_query(raw):
     else:
         save_advanced.decode_path(path)
     if language not in ("zh-CN", "en"):
-        raise ValueError("Save Editor query language is invalid.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor query language is invalid.")
     result = {
         "domain": domain,
         "search": search,
@@ -486,7 +507,7 @@ def _save_editor_query(raw):
         result["stateFilter"] = state_filter
     if "scope" in params:
         if params["scope"] not in SAVE_EDITOR_SCOPES:
-            raise ValueError("Save Editor browse scope is invalid.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor browse scope is invalid.")
         result["scope"] = params["scope"]
     return result
 
@@ -497,7 +518,7 @@ def _save_editor_detail(raw):
     language = params.get("language", "zh-CN")
     if (not isinstance(entry_id, str) or not entry_id.startswith(("investigate:", "advanced:", "save-container:"))
             or len(entry_id) <= 9 or language not in ("en", "zh-CN")):
-        raise ValueError("Save Editor investigation identity is invalid.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor investigation identity is invalid.")
     return {"entryId": entry_id, "language": language}
 
 
@@ -505,7 +526,7 @@ def _save_editor_language(raw):
     params = _params(raw)
     language = params.get("language", "zh-CN")
     if language not in ("en", "zh-CN"):
-        raise ValueError("Save Editor language is unsupported.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor language is unsupported.")
     return {"language": language}
 
 
@@ -513,7 +534,7 @@ def _save_editor_apply(raw):
     entries = _params(raw).get("draftEntryIds", [])
     if not isinstance(entries, list) or any(
             not isinstance(entry, str) or not entry for entry in entries):
-        raise ValueError("Save Editor draft identities are invalid.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor draft identities are invalid.")
     return {"draftEntryIds": list(dict.fromkeys(entries))}
 
 
@@ -523,11 +544,11 @@ def _save_editor_stage(raw):
     operation = params.get("operation")
     language = params.get("language", "zh-CN")
     if not isinstance(entry_id, str) or not entry_id or (len(entry_id) > 512 and not entry_id.startswith(("advanced:", "save-container:"))):
-        raise ValueError("Save Editor mutation entry is invalid.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor mutation entry is invalid.")
     if operation not in SAVE_EDITOR_MUTATION_KINDS:
-        raise ValueError("Save Editor mutation operation is invalid.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor mutation operation is invalid.")
     if language not in ("en", "zh-CN"):
-        raise ValueError("Save Editor language is unsupported.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor language is unsupported.")
     result = {"entryId": entry_id, "operation": operation, "language": language}
     if "value" in params:
         result["value"] = params["value"]
@@ -539,9 +560,9 @@ def _save_editor_unstage(raw):
     entry_id = params.get("entryId")
     language = params.get("language", "zh-CN")
     if not isinstance(entry_id, str) or not entry_id or (len(entry_id) > 512 and not entry_id.startswith(("advanced:", "save-container:"))):
-        raise ValueError("Save Editor staged action identity is invalid.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor staged action identity is invalid.")
     if language not in ("en", "zh-CN"):
-        raise ValueError("Save Editor language is unsupported.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor language is unsupported.")
     return {"entryId": entry_id, "language": language}
 
 
@@ -626,7 +647,7 @@ def _launch(adapter, params):
 def _stopped_operation(name):
     def invoke(adapter, params):
         if adapter.runtime.alive():
-            raise ValueError("请断开连接并退出游戏后操作。")
+            raise Hades2ValueError("hades2.error.disconnectBeforePrepare", "请断开连接并退出游戏后操作。")
         info = {"prepare": preparation.prepare, "restore": preparation.restore}[name](adapter.context.data_dir)
         return dict(adapter.scan(), operation=info)
 
@@ -921,13 +942,16 @@ class Hades2CommandContract:
         try:
             spec = COMMAND_SPECS.get(command)
             if spec is None:
-                raise ValueError("未知命令。")
+                raise Hades2ValueError("hades2.error.invalidCommand", "未知命令。")
             validated = spec.validate(params)
             workspace = None
             if command.startswith("save_editor_") and command not in ("save_editor_inventory", "save_editor_open"):
                 identifier = _params(params).get("workspaceId")
                 if not isinstance(identifier, str) or not identifier or len(identifier) > 128:
-                    raise ValueError("Save Editor workspace identity is invalid.")
+                    raise Hades2ValueError(
+                        "hades2.saveEditor.error.invalidMutation",
+                        "Save Editor workspace identity is invalid.",
+                    )
                 workspace = self.adapter.validate_save_workspace(identifier)
                 if command != "save_editor_close":
                     workspace.require_baseline(_params(params).get("baselineGeneration"))
@@ -939,21 +963,7 @@ class Hades2CommandContract:
                 return dict(result, baselineGeneration=workspace.baseline_generation)
             return result
         except Exception as error:
-            raise self._as_presentation_key(
-                present_runtime_error(command, error)
-            ) from error
-
-    @staticmethod
-    def _as_presentation_key(error):
-        # Preserve resolved presentation and recovery data across the legacy text mapper.
-        if isinstance(error, PresentableError) and error.presentation and error.presentation.startswith(("host.", "hades2.")):
-            return error
-        key, arguments = presentation_for(str(error))
-        if key is None:
-            return error
-        return Hades2PresentationError(
-            getattr(error, "code", "invalid_request"),
-            key,
-            arguments,
-            diagnostic=getattr(error, "diagnostic", None) or str(error),
-        )
+            presented = present_runtime_error(command, error)
+            if presented is error:
+                raise
+            raise presented from error

@@ -270,7 +270,9 @@ for breakpoint_expected, next_stop_id in ((False, 1), (True, 2)):
         failed_resume_stopped.resume(time.monotonic() + 1, breakpoint_expected=breakpoint_expected)
     except TransportError as error:
         assert error.code == "resume_failed", error.code
-        assert "simulated LLDB resume error" in str(error)
+        assert error.presentation == "hades2.error.resumeFailed", error.presentation
+        assert "simulated LLDB resume error" in (error.diagnostic or "")
+        assert error.arguments == ["simulated LLDB resume error"]
     else:
         raise AssertionError("failed Continue() on stopped process did not raise resume_failed")
     assert failed_resume_stopped.process.continues == 1
@@ -311,7 +313,7 @@ for phase, invoke, expected_observations in (
             invoke(transport)
         except TransportError as error:
             assert error.code == 'process_timeout'
-            assert error.presentation == TransportError('process_timeout', '游戏进程状态切换超时。').presentation
+            assert error.presentation == 'hades2.error.processTimeout'
             assert json.loads(error.diagnostic) == {'phase': phase, 'expectedStates': [5], 'lastObservedState': 6}
         else:
             raise AssertionError('Unobserved owning stop was accepted')

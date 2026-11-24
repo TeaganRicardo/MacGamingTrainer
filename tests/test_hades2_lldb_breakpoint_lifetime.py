@@ -296,7 +296,7 @@ def check_unknown(executable, _progress):
                 transport.execute("return true", expression_timeout_seconds=0.1)
         except TransportError as error:
             assert error.code == "outcome_unknown", error.code
-            message = str(error).lower()
+            message = (error.diagnostic or str(error)).lower()
             assert "deleted" not in message, message
         else:
             raise AssertionError("blocked expression unexpectedly completed")

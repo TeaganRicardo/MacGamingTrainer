@@ -6,7 +6,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
-from core.adapter import AdapterError
+from core.adapter import AdapterError, HostPresentationError
 from games.hades.simulation_time_warp import (
     APP_ACCUMULATOR_OFFSET,
     APP_INSTANCE_SYMBOL,
@@ -177,8 +177,9 @@ for speed, wrong_field, wrong_value in (
     write_count = len(drift_transport.writes)
     try:
         drift_owner.current_speed()
-    except AdapterError as error:
-        assert error.code == 'time_warp_verify_failed' and not drift_transport.tainted
+    except HostPresentationError as error:
+        assert error.code == 'time_warp_verify_failed' and error.presentation == 'host.timeWarp.error.verifyFailed'
+        assert not drift_transport.tainted
         assert 'autoReset=' in error.arguments[0] and 'fixedStep=' in error.arguments[1]
     else:
         raise AssertionError(f'inconsistent engine clock flags passed readback at {speed}x')
@@ -227,8 +228,9 @@ else:
 t.memory[t.APP_PTR + APP_TIME_SCALE_OFFSET] = bytearray(struct.pack('<f', 12.0))
 try:
     owner.current_speed()
-except AdapterError as error:
-    assert error.code == 'time_warp_verify_failed' and error.arguments == ['0..10', '12'] and not t.tainted
+except HostPresentationError as error:
+    assert error.code == 'time_warp_verify_failed' and error.presentation == 'host.timeWarp.error.verifyFailed'
+    assert error.arguments == ['0..10', '12'] and not t.tainted
 else:
     raise AssertionError('out-of-range speed accepted in current_speed')
 assert owner.reset() == 1.0  # reset recovers cleanly from finite >10 value
@@ -237,15 +239,17 @@ for bad_value, expected_actual in ((-1.0, '-1'), (float('nan'), 'nan')):
     t.memory[t.APP_PTR + APP_TIME_SCALE_OFFSET] = bytearray(struct.pack('<f', bad_value))
     try:
         owner.current_speed()
-    except AdapterError as error:
-        assert error.code == 'time_warp_verify_failed' and error.arguments == ['0..10', expected_actual]
+    except HostPresentationError as error:
+        assert error.code == 'time_warp_verify_failed' and error.presentation == 'host.timeWarp.error.verifyFailed'
+        assert error.arguments == ['0..10', expected_actual]
         assert not t.tainted
     else:
         raise AssertionError('non-finite/negative speed accepted in current_speed')
     try:
         owner.set_speed(2.0)
-    except AdapterError as error:
-        assert error.code == 'time_warp_verify_failed' and error.arguments == ['2', expected_actual]
+    except HostPresentationError as error:
+        assert error.code == 'time_warp_verify_failed' and error.presentation == 'host.timeWarp.error.verifyFailed'
+        assert error.arguments == ['2', expected_actual]
         assert not t.tainted
     else:
         raise AssertionError('non-finite/negative prior speed mutated by set_speed')

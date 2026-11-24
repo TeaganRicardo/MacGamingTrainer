@@ -13,8 +13,20 @@ from core.persistence import (
 class PersistenceError(PresentableError, RuntimeError):
     code = 'persistence_failed'
 
-    def __init__(self, message: str):
-        super().__init__(self.code, None, diagnostic=message, message=message)
+    def __init__(
+        self,
+        message: str,
+        *,
+        presentation: str = 'hades2.error.localWriteFailed',
+        arguments=(),
+    ):
+        super().__init__(
+            self.code,
+            presentation,
+            diagnostic=message,
+            arguments=arguments,
+            message=message,
+        )
 
 
 class UnsupportedSchemaVersionError(PersistenceError):
@@ -22,14 +34,20 @@ class UnsupportedSchemaVersionError(PersistenceError):
 
     def __init__(self, kind, found, supported):
         if found > supported:
+            presentation = 'hades2.error.preferenceNewerFormat'
             message = '{} 使用了更新的数据格式（schemaVersion={}，当前支持 {}），本次读取已拒绝且原文件保持不变。'.format(
                 kind, found, supported
             )
         else:
+            presentation = 'hades2.error.preferenceOlderFormat'
             message = '{} 使用了已不再支持的旧数据格式（schemaVersion={}，当前支持 {}），本次读取已拒绝且原文件保持不变。'.format(
                 kind, found, supported
             )
-        super().__init__(message)
+        super().__init__(
+            message,
+            presentation=presentation,
+            arguments=(str(kind), str(found), str(supported)),
+        )
         self.kind = kind
         self.found = found
         self.supported = supported

@@ -19,7 +19,7 @@ from .config import (
     GAME_EXECUTABLE_NAME, GAME_SAVES, MODULE_MANIFEST, STEAM_MANIFEST,
     SUPPORTED_BUILD, resolve_game_install, steam_manifest_for_bundle,
 )
-from .error_presentation import Hades2PresentationError
+from .error_presentation import Hades2PresentationError, Hades2RuntimeError
 from .operation_budgets import PROCESS_QUERY_TIMEOUT_SECONDS, SUBPROCESS_TIMEOUT_SECONDS
 from .persistence import migrate_legacy_root_data_dir
 
@@ -92,12 +92,22 @@ def _command(*args, allowed=(0,)):
     try:
         return bounded_run(args, TIMEOUT, capture_output=True, allowed=allowed)
     except BoundedCommandTimeoutError as error:
-        raise RuntimeError(str(error)) from error
+        program = error.argv[0] if error.argv else 'subprocess'
+        raise Hades2RuntimeError('hades2.error.timeout', str(error), (program, f'{error.budget:g}')) from error
     except OSError as error:
-        raise RuntimeError(f'无法运行 {args[0]}：{error}') from error
+        raise Hades2RuntimeError(
+            'hades2.error.commandLaunchFailed',
+            f'无法运行 {args[0]}：{error}',
+            (str(args[0]), str(error)),
+        ) from error
     except subprocess.CalledProcessError as error:
         detail = (error.stderr or error.stdout or b'').decode('utf-8', errors='replace')[-3000:].strip()
-        raise RuntimeError(f'{args[0]} 失败（{error.returncode}）：{detail or f"exit {error.returncode}"}') from error
+        reason = detail or f'exit {error.returncode}'
+        raise Hades2RuntimeError(
+            'hades2.error.commandFailed',
+            f'{args[0]} 失败（{error.returncode}）：{reason}',
+            (str(args[0]), str(error.returncode), reason),
+        ) from error
 
 
 def run(*args):
@@ -108,17 +118,35 @@ def _require_stopped():
     try:
         located = locate_target(MODULE_MANIFEST, timeout=PROCESS_QUERY_TIMEOUT_SECONDS)
     except AmbiguousTargetError as error:
-        raise RuntimeError(f'检测到多个 {DISPLAY_NAME} 进程，请保留一个。') from error
+        raise Hades2RuntimeError(
+            'hades2.error.multipleProcesses',
+            f'检测到多个 {DISPLAY_NAME} 进程，请保留一个。',
+            (DISPLAY_NAME,),
+        ) from error
     except BoundedCommandTimeoutError as error:
-        raise RuntimeError(str(error)) from error
+        program = error.argv[0] if error.argv else 'subprocess'
+        raise Hades2RuntimeError('hades2.error.timeout', str(error), (program, f'{error.budget:g}')) from error
     except OSError as error:
-        raise RuntimeError(f'无法运行 /bin/ps：{error}') from error
+        raise Hades2RuntimeError(
+            'hades2.error.commandLaunchFailed',
+            f'无法运行 /bin/ps：{error}',
+            ('/bin/ps', str(error)),
+        ) from error
     except subprocess.CalledProcessError as error:
         raw = error.stderr or error.stdout or ''
         detail = (raw.decode('utf-8', errors='replace') if isinstance(raw, bytes) else raw).strip()
-        raise RuntimeError(f'/bin/ps 失败（{error.returncode}）：{detail or f"exit {error.returncode}"}') from error
+        reason = detail or f'exit {error.returncode}'
+        raise Hades2RuntimeError(
+            'hades2.error.commandFailed',
+            f'/bin/ps 失败（{error.returncode}）：{reason}',
+            ('/bin/ps', str(error.returncode), reason),
+        ) from error
     if located is not None:
-        raise RuntimeError(f'请先退出 {DISPLAY_NAME}；运行中不能修改签名或恢复存档。')
+        raise Hades2RuntimeError(
+            'hades2.error.prepareWhileRunning',
+            f'请先退出 {DISPLAY_NAME}；运行中不能修改签名或恢复存档。',
+            (DISPLAY_NAME,),
+        )
 
 
 def _uuid(exe):
@@ -128,7 +156,11 @@ def _uuid(exe):
     match = re.search(pattern, result)
     if not match:
         suffix = f'（{architecture}）' if architecture else ''
-        raise RuntimeError('找不到匹配架构的 Mach-O UUID' + suffix + '。')
+        raise Hades2RuntimeError(
+            'hades2.error.uuidLookupFailed',
+            '找不到匹配架构的 Mach-O UUID' + suffix + '。',
+            (suffix,),
+        )
     return match.group(1).upper()
 
 
@@ -163,7 +195,11 @@ def compatibility(strict=False, game_path=None, *, query_running=True):
         _COMPATIBILITY_CACHE.move_to_end(cache_key)
         cached = _COMPATIBILITY_CACHE[cache_key]
         if strict and not cached['compatible']:
-            raise RuntimeError(cached['warnings'][0])
+            raise Hades2RuntimeError(
+                'hades2.error.unverifiedBuildWarning',
+                cached['warnings'][0],
+                (str(cached['version']), str(cached['steam_build']), str(cached['uuid'])),
+            )
         return dict(cached, warnings=list(cached['warnings']))
 
     info = plistlib.loads(info_path.read_bytes())
@@ -191,7 +227,11 @@ def compatibility(strict=False, game_path=None, *, query_running=True):
         while len(_COMPATIBILITY_CACHE) > _COMPATIBILITY_CACHE_MAX_ENTRIES:
             _COMPATIBILITY_CACHE.popitem(last=False)
     if strict and not compatible:
-        raise RuntimeError(warning)
+        raise Hades2RuntimeError(
+            'hades2.error.unverifiedBuildWarning',
+            warning,
+            (str(version), str(build), str(uuid)),
+        )
     return result
 
 
@@ -229,9 +269,9 @@ def _verify_backup(root, record):
     expected_sha256 = record.get('original_sha256')
     expected_uuid = record.get('uuid')
     if not isinstance(expected_sha256, str) or sha(original) != expected_sha256:
-        raise RuntimeError('原始备份损坏或与记录不匹配；拒绝覆盖游戏。')
+        raise Hades2RuntimeError('hades2.error.backupCorrupt', '原始备份损坏或与记录不匹配；拒绝覆盖游戏。')
     if not isinstance(expected_uuid, str) or _uuid(original) != expected_uuid:
-        raise RuntimeError('备份 UUID 不匹配。')
+        raise Hades2RuntimeError('hades2.error.backupUUIDMismatch', '备份 UUID 不匹配。')
     return original
 
 
@@ -241,7 +281,7 @@ def _entitlements(exe):
     start = combined.find(b'<?xml')
     end = combined.find(b'</plist>', start)
     if start < 0 or end < 0:
-        raise RuntimeError('无法读取原始权限；未修改游戏。')
+        raise Hades2RuntimeError('hades2.error.permissionsUnreadable', '无法读取原始权限；未修改游戏。')
     return plistlib.loads(combined[start:end + len(b'</plist>')])
 
 
@@ -258,16 +298,16 @@ def _atomic_install(source, destination, expected_current, original_sha256=None,
         verified = Path(directory) / GAME_EXECUTABLE_NAME
         shutil.copy2(source, verified)
         if sha(verified) != expected_source:
-            raise RuntimeError('独立验证副本校验失败；未修改游戏。')
+            raise Hades2RuntimeError('hades2.error.verificationFailed', '独立验证副本校验失败；未修改游戏。')
         if original_sha256 is not None and expected_source == original_sha256:
             if _uuid(verified) != original_uuid:
-                raise RuntimeError('原始恢复副本 UUID 不匹配；未修改游戏。')
+                raise Hades2RuntimeError('hades2.error.restoreUUIDMismatch', '原始恢复副本 UUID 不匹配；未修改游戏。')
         elif expected_source == ORIGINAL_SHA256:
             # This exact local original fails standalone codesign verification
             # (Info.plist requirement), but its known hash and UUID establish
             # the restoration baseline. Do not generalize to other binaries.
             if _uuid(verified) != UUID:
-                raise RuntimeError('原始恢复副本 UUID 不匹配；未修改游戏。')
+                raise Hades2RuntimeError('hades2.error.restoreUUIDMismatch', '原始恢复副本 UUID 不匹配；未修改游戏。')
         else:
             run('/usr/bin/codesign', '--verify', '--strict', str(verified))
         fd, name = tempfile.mkstemp(prefix='.trainer-', dir=destination.parent)
@@ -276,13 +316,13 @@ def _atomic_install(source, destination, expected_current, original_sha256=None,
         try:
             shutil.copy2(verified, staged)
             if sha(staged) != expected_source:
-                raise RuntimeError('暂存文件校验失败；未修改游戏。')
+                raise Hades2RuntimeError('hades2.error.stagedVerificationFailed', '暂存文件校验失败；未修改游戏。')
             # No codesign call here: only install bytes verified outside the app.
             with staged.open('rb') as stream:
                 os.fsync(stream.fileno())
             _require_stopped()
             if sha(destination) != expected_current:
-                raise RuntimeError('游戏文件在操作期间改变；拒绝覆盖。')
+                raise Hades2RuntimeError('hades2.error.fileChangedDuringOperation', '游戏文件在操作期间改变；拒绝覆盖。')
             os.replace(staged, destination)
             invalidate_compatibility_cache()
         finally:
@@ -310,7 +350,7 @@ def _stage_prepared(root, record, original, previous_prepared_sha256=None):
     prepared_entitlements = _entitlements(staged)
     if (_uuid(staged) != record.get('uuid') or not prepared_entitlements.get('com.apple.security.get-task-allow')
             or not prepared_entitlements.get('com.apple.security.cs.disable-library-validation')):
-        raise RuntimeError('调试签名校验失败；未修改游戏。')
+        raise Hades2RuntimeError('hades2.error.signingVerificationFailed', '调试签名校验失败；未修改游戏。')
     record.update(status='staged', prepared_sha256=sha(staged))
     if previous_prepared_sha256: record['previous_prepared_sha256'] = previous_prepared_sha256
     else: record.pop('previous_prepared_sha256', None)
@@ -337,7 +377,7 @@ def prepare(data_dir=None):
         original = _verify_backup(root, record)
         prepared_entitlements = _entitlements(exe)
         if not prepared_entitlements.get('com.apple.security.get-task-allow'):
-            raise RuntimeError('已准备文件缺少调试权限。')
+            raise Hades2RuntimeError('hades2.error.missingDebugPermission', '已准备文件缺少调试权限。')
         if prepared_entitlements.get('com.apple.security.cs.disable-library-validation'):
             if record.pop('previous_prepared_sha256', None) is not None or record.get('status') != 'prepared':
                 record['status'] = 'prepared'
@@ -352,7 +392,7 @@ def prepare(data_dir=None):
         return {'prepared': True, 'already_prepared': False, 'upgraded': True, 'backup': str(root), 'manifest': record}
 
     if _entitlements(exe).get('com.apple.security.get-task-allow'):
-        raise RuntimeError('当前可执行文件已带调试权限，但没有匹配的原始备份；拒绝覆盖。')
+        raise Hades2RuntimeError('hades2.error.noMatchingBackup', '当前可执行文件已带调试权限，但没有匹配的原始备份；拒绝覆盖。')
     bundle_signature = _command('/usr/bin/codesign', '--verify', '--strict', str(game), allowed=(0, 1))
 
     root = _backup_dir(backup_parent, 'signature')
@@ -397,7 +437,10 @@ def restore(data_dir=None):
         record['status'] = 'restored'
         _write_json(root / 'manifest.json', record)
         return {'restored': True, 'already_restored': False, 'backup': str(root)}
-    raise RuntimeError('没有与当前文件匹配的原始签名备份；游戏可能已更新，拒绝覆盖。')
+    raise Hades2RuntimeError(
+        'hades2.error.noOriginalBackup',
+        '没有与当前文件匹配的原始签名备份；游戏可能已更新，拒绝覆盖。',
+    )
 
 
 def official_display_names(*args, **kwargs):

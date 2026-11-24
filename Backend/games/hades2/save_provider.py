@@ -5,6 +5,7 @@ from pathlib import Path
 from core.save_resolution import LocalizedSnapshotDescription, ResolvedSaveFile, DefaultSaveProvider, SnapshotDescription
 
 from .localization import official_display_names
+from .error_presentation import Hades2ValueError
 from .save_document import Hades2SaveDocument, HadesSaveError, read_hades2_save_header
 
 
@@ -76,19 +77,28 @@ def resolve_active_profile_save(files):
     active = by_path.get("activeProfile")
     profile = _active_profile(active) if active is not None else None
     if profile is None:
-        raise ValueError("Save Editor could not resolve the active Hades profile.")
+        raise Hades2ValueError(
+            "hades2.saveEditor.error.operationFailed",
+            "Save Editor could not resolve the active Hades profile.",
+        )
     persistent = "{}.sav".format(profile)
     temporary = "{}_Temp.sav".format(profile)
     validation = "{}.v.sav".format(profile)
     if persistent not in by_path:
-        raise ValueError("Save Editor active profile save is missing.")
+        raise Hades2ValueError(
+            "hades2.saveEditor.error.operationFailed",
+            "Save Editor active profile save is missing.",
+        )
     if temporary in by_path and validation in by_path:
         try:
             if (by_path[validation].stat().st_mtime_ns >
                     by_path[persistent].stat().st_mtime_ns):
                 return profile, temporary
         except OSError as error:
-            raise ValueError("Save Editor could not inspect the active-save marker.") from error
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.operationFailed",
+                "Save Editor could not inspect the active-save marker.",
+            ) from error
     return profile, persistent
 
 

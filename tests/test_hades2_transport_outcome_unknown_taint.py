@@ -41,9 +41,12 @@ ast.fix_missing_locations(isolated)
 
 
 class FakeTransportError(Exception):
-    def __init__(self, code, message):
+    def __init__(self, code, message, *, diagnostic=None, arguments=()):
         super().__init__(message)
         self.code = code
+        self.presentation = message
+        self.diagnostic = diagnostic
+        self.arguments = tuple(arguments)
 
 
 class FakeError:

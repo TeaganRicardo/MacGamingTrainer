@@ -6,6 +6,7 @@ from pathlib import Path
 from core.persistence import VersionedDocumentStore
 from .vital_state import normalize_vital_locks
 
+from .error_presentation import Hades2ValueError
 from .persistence import (
     PersistenceError,
     UnsupportedSchemaVersionError,
@@ -95,7 +96,7 @@ def _normalize_element_locks(raw):
 def _desired_schema_version(raw):
     if 'schemaVersion' not in raw:return 0
     value=raw['schemaVersion']
-    if type(value) is not int or value<0:raise ValueError('desired-state schemaVersion 无效。')
+    if type(value) is not int or value<0:raise Hades2ValueError('hades2.error.desiredSchemaInvalid', 'desired-state schemaVersion 无效。')
     return value
 
 
@@ -136,7 +137,7 @@ def migrate_legacy_boon_semantics(raw, schema_version):
 def normalize_persisted_desired(raw, schema_version):
     """Migrate one persisted desired document to current canonical semantics."""
     if type(schema_version) is not int or schema_version < 0:
-        raise ValueError('desired-state schemaVersion 无效。')
+        raise Hades2ValueError('hades2.error.desiredSchemaInvalid', 'desired-state schemaVersion 无效。')
     if schema_version > DESIRED_STATE_SCHEMA_VERSION:
         raise UnsupportedSchemaVersionError(
             'desired-state', schema_version, DESIRED_STATE_SCHEMA_VERSION
@@ -185,11 +186,15 @@ class Hades2PreferenceStore:
             quarantine_corrupt=True,
             fallback_on_error=True,
             newer_schema_error=lambda found, supported: UnsupportedSchemaVersionError('desired-state', found, supported),
-            read_error=lambda _reason, _exc: PersistenceError('现有 desired-state 无法安全读取，已禁止本次进程覆盖原文件。'),
+            read_error=lambda _reason, _exc: PersistenceError(
+                '现有 desired-state 无法安全读取，已禁止本次进程覆盖原文件。',
+                presentation='hades2.error.preferenceWriteBlocked',
+            ),
             quarantine_failed_error=lambda reason: PersistenceError(
                 '现有 desired-state 无法安全隔离，已禁止覆盖原文件。'
                 if reason == 'unreadable'
-                else '损坏的 desired-state 无法安全隔离，已禁止覆盖原文件。'
+                else '损坏的 desired-state 无法安全隔离，已禁止覆盖原文件。',
+                presentation='hades2.error.preferenceWriteBlocked',
             ),
             write_error=lambda error: error if isinstance(error, PersistenceError) else PersistenceError('无法安全写入本地配置。'),
         )

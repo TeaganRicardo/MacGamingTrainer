@@ -6,6 +6,7 @@ An aspect level counts native purchased upgrade records; writes normalize the
 requested tier sequence without changing a runtime trait stack. Changing a durable selector never edits CurrentRun mounts.
 """
 
+from .error_presentation import Hades2ValueError, SaveBatchValidationError
 from .localization import official_display_names
 from .save_document import clone_lua_value, AmbiguousLuaKeyError, LuaTable
 
@@ -40,12 +41,11 @@ _DEFAULT_ASPECTS = {aspects[0] for aspects in _WEAPONS.values()}
 _MARKER_FIELDS = ("WeaponsUnlocked", "WorldUpgrades", "WorldUpgradesAdded")
 
 
-class SaveEquipmentBatchValidationError(ValueError):
+class SaveEquipmentBatchValidationError(SaveBatchValidationError):
     """Equipment batch rejection with the requested actions that caused it."""
 
-    def __init__(self, message, action_ids):
-        super().__init__(message)
-        self.action_ids = tuple(sorted(set(action_ids)))
+    def __init__(self, key, diagnostic, action_ids, *, category="equipment"):
+        super().__init__(key, diagnostic, category, action_ids)
 
 
 def _action_ids(own, related):
@@ -100,7 +100,7 @@ def _conflicting_action_ids(entry, own):
 def _state(root):
     state = root["GameState"]
     if not isinstance(state, LuaTable):
-        raise ValueError("Save Editor GameState is malformed.")
+        raise Hades2ValueError("hades2.saveEditor.error.operationFailed", "Save Editor GameState is malformed.")
     return state
 
 
@@ -111,7 +111,10 @@ def _table(state, name, *, create=False):
         if create:
             state[name] = value
     if not isinstance(value, LuaTable):
-        raise ValueError("Save Editor {} is unavailable or malformed.".format(name))
+        raise Hades2ValueError(
+            "hades2.saveEditor.error.operationFailed",
+            "Save Editor {} is unavailable or malformed.".format(name),
+        )
     return value
 
 
@@ -473,7 +476,10 @@ def rows(root, language="zh-CN", game_path=None):
         try:
             selected = state.get("EquippedFamiliar")
             if selected is not None and (not isinstance(selected, str) or selected not in _FAMILIARS):
-                raise ValueError("Save Editor familiar selection is unknown.")
+                raise Hades2ValueError(
+                    "hades2.saveEditor.error.invalidMutation",
+                    "Save Editor familiar selection is unknown.",
+                )
             access = _owned(state, tool) or _FAMILIAR_TOOLS.get(selected) == tool
         except AmbiguousLuaKeyError:
             access_owner_state = "ambiguous"
@@ -635,7 +641,10 @@ def descriptor(root, entry_id, game_path=None):
                     "Save Editor semantic owner is ambiguous."
                 )
             if row.get("ownerState") == "unsupported":
-                raise ValueError("Save Editor semantic owner is unsupported.")
+                raise Hades2ValueError(
+                    "hades2.saveEditor.error.invalidMutation",
+                    "Save Editor semantic owner is unsupported.",
+                )
             return {
                 "id": entry_id, "domain": "weapons", "rawId": row["rawId"],
                 "path": row["path"], "before": row["value"],
@@ -648,21 +657,36 @@ def descriptor(root, entry_id, game_path=None):
 
 def validate(descriptor_value, operation, value):
     if operation not in descriptor_value["mutationKinds"]:
-        raise ValueError("Save Editor equipment mutation is not authorized.")
+        raise Hades2ValueError(
+            "hades2.saveEditor.error.invalidMutation",
+            "Save Editor equipment mutation is not authorized.",
+        )
     kind = descriptor_value["valueType"]
     if kind == "boolean":
         if operation != "set" or type(value) is not bool:
-            raise ValueError("Save Editor equipment unlock must be boolean.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor equipment unlock must be boolean.",
+            )
     elif kind == "integer":
         limits = descriptor_value["constraints"]
         if (operation != "set" or type(value) is not int or
                 not limits["min"] <= value <= limits["max"]):
-            raise ValueError("Save Editor equipment rank is out of range.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor equipment rank is out of range.",
+            )
     elif kind == "enum":
         if operation != "setEnum" or type(value) is not str or value not in descriptor_value["choices"]:
-            raise ValueError("Save Editor equipment selection is invalid.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor equipment selection is invalid.",
+            )
     else:
-        raise ValueError("Save Editor equipment mutation type is unsupported.")
+        raise Hades2ValueError(
+            "hades2.saveEditor.error.invalidMutation",
+            "Save Editor equipment mutation type is unsupported.",
+        )
 
 
 def apply_intent(root, intent):
@@ -672,7 +696,10 @@ def apply_intent(root, intent):
     if entry_id.startswith("weapon:"):
         weapon = entry_id[len("weapon:"):]
         if weapon not in _WEAPONS:
-            raise ValueError("Save Editor weapon is unknown.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor weapon is unknown.",
+            )
         _set_owned(state, weapon, after)
         if not after:
             for aspect in _WEAPONS[weapon]:
@@ -682,7 +709,10 @@ def apply_intent(root, intent):
     if entry_id.startswith("aspect:"):
         aspect = entry_id[len("aspect:"):]
         if aspect not in _ASPECT_PARENT:
-            raise ValueError("Save Editor aspect is unknown.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor aspect is unknown.",
+            )
         if not after and aspect in _DEFAULT_ASPECTS:
             weapon = _ASPECT_PARENT[aspect]
             _set_owned(state, weapon, False)
@@ -703,7 +733,10 @@ def apply_intent(root, intent):
     if entry_id.startswith("aspectSelection:"):
         weapon = entry_id[len("aspectSelection:"):]
         if weapon not in _WEAPONS or (after and after not in _WEAPONS[weapon]):
-            raise ValueError("Save Editor selected aspect is unknown.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor selected aspect is unknown.",
+            )
         owner = _table(state, "LastWeaponUpgradeName", create=True)
         if after:
             if not _owned(state, weapon):
@@ -716,14 +749,20 @@ def apply_intent(root, intent):
     if entry_id.startswith("tool:"):
         tool = entry_id[len("tool:"):]
         if tool not in _TOOLS:
-            raise ValueError("Save Editor tool is unknown.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor tool is unknown.",
+            )
         _set_owned(state, tool, after >= 1)
         _set_owned(state, tool + "2", after == 2)
         return
     if entry_id.startswith("familiar:"):
         familiar = entry_id[len("familiar:"):]
         if familiar not in _FAMILIARS:
-            raise ValueError("Save Editor familiar is unknown.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor familiar is unknown.",
+            )
         table = _table(state, "FamiliarsUnlocked", create=True)
         if after:
             table[familiar] = True
@@ -738,13 +777,19 @@ def apply_intent(root, intent):
     if entry_id.startswith("familiarUpgrade:"):
         upgrade = entry_id[len("familiarUpgrade:"):]
         if upgrade not in _FAMILIAR_UPGRADE_PARENT:
-            raise ValueError("Save Editor equipment mutation is unknown.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor equipment mutation is unknown.",
+            )
         _set_familiar_rank(state, upgrade, after)
         return
     if entry_id.startswith("familiarSelected:"):
         familiar = entry_id[len("familiarSelected:"):]
         if familiar not in _FAMILIARS:
-            raise ValueError("Save Editor familiar is unknown.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor familiar is unknown.",
+            )
         if after:
             _table(state, "FamiliarsUnlocked", create=True)[familiar] = True
             state["EquippedFamiliar"] = familiar
@@ -758,7 +803,10 @@ def apply_intent(root, intent):
         else:
             state.pop("EquippedFamiliar", None)
         return
-    raise ValueError("Save Editor equipment mutation is unknown.")
+    raise Hades2ValueError(
+        "hades2.saveEditor.error.invalidMutation",
+        "Save Editor equipment mutation is unknown.",
+    )
 
 
 def _semantic_values(root):
@@ -851,10 +899,13 @@ def validate_batch(root, intents):
             if (entry.startswith("familiar:") and intent["after"] is False
                     and current.get("familiarSelection") == entry[len("familiar:"):]):
                 raise SaveEquipmentBatchValidationError(
+                    "hades2.saveEditor.error.equippedFamiliarMustBeUnlocked",
                     "Save Editor equipped familiar must be unlocked.",
                     _conflicting_action_ids(entry, own),
+                    category="familiar",
                 )
             raise SaveEquipmentBatchValidationError(
+                "hades2.saveEditor.error.equipmentChangesConflict",
                 "Save Editor equipment changes conflict.",
                 _conflicting_action_ids(entry, own),
             )
@@ -878,12 +929,14 @@ def validate_batch(root, intents):
                 if not owned and current[key] > 0:
                     related = {"weapon:" + weapon, key}
                     raise SaveEquipmentBatchValidationError(
+                        "hades2.saveEditor.error.lockedWeaponHasAspects",
                         "Save Editor locked weapon has acquired aspects.",
                         _action_ids(own, related),
                     )
                 if owned and aspect in _DEFAULT_ASPECTS and current[key] < 1:
                     related = {"weapon:" + weapon, key}
                     raise SaveEquipmentBatchValidationError(
+                        "hades2.saveEditor.error.unlockedWeaponNeedsDefaultAspect",
                         "Save Editor unlocked weapon lacks default aspect.",
                         _action_ids(own, related),
                     )
@@ -895,6 +948,7 @@ def validate_batch(root, intents):
                 "aspect:" + selected,
             }
             raise SaveEquipmentBatchValidationError(
+                "hades2.saveEditor.error.selectedAspectNotPurchased",
                 "Save Editor selected aspect is not purchased.",
                 _action_ids(own, related),
             )
@@ -904,6 +958,8 @@ def validate_batch(root, intents):
         if familiar and _flag(_table(_state(root), "FamiliarsUnlocked"), familiar) is not True:
             related = {"familiarSelection", "familiarSelected:" + familiar, "familiar:" + familiar}
             raise SaveEquipmentBatchValidationError(
+                "hades2.saveEditor.error.equippedFamiliarMustBeUnlocked",
                 "Save Editor equipped familiar must be unlocked.",
                 _action_ids(own, related),
+                category="familiar",
             )

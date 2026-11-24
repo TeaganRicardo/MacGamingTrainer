@@ -216,7 +216,11 @@ class _LLDBWorkerClient:
 
     def _call(self, method, params, *, allow_start):
         if not allow_start and not self.available:
-            raise AdapterError("disconnected", "请先连接游戏。")
+            raise AdapterError(
+                "disconnected",
+                "hades2.error.notConnected",
+                diagnostic="请先连接游戏。",
+            )
         self._start()
         response = self._request(method, params)
         error = response.get("error")

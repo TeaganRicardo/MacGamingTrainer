@@ -162,7 +162,7 @@ for raw in sys.stdin:
     if command.startswith('save_editor_'):
         try:result=save_command(command,params,state)
         except (ValueError,OSError) as error:
-            failure={'code':'fixture_editor','presentation':'hades.saveEditor.error','arguments':[str(error)]}
+            failure={'code':'fixture_editor','presentation':'hades.saveEditor.error.invalidMutation','diagnostic':str(error)}
             if isinstance(error,OSError):failure['recoveryPath']=str(folder/'recovery-copy')
             emit({'type':'result','id':request['id'],'protocolVersion':HOST_VERSION,'moduleProtocolVersion':MODULE_VERSION,'gameID':args.game,'ok':False,'error':failure})
             continue

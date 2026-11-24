@@ -7,9 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
+from core.errors import PresentableError
 from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
-from games.hades2.error_presentation import Hades2PresentationError
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.schema import TOGGLES, default_boon_rarity
 from core.process_time_warp import ProcessTimeWarpError
@@ -106,7 +106,7 @@ assert transport.sources == [], "process Time Warp unexpectedly crossed the Lua 
 
 try:
     adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 10.1}, "speed-invalid")
-except Hades2PresentationError as error:
+except PresentableError as error:
     # Out-of-range input is rejected with a language-neutral presentation key.
     assert error.presentation == "hades2.error.gameSpeedRange", error.presentation
 else:

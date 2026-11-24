@@ -4,6 +4,7 @@ Direct saved records are editable by their reliable type and physical owner.
 Native event resets retain their distinct verified companion-owner operation.
 """
 from . import save_advanced
+from .error_presentation import Hades2ValueError
 from .localization import official_display_names
 from .save_native_ids import QUEST_IDS, STORY_RESET_TEXT_IDS
 from .save_document import AmbiguousLuaKeyError, LuaTable
@@ -48,21 +49,27 @@ class DialogueWriteBlocked(ValueError):
 def _game_state(root):
     state = root["GameState"]
     if not isinstance(state, LuaTable):
-        raise ValueError("Save Editor GameState is malformed.")
+        raise Hades2ValueError("hades2.saveEditor.error.operationFailed", "Save Editor GameState is malformed.")
     return state
 
 
 def _table(state, name):
     value = state.get(name)
     if not isinstance(value, LuaTable):
-        raise ValueError("Save Editor {} is malformed.".format(name))
+        raise Hades2ValueError(
+            "hades2.saveEditor.error.operationFailed",
+            "Save Editor {} is malformed.".format(name),
+        )
     return value
 
 
 def _read_bool(table, identifier):
     value = table.get(identifier)
     if value is not None and type(value) is not bool:
-        raise ValueError("Save Editor narrative flag is not boolean.")
+        raise Hades2ValueError(
+            "hades2.saveEditor.error.invalidMutation",
+            "Save Editor narrative flag is not boolean.",
+        )
     return bool(value)
 
 

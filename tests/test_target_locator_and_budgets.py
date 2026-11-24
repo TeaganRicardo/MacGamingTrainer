@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.adapter import GameAdapterContext
+from core.errors import PresentableError
 from core.module_manifest import GameModuleManifest
 from core.protocol import JsonlRequestRouter
 from core.target_probe import (
@@ -23,7 +24,7 @@ from core.target_probe import (
 )
 from games.hades.adapter import HadesAdapter
 from games.hades.preferences import HadesPreferenceStore
-from games.hades2 import diagnostics, error_presentation, localization, preparation, save_investigation
+from games.hades2 import diagnostics, localization, preparation, save_investigation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.config import SUPPORTED_BUILD, resolve_game_install
 from games.hades.recovery import process_identity
@@ -446,16 +447,22 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
                     try:
                         op(guard_data)
                     except RuntimeError as error:
-                        pres = error_presentation.presentation_for(str(error))
-                        assert pres == ("hades2.error.prepareWhileRunning", ["Hades II"]), pres
+                        assert isinstance(error, PresentableError)
+                        assert (error.presentation, tuple(error.arguments)) == (
+                            "hades2.error.prepareWhileRunning",
+                            ("Hades II",),
+                        ), error
                     else:
                         raise AssertionError(f"preparation.{op.__name__} ran while game was running")
                 with patch("games.hades2.preparation.locate_target", side_effect=AmbiguousTargetError("multiple")):
                     try:
                         op(guard_data)
                     except RuntimeError as error:
-                        pres = error_presentation.presentation_for(str(error))
-                        assert pres == ("hades2.error.multipleProcesses", ["Hades II"]), pres
+                        assert isinstance(error, PresentableError)
+                        assert (error.presentation, tuple(error.arguments)) == (
+                            "hades2.error.multipleProcesses",
+                            ("Hades II",),
+                        ), error
                     else:
                         raise AssertionError(f"preparation.{op.__name__} ignored AmbiguousTargetError")
                 with patch(
@@ -465,8 +472,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
                     try:
                         op(guard_data)
                     except RuntimeError as error:
-                        pres = error_presentation.presentation_for(str(error))
-                        assert pres == ("hades2.error.timeout", ["/bin/ps", "5"]), pres
+                        assert isinstance(error, PresentableError)
+                        assert (error.presentation, tuple(error.arguments)) == (
+                            "hades2.error.timeout",
+                            ("/bin/ps", "5"),
+                        ), error
                     else:
                         raise AssertionError(f"preparation.{op.__name__} ignored BoundedCommandTimeoutError")
         assert not guard_data.exists()
@@ -477,6 +487,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
             try:
                 preparation.restore(guard_data)
             except RuntimeError as error:
+                assert isinstance(error, PresentableError)
+                assert error.presentation == "hades2.error.noOriginalBackup"
                 assert "没有与当前文件匹配的原始签名备份" in str(error), error
             else:
                 raise AssertionError("preparation.restore unexpectedly succeeded without backup")
@@ -486,8 +498,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
             try:
                 adapter.scan()
             except RuntimeError as error:
-                pres = error_presentation.presentation_for(str(error))
-                assert pres == ("hades2.error.timeout", ["/bin/ps", "2"]), pres
+                assert isinstance(error, PresentableError)
+                assert (error.presentation, tuple(error.arguments)) == (
+                    "hades2.error.timeout",
+                    ("/bin/ps", "2"),
+                ), error
             else:
                 raise AssertionError("Hades2Adapter.scan() did not raise on timeout")
 
@@ -498,8 +513,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
             try:
                 adapter.scan()
             except RuntimeError as error:
-                pres = error_presentation.presentation_for(str(error))
-                assert pres[0] == "hades2.error.processQueryFailed" and len(pres[1]) == 3 and pres[1][2] == "exit 2", pres
+                assert isinstance(error, PresentableError)
+                assert error.presentation == "hades2.error.processQueryFailed"
+                assert len(error.arguments) == 3 and error.arguments[2] == "exit 2", error.arguments
             else:
                 raise AssertionError("Hades2Adapter.scan() did not raise on CalledProcessError")
 
@@ -508,8 +524,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
             try:
                 preparation._command("/bin/ps")
             except RuntimeError as error:
-                pres = error_presentation.presentation_for(str(error))
-                assert pres == ("hades2.error.commandFailed", ["/bin/ps", "2", "exit 2"]), pres
+                assert isinstance(error, PresentableError)
+                assert (error.presentation, tuple(error.arguments)) == (
+                    "hades2.error.commandFailed",
+                    ("/bin/ps", "2", "exit 2"),
+                ), error
             else:
                 raise AssertionError("preparation._command did not raise on CalledProcessError")
 

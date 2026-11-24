@@ -4,6 +4,7 @@ Each semantic scalar owns its exact unique Lua path. Changing one statistic does
 not fabricate a completed run, alter another aggregate or mutate CurrentRun.
 Unknown records remain lossless and technically editable through Advanced.
 """
+from .error_presentation import Hades2ValueError
 from .localization import official_display_names
 from .save_document import AmbiguousLuaKeyError, LuaTable
 from . import save_advanced
@@ -88,7 +89,7 @@ def _row(root, entity, title, key, label, value, path, language, *, kind="intege
     try:
         owner = save_advanced.resolve_path(root, path[:-1])
         if not isinstance(owner, LuaTable):
-            raise ValueError("history scalar owner is not a Lua table")
+            raise Hades2ValueError("hades2.saveEditor.error.operationFailed", "history scalar owner is not a Lua table")
         try:
             actual = save_advanced.resolve_path(root, path)
             present = True
@@ -99,7 +100,7 @@ def _row(root, entity, title, key, label, value, path, language, *, kind="intege
         actual_kind = save_advanced.value_type(actual)
         save_advanced.validate_scalar(actual, actual_kind)
         if actual_kind not in ("number", "boolean", "string"):
-            raise ValueError("history measure is not a scalar")
+            raise Hades2ValueError("hades2.saveEditor.error.operationFailed", "history measure is not a scalar")
         if actual_kind != "number" or kind not in ("integer", "number", "enum"):
             kind = actual_kind
         row.update(value=save_advanced.json_value(actual), valueType=kind,
@@ -162,7 +163,7 @@ def rows(root, language="zh-CN", game_path=None):
             if value is None:
                 return
             if not isinstance(value, LuaTable):
-                raise ValueError("malformed history owner")
+                raise Hades2ValueError("hades2.saveEditor.error.operationFailed", "malformed history owner")
             projected = build(value)
         except (AmbiguousLuaKeyError, ValueError) as error:
             result.append(_unavailable(name, ["GameState", name], language, error))
@@ -173,7 +174,7 @@ def rows(root, language="zh-CN", game_path=None):
         projected, seen = [], set()
         for index, run in history.entries():
             if not _number(index) or index < 1 or int(index) != index or not isinstance(run, LuaTable):
-                raise ValueError("malformed run history")
+                raise Hades2ValueError("hades2.saveEditor.error.operationFailed", "malformed run history")
             if index in seen:
                 continue
             seen.add(index)
@@ -229,7 +230,7 @@ def rows(root, language="zh-CN", game_path=None):
         names = official_display_names(identities, language, game_path=game_path)
         for identity, record in stats.entries():
             if not isinstance(identity, str) or not isinstance(record, LuaTable):
-                raise ValueError("malformed lifetime history")
+                raise Hades2ValueError("hades2.saveEditor.error.operationFailed", "malformed lifetime history")
             if identity in seen:
                 continue
             seen.add(identity)
@@ -286,7 +287,7 @@ def descriptor(root, entry_id, game_path=None):
     for row in rows(root, "en", game_path=game_path):
         if row["id"] == entry_id:
             if not row["editable"]:
-                raise ValueError(row.get("reasonDiagnostic") or row["reason"])
+                raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", row.get("reasonDiagnostic") or row["reason"])
             # The same unique-path resolver is used for projection, review and
             # application; absence is permitted only for the named native default.
             return {"id": entry_id, "domain": "history", "rawId": row["rawId"],
@@ -300,22 +301,28 @@ def descriptor(root, entry_id, game_path=None):
 def validate(info, operation, value):
     kind = info["valueType"]
     if operation not in info["mutationKinds"]:
-        raise ValueError("Save Editor history operation is not supported.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor history operation is not supported.")
     if kind == "enum":
         if isinstance(value, str) and value in info["choices"]:
             value = int(value)
         save_advanced.validate_scalar(value, "integer")
         if str(int(value)) not in info["choices"]:
-            raise ValueError("Save Editor RunResult is not a listed native choice; use typed Advanced for an unknown value.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor RunResult is not a listed native choice; use typed Advanced for an unknown value.",
+            )
     else:
         save_advanced.validate_scalar(value, kind)
         if kind in ("integer", "number") and value < info["constraints"]["min"]:
-            raise ValueError("Save Editor history statistic must be non-negative.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor history statistic must be non-negative.",
+            )
     return value
 
 
 def apply_intent(root, intent):
     owner = save_advanced.resolve_path(root, intent["path"][:-1])
     if not isinstance(owner, LuaTable):
-        raise ValueError("Save Editor history owner is not a table.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor history owner is not a table.")
     owner[intent["path"][-1]] = intent["after"]

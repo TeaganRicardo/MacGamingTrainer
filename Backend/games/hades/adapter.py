@@ -18,6 +18,7 @@ from .world import WORLD_COMMANDS, mutation_params as world_mutation_params, rew
 from .profiles import HadesProfileStore
 from .diagnostics import build_diagnostics
 from .operation_budgets import LAUNCH_TIMEOUT_SECONDS, PROCESS_QUERY_TIMEOUT_SECONDS
+from .save_document import HadesSaveValueError
 from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, LOCK_FIELDS, ONE_SHOT_COMMANDS,
                      RESOURCE_IDS, feature_value, preference_value, invalid_value, number)
 
@@ -63,14 +64,16 @@ class HadesAdapter(GameAdapter):
             open_workspace=self._hades_save_open,
             unavailable_error=lambda: AdapterError(
                 'save_editor_unavailable',
-                'hades.saveEditor.error',
-                arguments=['Save management is unavailable.'],
+                'hades.saveEditor.error.unavailable',
+                diagnostic='Save management is unavailable.',
             ),
-            not_open_error=lambda _identifier: ValueError(
-                'This editor workspace is closed. Reopen the selected document.'
+            not_open_error=lambda _identifier: HadesSaveValueError(
+                'hades.saveEditor.error.notOpen',
+                'This editor workspace is closed. Reopen the selected document.',
             ),
-            stale_baseline_error=lambda: ValueError(
-                'This control belongs to an earlier document baseline. Refresh the editor before editing.'
+            stale_baseline_error=lambda: HadesSaveValueError(
+                'hades.saveEditor.error.staleBaseline',
+                'This control belongs to an earlier document baseline. Refresh the editor before editing.',
             ),
         )
 
@@ -361,8 +364,8 @@ class HadesAdapter(GameAdapter):
         except PresentableError:
             raise
         except (ValueError, KeyError, TypeError, OSError) as error:
-            raise AdapterError('save_editor_invalid', 'hades.saveEditor.error',
-                               diagnostic=str(error), arguments=[str(error)]) from error
+            raise AdapterError('save_editor_invalid', 'hades.saveEditor.error.operationFailed',
+                               diagnostic=str(error)) from error
 
     @staticmethod
     def _mutation_params(command, params):
