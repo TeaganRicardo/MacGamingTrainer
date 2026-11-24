@@ -1194,22 +1194,15 @@ struct Hades2TrainerView: View {
         "P_MiniBoss02",
     ]
 
-    private static let worldActionUnavailableReasonIDs: Set<String> = [
-        "source_anomaly_replacement",
-        "door_unavailable",
-        "exit_room_unavailable",
-        "reward_eligibility_unavailable",
-        "room_data_unavailable",
-        "room_eligibility_unavailable",
-        "room_force_predicate_unavailable",
-        "room_sets_unavailable",
-        "source_unavailable",
+    /// Every reason the resident reports on a Modify Exit item (#832): the
+    /// game's own selection rules, shown as warnings, and the few refusals
+    /// (a native probe that threw, no buildable room).
+    private static let worldActionReasonIDs: Set<String> = [
         "biome_depth_too_high",
         "biome_depth_too_low",
         "door_forced_destination",
         "door_forced_room_set",
         "door_has_predetermined_destination",
-        "door_returns_to_previous_room",
         "game_state_requirements",
         "global_forced_destination",
         "god_eligibility_requires_rng",
@@ -1220,20 +1213,18 @@ struct Hades2TrainerView: View {
         "max_creations_this_run",
         "native_forced_room_present",
         "native_ineligible",
-        "no_native_eligible_reward",
         "no_room_route",
         "reward_eligibility_probe_error",
         "reward_eligibility_requires_rng",
+        "reward_eligibility_unavailable",
         "reward_not_available",
         "reward_not_in_current_store",
         "reward_store_name_missing",
         "reward_store_unavailable",
-        "room_debug_only",
         "room_eligibility_probe_error",
         "room_eligibility_requires_rng",
+        "room_eligibility_unavailable",
         "room_excluded_by_exit_rules",
-        "room_force_probe_error",
-        "room_force_requires_rng",
         "room_has_fixed_reward_category",
         "room_has_forced_reward",
         "room_linked_route_required",
@@ -1243,20 +1234,28 @@ struct Hades2TrainerView: View {
         "room_no_reward",
         "room_requires_indoor",
         "room_required_tags_missing",
-        "room_same_as_source",
         "room_reward_deferred",
-        "room_set_unavailable",
+        "room_same_as_source",
         "room_wrong_wing_end",
+        "source_anomaly_replacement",
         "source_forced_room_set",
         "source_linked_destination",
         "source_next_room_set",
         "source_persistent_door_rooms",
-        "source_route_is_native_owned",
         "source_uses_previous_room_set",
     ]
 
-    private func worldActionTargetLabel(kind: String, id: String) -> String {
-        if kind == "roomCategory", id.contains("_MiniBoss") {
+    private func worldActionReason(_ id: String?) -> String? {
+        guard let id else { return nil }
+        let known = Self.worldActionReasonIDs.contains(id) ? id : "native_ineligible"
+        let key = "hades2.worldActions.unavailable.\(known)"
+        let localized = text(key)
+        return localized == key ? text("hades2.worldActions.unavailable.native_ineligible") : localized
+    }
+
+    private func worldActionRoomLabel(_ id: String) -> String {
+        if id == "current" { return text("hades2.worldActions.currentRoom") }
+        if id.contains("_MiniBoss") {
             if Self.worldActionRoomIDs.contains(id) {
                 let key = "hades2.worldActions.room.\(id)"
                 let localized = text(key)
@@ -1264,17 +1263,16 @@ struct Hades2TrainerView: View {
             }
             return "\(text("hades2.worldActions.route.miniboss")) · \(id)"
         }
-        if kind == "roomCategory" {
-            switch id {
-            case "combat": return text("hades2.worldActions.route.combat")
-            case "story": return text("hades2.worldActions.route.story")
-            case "shop": return text("hades2.worldActions.route.shop")
-            case "reprieve": return text("hades2.worldActions.route.reprieve")
-            case "miniboss": return text("hades2.worldActions.route.miniboss")
-            default: return id
-            }
+        switch id {
+        case "combat", "miniboss", "story", "shop", "reprieve":
+            return text("hades2.worldActions.route.\(id)")
+        default:
+            return id
         }
-        if kind == "reward", Self.worldActionGodIDs.contains(id) {
+    }
+
+    private func worldActionRewardLabel(_ id: String) -> String {
+        if Self.worldActionGodIDs.contains(id) {
             let key = "hades2.worldActions.god.\(id)"
             let localized = text(key)
             if localized != key { return localized }
@@ -1302,32 +1300,132 @@ struct Hades2TrainerView: View {
         return id
     }
 
-    private func worldActionTargetDisplay(_ target: Hades2WorldActionTarget) -> String {
-        let label = worldActionTargetLabel(kind: target.kind, id: target.id)
-        guard !target.enabled else { return label }
-        let reasonID = target.reason.flatMap { Self.worldActionUnavailableReasonIDs.contains($0) ? $0 : nil }
-            ?? "native_ineligible"
-        let reasonKey = "hades2.worldActions.unavailable.\(reasonID)"
-        let localized = text(reasonKey)
-        let reason = localized == reasonKey
-            ? text("hades2.worldActions.unavailable.native_ineligible") : localized
-        return "\(label) · \(reason)"
+    /// A refused item names why; an allowed item names the game rule it breaks.
+    private func worldActionItemLabel(_ label: String, enabled: Bool = true,
+                                      reason: String? = nil, warning: String? = nil) -> String {
+        if !enabled { return "\(label) · \(worldActionReason(reason ?? "native_ineligible") ?? "")" }
+        guard let warning = worldActionReason(warning) else { return label }
+        return "\(label) · ⚠︎ \(warning)"
     }
 
+    /// `Exit 1 · Combat · Zeus`: what the door holds now, as the game reports it.
     private func worldExitLabel(_ exit: Hades2WorldExit) -> String {
-        let current = exit.reward.isEmpty
-            ? (exit.roomName.isEmpty ? text("hades2.worldActions.unknownTarget") : exit.roomName)
-            : worldActionTargetLabel(kind: "reward", id: exit.reward)
-        return "\(exit.ordinal) · \(current)"
+        var parts = [text("hades2.worldActions.exitNumber", arguments: [String(exit.ordinal)])]
+        if !exit.roomKind.isEmpty {
+            parts.append(worldActionRoomLabel(exit.roomKind))
+        } else {
+            parts.append(exit.roomName.isEmpty ? text("hades2.worldActions.unknownTarget") : exit.roomName)
+        }
+        if exit.reward.isEmpty {
+            parts.append(text("hades2.worldActions.noReward"))
+        } else if !["Story", "Shop", "Empty"].contains(exit.reward) {
+            parts.append(worldActionRewardLabel(exit.reward))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func worldExitChoiceLabel(_ choice: Hades2WorldExitChoice, in exit: Hades2WorldExit) -> String {
+        let room = worldActionRoomLabel(choice.room)
+        if let reward = choice.reward { return "\(room) · \(worldActionRewardLabel(reward))" }
+        let acceptsReward = exit.roomTargets.first { $0.id == choice.room }?.acceptsReward ?? false
+        return acceptsReward ? "\(room) · \(text("hades2.worldActions.anyReward"))" : room
+    }
+
+    private func worldExitChoiceItem(_ choice: Hades2WorldExitChoice, title: String, enabled: Bool) -> some View {
+        Toggle(isOn: Binding(
+            get: { model.selectedWorldExitTarget == choice.id },
+            set: { if $0 { model.selectedWorldExitTarget = choice.id } }
+        )) {
+            Text(title)
+        }
+        .disabled(!enabled)
+    }
+
+    /// One room type's submenu: "Any reward" (a reservation; the game picks),
+    /// then Olympians, then other rewards. A reward under the door's own room
+    /// type edits that room in place.
+    @ViewBuilder
+    private func worldExitRewardItems(_ exit: Hades2WorldExit, room: Hades2WorldActionTarget) -> some View {
+        let gods = exit.rewardTargets.filter { Self.worldActionGodIDs.contains($0.id) }
+        let others = exit.rewardTargets.filter { !Self.worldActionGodIDs.contains($0.id) }
+        if exit.offersAnyReward(room) {
+            worldExitChoiceItem(
+                Hades2WorldExitChoice(room: room.id),
+                title: worldActionItemLabel(text("hades2.worldActions.anyReward"),
+                    warning: exit.isCurrentRoom(room.id) ? room.warning : nil),
+                enabled: true
+            )
+        }
+        if !gods.isEmpty {
+            Section(text("hades2.worldActions.gods")) {
+                ForEach(gods) { reward in
+                    worldExitChoiceItem(
+                        Hades2WorldExitChoice(room: room.id, reward: reward.id),
+                        title: worldActionItemLabel(worldActionRewardLabel(reward.id), enabled: reward.enabled,
+                            reason: reward.reason, warning: reward.warning),
+                        enabled: reward.enabled
+                    )
+                }
+            }
+        }
+        if !others.isEmpty {
+            Section(text("hades2.worldActions.rewards")) {
+                ForEach(others) { reward in
+                    worldExitChoiceItem(
+                        Hades2WorldExitChoice(room: room.id, reward: reward.id),
+                        title: worldActionItemLabel(worldActionRewardLabel(reward.id), enabled: reward.enabled,
+                            reason: reward.reason, warning: reward.warning),
+                        enabled: reward.enabled
+                    )
+                }
+            }
+        }
+    }
+
+    /// Target: a nested menu by room type (`Combat > Zeus`, `Story`, ...).
+    /// One choice sets the room type and the reward together (#832).
+    private func worldExitTargetMenu(_ exit: Hades2WorldExit?) -> some View {
+        let title: String
+        if let exit, let lease = exit.activeLease {
+            title = worldExitChoiceLabel(lease.choice, in: exit)
+        } else if let exit, let choice = model.selectedWorldExitChoice, exit.isEnabled(choice) {
+            title = worldExitChoiceLabel(choice, in: exit)
+        } else {
+            title = text("hades2.worldActions.noTarget")
+        }
+        return Menu {
+            if let exit {
+                ForEach(exit.roomTargets) { room in
+                    if room.acceptsReward {
+                        Menu {
+                            worldExitRewardItems(exit, room: room)
+                        } label: {
+                            // The door's own type warns about its reward rule
+                            // (an in-place edit); any other type about routing.
+                            Text(worldActionItemLabel(worldActionRoomLabel(room.id), enabled: room.enabled,
+                                reason: room.reason,
+                                warning: exit.isCurrentRoom(room.id) ? exit.rewardWarning : room.warning))
+                        }
+                        .disabled(!room.enabled)
+                    } else {
+                        worldExitChoiceItem(
+                            Hades2WorldExitChoice(room: room.id),
+                            title: worldActionItemLabel(worldActionRoomLabel(room.id), enabled: room.enabled,
+                                reason: room.reason, warning: room.warning),
+                            enabled: room.enabled
+                        )
+                    }
+                }
+            }
+        } label: {
+            Text(title)
+        }
+        .accessibilityLabel(text("hades2.worldActions.target"))
+        .accessibilityValue(title)
     }
 
     private var worldExitPanel: some View {
         let exit = model.selectedWorldExit
-        let rewardTargets = exit?.targets.filter { $0.kind == "reward" } ?? []
-        let godTargets = rewardTargets.filter { Self.worldActionGodIDs.contains($0.id) }
-        let ordinaryRewardTargets = rewardTargets.filter { !Self.worldActionGodIDs.contains($0.id) }
-        let routeTargets = exit?.targets.filter { $0.kind == "roomCategory" } ?? []
-        let leaseSelection = exit?.activeLease.map { $0.kind + ":" + $0.target }
         return TrainerDualPickerActionRow(
             title: text("hades2.worldActions.modifyExit"),
             icon: Hades2WorkbenchIcon.doorway,
@@ -1355,49 +1453,9 @@ struct Hades2TrainerView: View {
             .trainerPicker(.layoutAllocated, state: model.canSelectWorldExit ? .interactive : .unavailable)
             .accessibilityIdentifier("hades2.worldActions.currentExit")
         } secondPicker: {
-            Picker(
-                text("hades2.worldActions.target"),
-                selection: $model.selectedWorldExitTarget
-            ) {
-                if let lease = exit?.activeLease,
-                   !((exit?.targets ?? []).contains { $0.stableID == (leaseSelection ?? "") }) {
-                    Text(worldActionTargetLabel(kind: lease.kind, id: lease.target))
-                        .tag(lease.kind + ":" + lease.target)
-                }
-                if !godTargets.isEmpty {
-                    Section(text("hades2.worldActions.gods")) {
-                        ForEach(godTargets, id: \.stableID) { target in
-                            Text(worldActionTargetDisplay(target))
-                                .selectionDisabled(!target.enabled)
-                                .tag(target.stableID)
-                        }
-                    }
-                }
-                if !ordinaryRewardTargets.isEmpty {
-                    Section(text("hades2.worldActions.rewards")) {
-                        ForEach(ordinaryRewardTargets, id: \.stableID) { target in
-                            Text(worldActionTargetDisplay(target))
-                                .selectionDisabled(!target.enabled)
-                                .tag(target.stableID)
-                        }
-                    }
-                }
-                if !routeTargets.isEmpty {
-                    Section(text("hades2.worldActions.routes")) {
-                        ForEach(routeTargets, id: \.stableID) { target in
-                            Text(worldActionTargetDisplay(target))
-                                .selectionDisabled(!target.enabled)
-                                .tag(target.stableID)
-                        }
-                    }
-                }
-                if exit != nil && !((exit?.targets ?? []).contains { $0.enabled }) && exit?.activeLease == nil {
-                    Text(text("hades2.worldActions.noTarget")).tag("")
-                }
-            }
-            .labelsHidden()
-            .trainerPicker(.layoutAllocated, state: model.canSelectWorldExitTarget ? .interactive : .unavailable)
-            .accessibilityIdentifier("hades2.worldActions.target")
+            worldExitTargetMenu(exit)
+                .trainerPicker(.layoutAllocated, state: model.canSelectWorldExitTarget ? .interactive : .unavailable)
+                .accessibilityIdentifier("hades2.worldActions.target")
         } shortcut: {
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyWorldExit))
         } action: {

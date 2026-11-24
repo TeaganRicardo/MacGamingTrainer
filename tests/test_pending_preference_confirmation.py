@@ -124,11 +124,11 @@ class PendingResidentSession(FakeResidentSession):
             return
         if command == 'apply_world_exit':
             assert params['doorToken'] == 'exit:test:1'
-            assert params['kind'] == 'reward'
-            assert params['target'] == 'WeaponUpgrade'
+            assert params['room'] == 'combat'
+            assert params['reward'] == 'WeaponUpgrade'
             self.state['worldActions']['exits'][0]['activeLease'] = {
-                'kind': 'reward',
-                'target': 'WeaponUpgrade',
+                'room': 'combat',
+                'reward': 'WeaponUpgrade',
                 'leaseToken': 'lease:test:1',
             }
             return
@@ -306,15 +306,15 @@ adapter_reward.dispatch(
     'apply_world_exit',
     {
         'doorToken': 'exit:test:1',
-        'kind': 'reward',
-        'target': 'WeaponUpgrade',
+        'room': 'combat',
+        'reward': 'WeaponUpgrade',
     },
     'world-exit-apply',
 )
 lease = transport_reward.state['worldActions']['exits'][0]['activeLease']
 assert lease == {
-    'kind': 'reward',
-    'target': 'WeaponUpgrade',
+    'room': 'combat',
+    'reward': 'WeaponUpgrade',
     'leaseToken': 'lease:test:1',
 }
 assert adapter_reward.preferences['invincibility'] is True

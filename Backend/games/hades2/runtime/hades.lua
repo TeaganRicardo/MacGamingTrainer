@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 140 then
+if previousModule and previousModule.revision ~= 141 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 140 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 140,
+    version = 1, revision = 141,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -9567,10 +9567,11 @@ if __MacGamingTrainerV1 == nil then
     -- a changed token always forces a fresh, read-only probe.
     local targetCatalogs = setmetatable({}, { __mode = "k" })
     local nextIdentity, nextLease = 0, 0
-    local routeOrder = { "combat", "story", "shop", "reprieve", "miniboss" }
+    local routeOrder = { "combat", "miniboss", "story", "shop", "reprieve" }
     local rewardFields = {
       "Reward", "ChosenRewardType", "ForceLootName", "RewardOverrides",
       "RewardPreviewOverride", "ForcedReward", "RewardStoreName", "NeedsReward",
+      "DeferReward",
     }
 
     local function identity(value)
@@ -9865,6 +9866,21 @@ if __MacGamingTrainerV1 == nil then
       return not not result, usedRandom
     end
 
+    -- An exit's room types come from the region of the room the door already
+    -- leads to, so a region transition (native NextRoomSet) offers the next
+    -- region's rooms. A native anomaly swap (ChooseNextRoomData with
+    -- ForceNextRoomSet "Anomaly") is not the door's region: keep the source's.
+    local function regionFor(door, source, args)
+      local own = type(door.Room) == "table" and door.Room.RoomSetName or nil
+      if own ~= nil and own ~= "Anomaly" and type(RoomSets[own]) == "table" then return own end
+      return args.RoomSetName or source.RoomSetName or "F"
+    end
+
+    -- Every buildable room of the exit's region, bucketed by room type and by
+    -- named miniboss (#832). The game's own selection rules (eligibility,
+    -- forced progression, anomaly replacement) choose the preferred pool and
+    -- the warning; they never remove a room. A DebugOnly template or a room
+    -- whose native probe threw is not buildable.
     local function routeCandidatesWithDiagnostics(door, diagnostics)
       diagnostics = diagnostics or {}
       local function unavailable(reason)
@@ -9872,140 +9888,151 @@ if __MacGamingTrainerV1 == nil then
         return nil
       end
       if not editableDoor(door) then return unavailable("exit_not_editable") end
-      local safe, safetyReason = routeSourceSafe(door)
+      local _, safetyReason = routeSourceSafe(door)
       diagnostics.sourceSafety = safetyReason
-      if not safe then return unavailable("source_route_is_native_owned") end
       if type(RoomSets) ~= "table" then return unavailable("room_sets_unavailable") end
       if type(RoomData) ~= "table" then return unavailable("room_data_unavailable") end
-      if type(IsRoomEligible) ~= "function" then return unavailable("room_eligibility_unavailable") end
-      if type(IsRoomForced) ~= "function" then return unavailable("room_force_predicate_unavailable") end
-
       local source = currentSource()
-      local sourceData = type(RoomData[source.Name]) == "table" and RoomData[source.Name] or source
+      if type(source) ~= "table" then return unavailable("source_unavailable") end
       local args = type(door.ChooseRoomArgs) == "table" and door.ChooseRoomArgs or {}
-      local roomSetName = args.RoomSetName or source.RoomSetName or "F"
+      local roomSetName = regionFor(door, source, args)
       diagnostics.roomSetName = tostring(roomSetName)
       local roomSet = RoomSets[roomSetName]
       if type(roomSet) ~= "table" then return unavailable("room_set_unavailable") end
       diagnostics.roomSetCount = #roomSet
+      diagnostics.eligibilityUnavailable = type(IsRoomEligible) ~= "function" or nil
 
       local otherDoors = {}
-      local offeredDoors = nativeOfferedExitDoorArray()
       -- Native ChooseNextRoomData receives the complete collapsed exit array
       -- after positional UnavailableDoorIds have been removed. IsRoomForced
       -- may inspect a preassigned room in any remaining sibling slot,
       -- including a later slot. Exclude only this exact door so its existing
       -- destination cannot satisfy its own AlwaysForceOncePerRoom predicate.
-      for _, offered in ipairs(offeredDoors) do
+      for _, offered in ipairs(nativeOfferedExitDoorArray()) do
         if type(offered) == "table" and offered ~= door
             and type(offered.Room) == "table" then
           otherDoors[#otherDoors + 1] = offered
         end
       end
+      local function mark(field, name)
+        diagnostics[field] = diagnostics[field] or {}
+        diagnostics[field][name] = true
+      end
       local result = {}
       local inspected, eligibleCount, ineligibleCount = 0, 0, 0
-      local hardForcedRoom = nil
       for _, roomName in ipairs(roomSet) do
         local data = type(roomName) == "table" and roomName or RoomData[roomName]
-        if type(data) == "table" then
+        -- Rooms without a selectable type (a pre-boss, an intro) are still
+        -- probed: their forced progression warns every other type.
+        if type(data) == "table" and not data.DebugOnly then
+          local kind = routeKind(data.Name)
           inspected = inspected + 1
+          local name = tostring(data.Name)
           -- IsRoomEligible normalizes missing Tags in-place in the supported
           -- build. Probe a shallow descriptor copy so observation stays read-only.
           local probe = {}
           for key, value in pairs(data) do probe[key] = value end
-          local ok, eligible, usedRandom = pcall(
-            nativeProbeWithoutRNG, IsRoomEligible, CurrentRun, source, probe, copyProbeArgs(args)
-          )
-          if not ok then
-            local name = tostring(data.Name or roomName)
-            diagnostics.probeErrorRoom = name
-            diagnostics.probeError = string.sub(tostring(eligible), 1, 160)
-            diagnostics.probeErrorRooms = diagnostics.probeErrorRooms or {}
-            diagnostics.probeErrorRooms[name] = true
-            eligible = false
-          end
-          if usedRandom then
-            -- An opaque candidate is individually excluded. Never suppress
-            -- unrelated rooms because one eligibility probe uses native RNG.
-            local name = tostring(data.Name or roomName)
-            diagnostics.randomEligibilityRoom = name
-            diagnostics.randomEligibilityRooms = diagnostics.randomEligibilityRooms or {}
-            diagnostics.randomEligibilityRooms[name] = true
-            eligible = false
+          local eligible, failed, forced, anomaly = false, false, false, false
+          if not diagnostics.eligibilityUnavailable then
+            local ok, value, usedRandom = pcall(
+              nativeProbeWithoutRNG, IsRoomEligible, CurrentRun, source, probe, copyProbeArgs(args)
+            )
+            if not ok then
+              failed = true
+              diagnostics.probeErrorRoom = name
+              diagnostics.probeError = string.sub(tostring(value), 1, 160)
+              mark("probeErrorRooms", name)
+            elseif usedRandom then
+              -- Opaque eligibility is never sampled; the room stays buildable.
+              diagnostics.randomEligibilityRoom = name
+              mark("randomEligibilityRooms", name)
+            else
+              eligible = value and true or false
+            end
           end
           if eligible then
             eligibleCount = eligibleCount + 1
             if source.DoAnomalies and data.AllowAnomalyReplacement then
-              -- Native ChooseNextRoomData replaces this destination with the
-              -- Anomaly room set. It is not a selectable final destination.
-              local name = tostring(data.Name or roomName)
-              diagnostics.anomalyReplacementRooms = diagnostics.anomalyReplacementRooms or {}
-              diagnostics.anomalyReplacementRooms[name] = true
+              -- Native ChooseNextRoomData would swap this destination for the
+              -- Anomaly room set; a direct build skips that swap.
+              anomaly = true
+              mark("anomalyReplacementRooms", name)
             else
-              local forceOK, forced, forceUsesRandom = pcall(couldBeForced, probe, args, otherDoors)
+              local forceOK, value, forceUsesRandom = pcall(couldBeForced, probe, args, otherDoors)
               if not forceOK then
-                local name = tostring(data.Name or roomName)
+                failed = true
                 diagnostics.probeErrorRoom = name
-                diagnostics.probeError = string.sub(tostring(forced), 1, 160)
-                diagnostics.forceProbeErrorRooms = diagnostics.forceProbeErrorRooms or {}
-                diagnostics.forceProbeErrorRooms[name] = true
-              end
-              if forceOK and forceUsesRandom then
+                diagnostics.probeError = string.sub(tostring(value), 1, 160)
+                mark("forceProbeErrorRooms", name)
+              elseif forceUsesRandom then
                 -- A probabilistic native force is not a deterministic progress
                 -- lock. Do not advance native RNG merely to inspect the menu.
-                diagnostics.randomForceRoom = tostring(data.Name or roomName)
-                forced = false
-              end
-              if forceOK and forced then
-                -- Deterministic forced progression still takes precedence, but
-                -- inspect the entire set to expose the blocked alternatives.
-                hardForcedRoom = hardForcedRoom or tostring(data.Name or roomName)
-                diagnostics.forcedRoom = hardForcedRoom
-              end
-              local kind = forceOK and routeKind(data.Name) or nil
-              if kind ~= nil then
-                result[kind] = result[kind] or {}
-                result[kind][#result[kind] + 1] = data
-                if kind == "miniboss" then
-                  -- Exact locally defined miniboss rooms share the ordinary
-                  -- category reservation/late-commit owner.
-                  result[data.Name] = { data }
-                end
+                diagnostics.randomForceRoom = name
+              elseif value then
+                forced = true
+                diagnostics.forcedRoom = diagnostics.forcedRoom or name
               end
             end
-          else
+          elseif not failed then
             ineligibleCount = ineligibleCount + 1
+          end
+          local keys = { kind }
+          -- A named miniboss room is also its own exact target.
+          if kind == "miniboss" then keys[2] = name end
+          if kind == nil then keys = {} end
+          for _, key in ipairs(keys) do
+            local bucket = result[key]
+            if bucket == nil then
+              bucket = { all = {}, eligible = {}, forced = {}, anomaly = 0, probeErrors = 0 }
+              result[key] = bucket
+            end
+            if failed then
+              bucket.probeErrors = bucket.probeErrors + 1
+            else
+              bucket.all[#bucket.all + 1] = data
+              if eligible then bucket.eligible[#bucket.eligible + 1] = data end
+              if forced then bucket.forced[#bucket.forced + 1] = data end
+              if anomaly then bucket.anomaly = bucket.anomaly + 1 end
+            end
           end
         end
       end
-      local totalCandidates = 0
+      local function byName(a, b) return tostring(a.Name) < tostring(b.Name) end
+      for _, bucket in pairs(result) do
+        table.sort(bucket.all, byName)
+        table.sort(bucket.eligible, byName)
+        table.sort(bucket.forced, byName)
+      end
       diagnostics.candidateCountByCategory = {}
       for _, kind in ipairs(routeOrder) do
-        local candidates = result[kind] or {}
-        table.sort(candidates, function(a, b)
-          return tostring(a.Name) < tostring(b.Name)
-        end)
-        diagnostics.candidateCountByCategory[kind] = #candidates
-        totalCandidates = totalCandidates + #candidates
+        diagnostics.candidateCountByCategory[kind] = result[kind] and #result[kind].eligible or 0
       end
       diagnostics.inspectedRoomCount = inspected
       diagnostics.eligibleRoomCount = eligibleCount
       diagnostics.ineligibleRoomCount = ineligibleCount
-      diagnostics.candidateCount = totalCandidates
-      if hardForcedRoom ~= nil then
-        diagnostics.reason = "native_forced_room_present"
-        return nil
-      end
-      diagnostics.reason = totalCandidates > 0 and "available" or "no_native_eligible_route"
+      diagnostics.reason = "available"
       return result
     end
 
-    -- Preserve the established internal helper shape for native apply paths;
-    -- observation diagnostics use the richer companion below.
     local function routeCandidates(door)
       return routeCandidatesWithDiagnostics(door)
     end
 
+    -- The rooms a reservation builds from: native forced progression first,
+    -- then native-eligible rooms, then every buildable room of that type.
+    local function routeRooms(bucket)
+      if type(bucket) ~= "table" then return nil end
+      if #bucket.forced > 0 then return bucket.forced end
+      if #bucket.eligible > 0 then return bucket.eligible end
+      return bucket.all
+    end
+
+    -- Every reward this exit could hold (#832). The door's own pool comes
+    -- first, then its reference store, then the RunProgress and MetaProgress
+    -- pools. The game's own reward rules become a per-reward warning; only a
+    -- native probe that throws refuses a reward. Room-level rules of the
+    -- door's current room (NoReward, deferred, forced or fixed rewards) are
+    -- returned separately: they apply only to an in-place reward edit.
     local function rewardCandidatesWithDiagnostics(door, diagnostics)
       diagnostics = diagnostics or {}
       local room = editableDoor(door) and door.Room or nil
@@ -10031,16 +10058,17 @@ if __MacGamingTrainerV1 == nil then
       if locked == nil and (type(storeName) ~= "string" or storeName == "") then
         locked = "reward_store_name_missing"
       end
-      local referenceStore
-      if type(GetRewardStoreData) == "function" and type(storeName) == "string" then
-        local ok, source = pcall(GetRewardStoreData, storeName)
-        if ok and type(source) == "table" then referenceStore = source end
-      end
-      if referenceStore == nil and type(RewardStoreData) == "table" then
-        referenceStore = RewardStoreData[storeName]
-      end
       if locked == nil and type(currentStore) ~= "table" then
         locked = "reward_store_unavailable"
+      end
+      diagnostics.roomWarning = locked
+      local function referenceStore(name)
+        if type(name) ~= "string" or name == "" then return nil end
+        if type(GetRewardStoreData) == "function" then
+          local ok, value = pcall(GetRewardStoreData, name)
+          if ok and type(value) == "table" then return value end
+        end
+        return type(RewardStoreData) == "table" and RewardStoreData[name] or nil
       end
 
       local previously, excludedGods, siblingGods = {}, {}, {}
@@ -10094,17 +10122,16 @@ if __MacGamingTrainerV1 == nil then
 
       local result, byID = {}, {}
       local inspected, ineligible, randomDependent, probeErrors = 0, 0, 0, 0
-      local enabledCount, currentEligibleCount = 0, 0
+      local enabledCount, warnedCount, currentEligibleCount = 0, 0, 0
       local currentEligibleIDs = {}
       local function offer(reward, forceLootName, sourceKind)
         local id = forceLootName or reward.ForceLootName or reward.Name
         if type(id) ~= "string" or id == "" then return end
         inspected = inspected + 1
-        local problem = locked
-        if problem == nil and type(IsRoomRewardEligible) ~= "function" then
-          problem = "reward_eligibility_unavailable"
-        end
-        if problem == nil then
+        local refused, warning = nil, nil
+        if type(IsRoomRewardEligible) ~= "function" then
+          warning = "reward_eligibility_unavailable"
+        else
           local probe = {}
           for key, value in pairs(reward) do probe[key] = value end
           local ok, eligible, random = pcall(
@@ -10112,40 +10139,41 @@ if __MacGamingTrainerV1 == nil then
             IsRoomRewardEligible, CurrentRun, room, probe, previously, { Door = door }
           )
           if not ok then
-            problem = "reward_eligibility_probe_error"
+            refused = "reward_eligibility_probe_error"
             probeErrors = probeErrors + 1
             if diagnostics.probeError == nil then
               diagnostics.probeError = string.sub(tostring(eligible), 1, 160)
             end
           elseif random then
-            problem = "reward_eligibility_requires_rng"
+            warning = "reward_eligibility_requires_rng"
             randomDependent = randomDependent + 1
           elseif not eligible then
-            problem = "reward_not_available"
+            warning = "reward_not_available"
             ineligible = ineligible + 1
           end
         end
-        if problem == nil and forceLootName ~= nil then
+        if refused == nil and warning == nil and forceLootName ~= nil then
           if siblingGods[forceLootName] then
-            problem = "reward_not_available"
+            warning = "reward_not_available"
           elseif not godEligibilityKnown then
-            problem = godEligibilityReason or "god_eligibility_unavailable"
+            warning = godEligibilityReason or "god_eligibility_unavailable"
           elseif not eligibleGods[forceLootName] then
-            problem = godLimit and "god_limit" or "god_not_eligible"
+            warning = godLimit and "god_limit" or "god_not_eligible"
           end
         end
-        if problem == nil and sourceKind == "reference" and currentEligibleCount > 0 then
-          -- Native ChooseRoomReward only refills its current store after it has
-          -- no eligible entries. A different reward store is never a valid
-          -- fallback for this physical exit.
-          problem = "reward_not_in_current_store"
+        -- Native ChooseRoomReward refills only its own store, and only once
+        -- that store has no eligible entry; any other pool is off-pool.
+        if refused == nil and warning == nil and (sourceKind == "other"
+            or (sourceKind == "reference" and currentEligibleCount > 0)) then
+          warning = "reward_not_in_current_store"
         end
         local candidate = {
           id = id, rewardType = reward.Name,
           forceLoot = forceLootName or reward.ForceLootName,
-          reward = reward, enabled = problem == nil, reason = problem,
+          reward = reward, enabled = refused == nil, reason = refused, warning = warning,
         }
-        if sourceKind == "current" and candidate.enabled and not currentEligibleIDs[id] then
+        if sourceKind == "current" and refused == nil and warning == nil
+            and not currentEligibleIDs[id] then
           currentEligibleIDs[id] = true
           currentEligibleCount = currentEligibleCount + 1
         end
@@ -10153,14 +10181,15 @@ if __MacGamingTrainerV1 == nil then
         if old == nil then
           result[#result + 1] = candidate
           byID[id] = #result
-          if candidate.enabled then enabledCount = enabledCount + 1 end
-        elseif candidate.enabled and not result[old].enabled then
+        elseif (candidate.enabled and not result[old].enabled)
+            or (candidate.enabled and result[old].warning ~= nil and warning == nil) then
           result[old] = candidate
-          enabledCount = enabledCount + 1
         end
       end
+      local scanned = {}
       local function scan(store, sourceKind)
-        if type(store) ~= "table" then return end
+        if type(store) ~= "table" or scanned[store] then return end
+        scanned[store] = true
         for _, reward in ipairs(store) do
           if type(reward) == "table" and type(reward.Name) == "string"
               and reward.Name ~= "Story" and reward.Name ~= "Shop"
@@ -10174,7 +10203,14 @@ if __MacGamingTrainerV1 == nil then
         end
       end
       scan(currentStore, "current")
-      if referenceStore ~= currentStore then scan(referenceStore, "reference") end
+      scan(referenceStore(storeName), "reference")
+      for _, name in ipairs({ "RunProgress", "MetaProgress" }) do
+        if name ~= storeName then scan(referenceStore(name), "other") end
+      end
+      for _, candidate in ipairs(result) do
+        if candidate.enabled then enabledCount = enabledCount + 1 end
+        if candidate.warning ~= nil then warnedCount = warnedCount + 1 end
+      end
       diagnostics.currentStoreEligibleTargetCount = currentEligibleCount
       diagnostics.refillRequired = currentEligibleCount == 0 and type(currentStore) == "table"
       diagnostics.inspectedRewardCount = inspected
@@ -10182,43 +10218,25 @@ if __MacGamingTrainerV1 == nil then
       diagnostics.randomDependentRewardCount = randomDependent
       diagnostics.probeErrorCount = probeErrors
       diagnostics.candidateCount = enabledCount
+      diagnostics.warnedCandidateCount = warnedCount
       diagnostics.disabledCandidateCount = #result - enabledCount
-      if enabledCount > 0 then
-        diagnostics.reason = "available"
-      else
-        diagnostics.reason = locked or (probeErrors > 0 and "reward_eligibility_probe_error")
-          or (randomDependent > 0 and "reward_eligibility_requires_rng")
-          or "no_native_eligible_reward"
-      end
+      diagnostics.reason = enabledCount > 0 and "available"
+        or (probeErrors > 0 and "reward_eligibility_probe_error") or "no_reward_target"
       return result
     end
 
-        local function rewardCandidates(door)
+    local function rewardCandidates(door)
       return rewardCandidatesWithDiagnostics(door)
     end
 
-    local function roomUnavailableReason(data, routeReason, door, routeDiagnostics)
-      if routeReason ~= nil and routeReason ~= "available"
-          and routeReason ~= "no_native_eligible_route" then return routeReason end
+    -- Why native routing would not pick this room. A warning only (#832).
+    local function roomUnavailableReason(data, door, routeDiagnostics)
       routeDiagnostics = routeDiagnostics or {}
       local name = tostring(data.Name or "")
-      if routeDiagnostics.anomalyReplacementRooms
-          and routeDiagnostics.anomalyReplacementRooms[name] then
-        return "source_anomaly_replacement"
-      end
       if routeDiagnostics.randomEligibilityRooms
           and routeDiagnostics.randomEligibilityRooms[name] then
         return "room_eligibility_requires_rng"
       end
-      if routeDiagnostics.probeErrorRooms
-          and routeDiagnostics.probeErrorRooms[name] then
-        return "room_eligibility_probe_error"
-      end
-      if routeDiagnostics.forceProbeErrorRooms
-          and routeDiagnostics.forceProbeErrorRooms[name] then
-        return "room_force_probe_error"
-      end
-      if data.DebugOnly then return "room_debug_only" end
 
       local run = type(CurrentRun) == "table" and CurrentRun or {}
       local source = currentSource() or {}
@@ -10375,6 +10393,24 @@ if __MacGamingTrainerV1 == nil then
       return table.concat(parts, "|")
     end
 
+    -- The single warning shown on a room-type target (#832): the game's own
+    -- routing for this exit, then forced progression elsewhere, then why
+    -- native routing would not pick this type.
+    local function routeWarning(bucket, door, diagnostics)
+      if diagnostics.sourceSafety ~= nil and diagnostics.sourceSafety ~= "safe" then
+        return diagnostics.sourceSafety
+      end
+      if #bucket.eligible == 0 then
+        if diagnostics.eligibilityUnavailable then return "room_eligibility_unavailable" end
+        return roomUnavailableReason(bucket.all[1], door, diagnostics)
+      end
+      if diagnostics.forcedRoom ~= nil and #bucket.forced == 0 then
+        return "native_forced_room_present"
+      end
+      if bucket.anomaly >= #bucket.eligible then return "source_anomaly_replacement" end
+      return nil
+    end
+
     local function targetCatalogForDoor(door, doorToken, refresh, contextSignature)
       local cached = targetCatalogs[door]
       if not refresh and type(cached) == "table" and cached.doorToken == doorToken
@@ -10389,62 +10425,49 @@ if __MacGamingTrainerV1 == nil then
       }
       local enabledCount = 0
       for _, candidate in ipairs(rewardCandidatesWithDiagnostics(door, diagnostics.reward)) do
-        local enabled = candidate.enabled ~= false
         targets[#targets + 1] = {
-          kind = "reward", id = candidate.id,
-          enabled = enabled,
-          reason = enabled and nil or candidate.reason or "reward_not_available",
+          kind = "reward", id = candidate.id, enabled = candidate.enabled,
+          reason = candidate.reason, warning = candidate.warning,
         }
-        if enabled then enabledCount = enabledCount + 1 end
+        if candidate.enabled then enabledCount = enabledCount + 1 end
       end
       local routes = routeCandidatesWithDiagnostics(door, diagnostics.routes)
-      local source = currentSource()
-      local args = type(door.ChooseRoomArgs) == "table" and door.ChooseRoomArgs or {}
-      local roomSetName = args.RoomSetName
-        or (type(source) == "table" and source.RoomSetName) or "F"
-      local roomSet = type(RoomSets) == "table" and RoomSets[roomSetName] or nil
-      local categories, namedMinibosses = {}, {}
-      for _, roomName in ipairs(type(roomSet) == "table" and roomSet or {}) do
-        local data = type(roomName) == "table" and roomName
-          or (type(RoomData) == "table" and RoomData[roomName])
-        if type(data) == "table" then
-          local kind = routeKind(data.Name)
-          if kind ~= nil then
-            categories[kind] = categories[kind] or data
-            if kind == "miniboss" then namedMinibosses[data.Name] = data end
+      local currentKind = routeKind(door.Room.Name)
+      local currentListed = false
+      local function addRoom(id, bucket, acceptsReward)
+        local rooms = routeRooms(bucket)
+        local enabled = #rooms > 0
+        targets[#targets + 1] = {
+          kind = "roomCategory", id = id, enabled = enabled, acceptsReward = acceptsReward,
+          reason = not enabled and (bucket.probeErrors > 0
+            and "room_eligibility_probe_error" or "no_room_route") or nil,
+          warning = enabled and routeWarning(bucket, door, diagnostics.routes) or nil,
+        }
+        if enabled then enabledCount = enabledCount + 1 end
+        -- An in-place reward edit needs no buildable room, so a refused own
+        -- type still leaves "current" for it.
+        if enabled and (id == currentKind or id == door.Room.Name) then currentListed = true end
+      end
+      for _, kind in ipairs(type(routes) == "table" and routeOrder or {}) do
+        if routes[kind] ~= nil then
+          addRoom(kind, routes[kind], kind == "combat" or kind == "miniboss")
+          if kind == "miniboss" then
+            local names = {}
+            for key in pairs(routes) do
+              if key ~= kind and routeKind(key) == kind then names[#names + 1] = key end
+            end
+            table.sort(names)
+            for _, name in ipairs(names) do addRoom(name, routes[name], true) end
           end
         end
       end
-      local reason = diagnostics.routes.reason
-      if diagnostics.routes.sourceSafety ~= nil
-          and diagnostics.routes.sourceSafety ~= "safe" then
-        reason = diagnostics.routes.sourceSafety
-      end
-      for _, kind in ipairs(routeOrder) do
-        local example = categories[kind]
-        if example ~= nil then
-          local enabled = type(routes) == "table"
-            and type(routes[kind]) == "table" and #routes[kind] > 0
-          targets[#targets + 1] = {
-            kind = "roomCategory", id = kind,
-            enabled = enabled,
-            reason = enabled and nil or roomUnavailableReason(example, reason, door, diagnostics.routes),
-          }
-          if enabled then enabledCount = enabledCount + 1 end
-        end
-      end
-      local names = {}
-      for name in pairs(namedMinibosses) do names[#names + 1] = name end
-      table.sort(names)
-      for _, name in ipairs(names) do
-        local enabled = type(routes) == "table"
-          and type(routes[name]) == "table" and #routes[name] > 0
+      if not currentListed then
+        -- The door leads to a room type the region does not build (an intro,
+        -- a boss, a region transition). Its reward can still change in place.
         targets[#targets + 1] = {
-          kind = "roomCategory", id = name,
-          enabled = enabled,
-          reason = enabled and nil or roomUnavailableReason(namedMinibosses[name], reason, door, diagnostics.routes),
+          kind = "roomCategory", id = "current", enabled = true, acceptsReward = true,
         }
-        if enabled then enabledCount = enabledCount + 1 end
+        enabledCount = enabledCount + 1
       end
       diagnostics.targetCount = #targets
       diagnostics.enabledTargetCount = enabledCount
@@ -10459,17 +10482,18 @@ if __MacGamingTrainerV1 == nil then
       return targets, diagnostics
     end
 
-        local function rewardCandidate(door, target)
+    local function rewardCandidate(door, target)
       for _, candidate in ipairs(rewardCandidates(door)) do
         if candidate.id == target and candidate.enabled then return candidate end
       end
       return nil
     end
 
-    -- A category reservation has not selected a concrete room or reward yet.
-    -- Project only a native generic category icon; never display the first
-    -- eligible candidate's name, boon, NPC icon or reward as a false promise.
-    local function previewRoom(door, route)
+    -- A category reservation has not selected a concrete room yet. Project
+    -- the chosen reward, which the late commit forces, or else only a native
+    -- generic category icon; never display a candidate's name, boon, NPC icon
+    -- or reward as a false promise.
+    local function previewRoom(door, route, reward)
       local proxy = {}
       for key, value in pairs(door.Room) do proxy[key] = value end
       proxy.Reward = nil
@@ -10484,6 +10508,13 @@ if __MacGamingTrainerV1 == nil then
       proxy.Encounter = nil
       proxy.NextRoomSet = nil
       proxy.NextRoomSetNoGenerate = nil
+      if type(reward) == "table" then
+        proxy.Reward = reward.reward
+        proxy.ChosenRewardType = reward.rewardType
+        proxy.ForceLootName = reward.forceLoot
+        proxy.RewardPreviewOverride = nil
+        return proxy
+      end
       -- These three animation names are owned by the supported game's
       -- CreateDoorRewardPreview/RewardPresentation native renderer.
       proxy.RewardPreviewOverride = route == "shop" and "ShopPreview"
@@ -10539,9 +10570,9 @@ if __MacGamingTrainerV1 == nil then
 
     local function materializeRoute(run, door, lease)
       local routes = routeCandidates(door)
-      local candidates = type(routes) == "table" and routes[lease.target] or nil
+      local candidates = routeRooms(type(routes) == "table" and routes[lease.target] or nil)
       if type(candidates) ~= "table" or #candidates == 0 then
-        error("World exit route is no longer native-eligible")
+        error("World exit route has no buildable room")
       end
       local data = GetRandomValue(candidates)
       if type(data) ~= "table" then error("World exit route has no native destination") end
@@ -10572,7 +10603,21 @@ if __MacGamingTrainerV1 == nil then
           }
         end
       end
-      if not target.NoReward and not target.DeferReward and type(ChooseRoomReward) == "function" then
+      local chosen = lease.reward
+      if type(chosen) == "table" then
+        -- The player picked this reward with the room type: force it, as an
+        -- in-place reward edit does, whatever the new room's own rules say.
+        target.Reward = type(DeepCopyTable) == "function"
+          and DeepCopyTable(chosen.reward) or chosen.reward
+        target.ChosenRewardType = chosen.rewardType
+        target.ForceLootName = chosen.forceLoot
+        target.RewardOverrides = type(target.Reward) == "table" and target.Reward.Overrides or nil
+        target.RewardPreviewOverride = nil
+        target.DeferReward = nil
+        if type(SetupRoomReward) == "function" then
+          SetupRoomReward(run, target, previously, { Door = door })
+        end
+      elseif not target.NoReward and not target.DeferReward and type(ChooseRoomReward) == "function" then
         if type(storeName) ~= "string" then error("World exit reward store is unavailable") end
         target.ChosenRewardType = ChooseRoomReward(
           run, target, storeName, previously, { Door = door }
@@ -10606,7 +10651,7 @@ if __MacGamingTrainerV1 == nil then
             return original(door, ...)
           end
           local actual = door.Room
-          door.Room = previewRoom(door, lease.target)
+          door.Room = previewRoom(door, lease.target, lease.reward)
           local reply = table.pack(pcall(original, door, ...))
           door.Room = actual
           if not reply[1] then error(reply[2], 0) end
@@ -10657,9 +10702,9 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
-    local function leaseToken(doorToken, kind, target)
+    local function leaseToken(doorToken, roomID, rewardID)
       nextLease = nextLease + 1
-      return table.concat({ doorToken, kind, target, tostring(nextLease) }, ":")
+      return table.concat({ doorToken, roomID, rewardID or "", tostring(nextLease) }, ":")
     end
 
     local function snapshotReward(door)
@@ -10690,15 +10735,14 @@ if __MacGamingTrainerV1 == nil then
       refreshPreview(door)
     end
 
-    local function applyReward(door, target, doorToken)
-      local candidate = rewardCandidate(door, target)
-      if candidate == nil then error("World exit reward is not native-eligible") end
+    local function applyReward(door, candidate, doorToken, roomID)
       local lease = {
-        kind = "reward", target = target, doorToken = doorToken,
+        kind = "reward", target = candidate.id, room = roomID, rewardID = candidate.id,
+        doorToken = doorToken,
         run = CurrentRun, hero = currentHero(), sourceRoom = currentSource(),
         snapshot = snapshotReward(door),
       }
-      lease.leaseToken = leaseToken(doorToken, lease.kind, target)
+      lease.leaseToken = leaseToken(doorToken, roomID, candidate.id)
       local room = door.Room
       local reward = type(DeepCopyTable) == "function"
         and DeepCopyTable(candidate.reward) or candidate.reward
@@ -10706,6 +10750,10 @@ if __MacGamingTrainerV1 == nil then
       room.ChosenRewardType = candidate.rewardType
       room.ForceLootName = candidate.forceLoot
       room.RewardOverrides = type(reward) == "table" and reward.Overrides or nil
+      -- An explicit reward replaces the room's own preview override, and a
+      -- deferred reward would never spawn (native SpawnRoomReward skips it).
+      room.RewardPreviewOverride = nil
+      room.DeferReward = nil
       if type(SetupRoomReward) == "function" then
         SetupRoomReward(CurrentRun, room, {}, { Door = door })
       end
@@ -10722,17 +10770,16 @@ if __MacGamingTrainerV1 == nil then
       return lease
     end
 
-    local function applyRoute(door, target, doorToken)
-      local routes = routeCandidates(door)
-      if type(routes) ~= "table" or type(routes[target]) ~= "table"
-          or #routes[target] == 0 then error("World exit route is not native-eligible") end
+    local function applyRoute(door, roomID, reward, doorToken)
       installRouteHooks()
       local lease = {
-        kind = "roomCategory", target = target, doorToken = doorToken,
+        kind = "roomCategory", target = roomID, room = roomID,
+        reward = reward, rewardID = reward and reward.id or nil,
+        doorToken = doorToken,
         run = CurrentRun, hero = currentHero(), sourceRoom = currentSource(),
         originalRoom = door.Room, signature = routeSignature(door),
       }
-      lease.leaseToken = leaseToken(doorToken, lease.kind, target)
+      lease.leaseToken = leaseToken(doorToken, roomID, lease.rewardID)
       leases[door] = lease
       local ok, failure = pcall(refreshPreview, door)
       if not ok then
@@ -10743,30 +10790,36 @@ if __MacGamingTrainerV1 == nil then
       return lease
     end
 
+    -- One Apply carries a room type and an optional reward (#832). A reward
+    -- for the room type the door already leads to edits that room in place;
+    -- any other room type is a reservation built when the player walks
+    -- through. Only what cannot be built is refused.
     local function preflightApply(params)
       local door = findDoor(params.doorToken)
       if activeLease(door) ~= nil then error("World exit already has an active lease") end
-      if params.kind == "reward" then
-        if type(params.target) ~= "string" or rewardCandidate(door, params.target) == nil then
-          error("World exit reward is not native-eligible")
-        end
-      elseif params.kind == "roomCategory" then
-        local routes = routeCandidates(door)
-        if type(params.target) ~= "string" or type(routes) ~= "table"
-            or type(routes[params.target]) ~= "table" or #routes[params.target] == 0 then
-          error("World exit route is not native-eligible")
-        end
-      else
-        error("World exit target kind is invalid")
+      local roomID, rewardID = params.room, params.reward
+      if type(roomID) ~= "string" or roomID == "" then error("World exit target is invalid") end
+      local reward = nil
+      if rewardID ~= nil then
+        reward = type(rewardID) == "string" and rewardCandidate(door, rewardID) or nil
+        if reward == nil then error("World exit reward is unavailable") end
       end
-      return door
+      if reward ~= nil and (roomID == "current" or roomID == door.Room.Name
+          or roomID == routeKind(door.Room.Name)) then
+        return door, "reward", reward
+      end
+      if roomID == "current" then error("World exit target is invalid") end
+      local routes = routeCandidates(door)
+      local rooms = routeRooms(type(routes) == "table" and routes[roomID] or nil)
+      if type(rooms) ~= "table" or #rooms == 0 then error("World exit room type is unavailable") end
+      return door, "roomCategory", reward
     end
 
     local function apply(params)
-      local door = preflightApply(params)
+      local door, mode, reward = preflightApply(params)
       local doorToken = tokenFor(door)
-      if params.kind == "reward" then applyReward(door, params.target, doorToken)
-      else applyRoute(door, params.target, doorToken) end
+      if mode == "reward" then applyReward(door, reward, doorToken, params.room)
+      else applyRoute(door, params.room, reward, doorToken) end
     end
 
     local function preflightCancel(params)
@@ -10864,14 +10917,18 @@ if __MacGamingTrainerV1 == nil then
           local targets, targetDiagnostics = targetCatalogForDoor(
             door, doorToken, includeTargets == true, contextSignature
           )
+          -- What the door holds now, as the game reports it; an unbuilt
+          -- room-type reservation is reported only as the active lease.
           local row = {
             doorToken = doorToken, objectId = door.ObjectId,
             roomName = door.Room.Name,
+            roomKind = routeKind(door.Room.Name) or "",
             reward = door.Room.ForceLootName or door.Room.ChosenRewardType or "",
+            rewardWarning = targetDiagnostics.reward and targetDiagnostics.reward.roomWarning or nil,
             targets = targets,
             targetDiagnostics = targetDiagnostics,
             activeLease = type(lease) == "table" and {
-              kind = lease.kind, target = lease.target, leaseToken = lease.leaseToken,
+              room = lease.room, reward = lease.rewardID, leaseToken = lease.leaseToken,
             } or nil,
           }
           exits[#exits + 1] = row
@@ -11426,7 +11483,7 @@ if __MacGamingTrainerV1 == nil then
       mature_garden = { "scopeToken" },
       acquire_chaos_pair = { "blessing", "curse", "rarity", "level" },
       spawn_reward = { "reward", "rarity", "level" },
-      apply_world_exit = { "doorToken", "kind", "target" },
+      apply_world_exit = { "doorToken", "room", "reward" },
       cancel_world_exit = { "doorToken", "leaseToken" },
       apply_world_occurrence = { "target" },
       cancel_world_occurrence = { "leaseToken" },

@@ -190,6 +190,14 @@
       "englishValue": "Chaos Gate",
       "englishSource": "HelpText.en.sjson",
       "verification": "Same localization ID verified in supported Hades II 1.143476 / Steam 25481925."
+    },
+    "fountain": {
+      "value": "泉水",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "Fountain",
+      "englishValue": "Fountain",
+      "englishSource": "HelpText.en.sjson",
+      "verification": "Same localization ID verified in supported Hades II 1.143476 / Steam 25481925."
     }
   },
   "nativeChoiceTitles": {

@@ -56,7 +56,7 @@ contract = Hades2CommandContract(probe)
 
 contract.dispatch(
     "apply_world_exit",
-    {"doorToken": "exit:1:2:3:4:5", "kind": "reward", "target": "WeaponUpgrade"},
+    {"doorToken": "exit:1:2:3:4:5", "room": "combat", "reward": "WeaponUpgrade"},
     "world-exit-apply",
 )
 contract.dispatch(
@@ -76,8 +76,8 @@ contract.dispatch(
 )
 assert probe.calls == [
     ("apply_world_exit", {
-        "doorToken": "exit:1:2:3:4:5", "kind": "reward",
-        "target": "WeaponUpgrade", "requestId": "world-exit-apply",
+        "doorToken": "exit:1:2:3:4:5", "room": "combat",
+        "reward": "WeaponUpgrade", "requestId": "world-exit-apply",
     }),
     ("cancel_world_exit", {
         "doorToken": "exit:1:2:3:4:5", "leaseToken": "lease-1",
