@@ -257,7 +257,7 @@ assert state['infiniteMoney'] is True and a.preferences['infiniteMoney'] is True
 try:
     a.dispatch(
         'apply_world_exit',
-        {'doorToken':'exit:test:1','kind':'reward','target':'WeaponUpgrade'},
+        {'doorToken':'exit:test:1','room':'combat','reward':'WeaponUpgrade'},
         'offline-attempt',
     )
 except Hades2PresentationError as error:

@@ -141,16 +141,16 @@ CurrentRun.CurrentRoom.DoAnomalies = true
 RoomData.F_Combat01.AllowAnomalyReplacement = true
 local anomalyExit = exitByObject(1)
 local anomalyCombat = targetRow(anomalyExit, "roomCategory", "combat")
-assert(anomalyCombat and anomalyCombat.enabled == false
-    and anomalyCombat.reason == "source_anomaly_replacement",
-  "exact route picker bypassed native anomaly replacement")
+assert(anomalyCombat and anomalyCombat.enabled == true
+    and anomalyCombat.warning == "source_anomaly_replacement",
+  "a direct build that skips native anomaly replacement must warn, not refuse")
 CurrentRun.CurrentRoom.DoAnomalies = originalDoAnomalies
 RoomData.F_Combat01.AllowAnomalyReplacement = originalAnomalyFlag
 first, second = exitByObject(1), exitByObject(2)
 
 -- IsRoomRewardEligible calls native game-state requirements, which may count
--- checks and sample ChanceToPlay. Catalog inspection must do neither and must
--- hide rewards whose eligibility depends on native RNG.
+-- checks and sample ChanceToPlay. Catalog inspection must do neither; a reward
+-- whose eligibility depends on native RNG is offered with a warning (#832).
 local previousSession, nativeRewardEligible = SessionMapState, IsRoomRewardEligible
 local rewardUsesRandom = false
 SessionMapState = { RequirementChecksThisFrame = 17 }
@@ -171,18 +171,22 @@ assert(SessionMapState == observedSession
   "reward catalog inspection mutated native frame counters or RNG")
 rewardUsesRandom = true
 local randomReward = targetRow(exitByObject(1), "reward", "MaxHealthDrop")
-assert(randomReward ~= nil and randomReward.enabled == false
-    and randomReward.reason == "reward_eligibility_requires_rng",
-  "random-dependent native reward must remain visible but disabled")
-local randomRewardApply = pcall(function()
-  M.dispatch("apply_world_exit", {
-    doorToken = exitByObject(1).doorToken,
-    kind = "reward", target = "MaxHealthDrop",
-    requestId = "blocked-random-reward", includeCatalogs = true,
-  })
-end)
-assert(not randomRewardApply,
-  "a disabled reward must be rejected at the resident mutation seam")
+assert(randomReward ~= nil and randomReward.enabled == true
+    and randomReward.warning == "reward_eligibility_requires_rng",
+  "random-dependent native reward must be offered with a warning")
+local randomRewardReply = M.dispatch("apply_world_exit", {
+  doorToken = exitByObject(1).doorToken,
+  room = "current", reward = "MaxHealthDrop",
+  requestId = "warned-random-reward", includeCatalogs = true,
+})
+local randomRewardLease = randomRewardReply.worldActions.exits[1].activeLease
+assert(randomRewardLease ~= nil and randomRewardLease.reward == "MaxHealthDrop",
+  "a warned reward must apply")
+M.dispatch("cancel_world_exit", {
+  doorToken = randomRewardReply.worldActions.exits[1].doorToken,
+  leaseToken = randomRewardLease.leaseToken,
+  requestId = "cancel-warned-random-reward", includeCatalogs = true,
+})
 assert(SessionMapState == observedSession
     and SessionMapState.RequirementChecksThisFrame == 17
     and nativeRandomCalls == beforeRewardProbeRNG,
@@ -191,14 +195,14 @@ IsRoomRewardEligible = nativeRewardEligible
 SessionMapState = previousSession
 
 -- Native eligibility and force predicates are probed without advancing the
--- game's RNG. Random-dependent predicates fail closed for generic categories.
+-- game's RNG. A random-dependent predicate warns; the room stays buildable.
 probeEligibilityUsesRandom = true
 local beforeEligibilityProbe = nativeRandomCalls
 local eligibilityBlocked = exitByObject(1)
-assert(not targetExists(eligibilityBlocked, "roomCategory", "combat"))
-assert(targetRow(eligibilityBlocked, "roomCategory", "combat") ~= nil
-    and targetRow(eligibilityBlocked, "roomCategory", "combat").enabled == false,
-  "random-dependent room eligibility must retain a disabled category")
+assert(targetExists(eligibilityBlocked, "roomCategory", "combat")
+    and targetRow(eligibilityBlocked, "roomCategory", "combat").warning
+      == "room_eligibility_requires_rng",
+  "random-dependent room eligibility must warn, not disable")
 assert(eligibilityBlocked.targetDiagnostics.routes.randomEligibilityRoom ~= nil,
   "random-dependent room eligibility was not diagnosed")
 assert(nativeRandomCalls == beforeEligibilityProbe,
@@ -219,23 +223,28 @@ probeForceUsesRandom = false
 RoomData.F_Forced01.RandomForced = nil
 assert(targetExists(exitByObject(1), "roomCategory", "combat"))
 
--- A deterministic native forced room is a hard progression constraint.
--- Show alternatives disabled rather than removing them from the picker.
+-- A deterministic native forced room is forced progression. Every other
+-- room type warns about it and stays selectable (#832), even when the forced
+-- room has no selectable type of its own (a pre-boss).
 nativeRoomForced.F_Forced01 = true
 local hardForced = exitByObject(1)
-local disabledCombat = targetRow(hardForced, "roomCategory", "combat")
-assert(disabledCombat ~= nil and disabledCombat.enabled == false
-    and disabledCombat.reason == "native_forced_room_present",
-  "hard forced progression must keep alternatives visible and blocked")
-local forcedRouteApply = pcall(function()
-  M.dispatch("apply_world_exit", {
-    doorToken = hardForced.doorToken,
-    kind = "roomCategory", target = "combat",
-    requestId = "blocked-forced-route", includeCatalogs = true,
-  })
-end)
-assert(not forcedRouteApply,
-  "a disabled native forced route must be rejected by the resident")
+local warnedCombat = targetRow(hardForced, "roomCategory", "combat")
+assert(warnedCombat ~= nil and warnedCombat.enabled == true
+    and warnedCombat.warning == "native_forced_room_present",
+  "hard forced progression must warn on alternatives")
+assert(hardForced.targetDiagnostics.routes.forcedRoom == "F_Forced01")
+local forcedRouteReply = M.dispatch("apply_world_exit", {
+  doorToken = hardForced.doorToken, room = "combat",
+  requestId = "warned-forced-route", includeCatalogs = true,
+})
+local forcedRouteLease = forcedRouteReply.worldActions.exits[1].activeLease
+assert(forcedRouteLease ~= nil and forcedRouteLease.room == "combat",
+  "a warned route must apply")
+M.dispatch("cancel_world_exit", {
+  doorToken = forcedRouteReply.worldActions.exits[1].doorToken,
+  leaseToken = forcedRouteLease.leaseToken,
+  requestId = "cancel-warned-forced-route", includeCatalogs = true,
+})
 nativeRoomForced.F_Forced01 = nil
 
 -- Native ChooseNextRoomData receives the complete offered-door array.
@@ -247,13 +256,14 @@ RoomData.F_Story01.AlwaysForceOncePerRoom = true
 door2.Room = DeepCopyTable(RoomData.F_Story01)
 local forcedForFirst = exitByObject(1)
 local forcedForFirstTarget = targetRow(forcedForFirst, "roomCategory", "combat")
-assert(forcedForFirstTarget and forcedForFirstTarget.enabled == true,
+assert(forcedForFirstTarget and forcedForFirstTarget.enabled == true
+    and forcedForFirstTarget.warning == nil,
   "a later preassigned sibling room must suppress the same AlwaysForceOncePerRoom destination on this exit")
 
 door1.Room = DeepCopyTable(RoomData.F_Story01)
 local laterDoor = exitByObject(2)
 local laterCombat = targetRow(laterDoor, "roomCategory", "combat")
-assert(laterCombat and laterCombat.enabled == true,
+assert(laterCombat and laterCombat.enabled == true and laterCombat.warning == nil,
   "an earlier door's forced-once room incorrectly blocked the later door's other-room choices")
 
 door1.Room = originalForcedDoor1Room
@@ -270,14 +280,14 @@ local originalOffered1 = DeepCopyTable(CurrentRun.CurrentRoom.OfferedRewards[1])
 local originalOffered2 = DeepCopyTable(CurrentRun.CurrentRoom.OfferedRewards[2])
 local rewardReply = M.dispatch("apply_world_exit", {
   doorToken = first.doorToken,
-  kind = "reward",
-  target = "MaxHealthDrop",
+  room = "current",
+  reward = "MaxHealthDrop",
   requestId = "reward-exit-1",
   includeCatalogs = true,
 })
 local rewardLease = rewardReply.worldActions.exits[1].activeLease
-assert(type(rewardLease) == "table" and rewardLease.kind == "reward"
-    and rewardLease.target == "MaxHealthDrop"
+assert(type(rewardLease) == "table" and rewardLease.room == "current"
+    and rewardLease.reward == "MaxHealthDrop"
     and type(rewardLease.leaseToken) == "string")
 assert(door1.Room == originalRoom1 and door1.Room.ChosenRewardType == "MaxHealthDrop")
 assert(door2.Room == originalRoom2 and door2.Room.ChosenRewardType == "MaxManaDrop",
@@ -312,7 +322,7 @@ local function exerciseMissingNativeMaps(withSibling)
   source.ExitDoorRooms = nil
   local exit = exitByObject(1)
   local receipt = M.dispatch("apply_world_exit", {
-    doorToken = exit.doorToken, kind = "reward", target = "MaxHealthDrop",
+    doorToken = exit.doorToken, room = "current", reward = "MaxHealthDrop",
     requestId = "missing-maps-" .. tostring(withSibling), includeCatalogs = true,
   })
   local applied = receipt.worldActions.exits[1].activeLease
@@ -355,14 +365,13 @@ local offeredBefore1 = DeepCopyTable(sourceRoom.OfferedRewards[1])
 local previewsBefore = previewCalls
 local routeReply = M.dispatch("apply_world_exit", {
   doorToken = first.doorToken,
-  kind = "roomCategory",
-  target = "combat",
+  room = "combat",
   requestId = "route-exit-1",
   includeCatalogs = true,
 })
 local routeLease = routeReply.worldActions.exits[1].activeLease
-assert(type(routeLease) == "table" and routeLease.kind == "roomCategory"
-    and routeLease.target == "combat")
+assert(type(routeLease) == "table" and routeLease.room == "combat"
+    and routeLease.reward == nil)
 assert(nativeRandomCalls == drawsBefore
     and (CurrentRun.RoomCreations.F_Combat01 or 0) == combatCreationsBefore,
   "category Apply sampled or created a destination")
@@ -398,11 +407,11 @@ assert(exitByObject(1).activeLease == nil)
 -- departure invalidates its sibling lease.
 local firstNow, secondNow = exitByObject(1), exitByObject(2)
 local a = M.dispatch("apply_world_exit", {
-  doorToken = firstNow.doorToken, kind = "roomCategory", target = "combat",
+  doorToken = firstNow.doorToken, room = "combat",
   requestId = "route-a", includeCatalogs = true,
 })
 local b = M.dispatch("apply_world_exit", {
-  doorToken = secondNow.doorToken, kind = "roomCategory", target = "combat",
+  doorToken = secondNow.doorToken, room = "combat",
   requestId = "route-b", includeCatalogs = true,
 })
 assert(a.worldActions.exits[1].activeLease ~= nil)
@@ -448,8 +457,7 @@ setOccurrence("npc:Arachne", "occurrence-after-exits")
 local precedenceCreations = CurrentRun.RoomCreations.F_Combat01 or 0
 local precedenceReply = M.dispatch("apply_world_exit", {
   doorToken = precedenceExit.doorToken,
-  kind = "roomCategory",
-  target = "combat",
+  room = "combat",
   requestId = "route-with-room-occurrence",
   includeCatalogs = true,
 })
@@ -484,8 +492,8 @@ assert(cleanupDoor2.Room.Name == "F_Combat01"
   "fixture must generate a genuinely native-eligible ordinary sibling")
 local rewardLeaseReply = M.dispatch("apply_world_exit", {
   doorToken = cleanupExit2.doorToken,
-  kind = "reward",
-  target = "MaxHealthDrop",
+  room = "current",
+  reward = "MaxHealthDrop",
   requestId = "sibling-reward-lease",
   includeCatalogs = true,
 })
@@ -493,8 +501,7 @@ assert(cleanupDoor2.Room.ChosenRewardType == "MaxHealthDrop")
 local routeExit1 = exitByObject(1)
 M.dispatch("apply_world_exit", {
   doorToken = routeExit1.doorToken,
-  kind = "roomCategory",
-  target = "combat",
+  room = "combat",
   requestId = "commit-other-exit",
   includeCatalogs = true,
 })
@@ -514,7 +521,7 @@ rerollDoor.Room.ChosenRewardType = "RoomMoneyDrop"
 AssignRoomToExitDoor(rerollDoor, rerollDoor.Room)
 local beforeReroll = exitByObject(1)
 local pending = M.dispatch("apply_world_exit", {
-  doorToken = beforeReroll.doorToken, kind = "roomCategory", target = "combat",
+  doorToken = beforeReroll.doorToken, room = "combat",
   requestId = "route-before-reroll", includeCatalogs = true,
 })
 local staleLease = pending.worldActions.exits[1].activeLease.leaseToken
@@ -558,25 +565,29 @@ assert(exitByObject(1).doorToken ~= beforeNativeInPlace,
   "native reward ABA restored the obsolete exact-exit token")
 local obsoleteApply = pcall(function()
   M.dispatch("apply_world_exit", {
-    doorToken = beforeNativeInPlace, kind = "reward", target = "MaxHealthDrop",
+    doorToken = beforeNativeInPlace, room = "current", reward = "MaxHealthDrop",
     requestId = "obsolete-aba-apply", includeCatalogs = true,
   })
 end)
 assert(not obsoleteApply, "obsolete native reward token re-applied a world edit")
 
--- Linked/critical source routing remains native-owned and cannot be overridden
--- by a generic category reservation.
+-- Linked/critical source routing is the game's fixed route. Overriding it
+-- warns and stays selectable (#832).
 CurrentRun.CurrentRoom.LinkedRoom = "F_Combat01"
 local linked = exitByObject(1)
-assert(not targetExists(linked, "roomCategory", "combat"),
-  "linked native source incorrectly advertises generic route replacement")
-local linkedOk = pcall(function()
-  M.dispatch("apply_world_exit", {
-    doorToken = linked.doorToken, kind = "roomCategory", target = "combat",
-    requestId = "linked-route", includeCatalogs = true,
-  })
-end)
-assert(not linkedOk, "linked native source accepted a generic category override")
+assert(targetExists(linked, "roomCategory", "combat")
+    and targetRow(linked, "roomCategory", "combat").warning == "source_linked_destination",
+  "linked native source must warn on a room-type override")
+local linkedReply = M.dispatch("apply_world_exit", {
+  doorToken = linked.doorToken, room = "combat",
+  requestId = "linked-route", includeCatalogs = true,
+})
+M.dispatch("cancel_world_exit", {
+  doorToken = linkedReply.worldActions.exits[1].doorToken,
+  leaseToken = linkedReply.worldActions.exits[1].activeLease.leaseToken,
+  requestId = "cancel-linked-route", includeCatalogs = true,
+})
+CurrentRun.CurrentRoom.LinkedRoom = nil
 
 -- A native CreateRoom/Assign failure occurs after AttemptUseDoor has passed its
 -- eligibility/cost boundary. World Actions must fall back to the already
@@ -594,7 +605,7 @@ for _, injected in ipairs({ "create", "assign" }) do
   local previousCreated = CurrentRun.RoomCreations.F_Combat01 or 0
   local seen = exitByObject(1)
   M.dispatch("apply_world_exit", {
-    doorToken = seen.doorToken, kind = "roomCategory", target = "combat",
+    doorToken = seen.doorToken, room = "combat",
     requestId = "fault-" .. injected, includeCatalogs = true,
   })
   if injected == "create" then
@@ -633,11 +644,11 @@ setRoomSet("F")
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
 local cleanupFirst, cleanupSecond = MapState.OfferedExitDoors[1], MapState.OfferedExitDoors[2]
 M.dispatch("apply_world_exit", {
-  doorToken = exitByObject(1).doorToken, kind = "roomCategory", target = "combat",
+  doorToken = exitByObject(1).doorToken, room = "combat",
   requestId = "cleanup-first", includeCatalogs = true,
 })
 M.dispatch("apply_world_exit", {
-  doorToken = exitByObject(2).doorToken, kind = "roomCategory", target = "combat",
+  doorToken = exitByObject(2).doorToken, room = "combat",
   requestId = "cleanup-second", includeCatalogs = true,
 })
 local nativePreview = CreateDoorRewardPreview
@@ -694,17 +705,19 @@ local godExit = exitByObject(1)
 assert(targetExists(godExit, "reward", "ApolloUpgrade")
     and targetExists(godExit, "reward", "ZeusUpgrade"),
   "native Boon template did not enumerate distinct Olympian targets")
-assert(not targetRow(godExit, "reward", "MetaCurrencyDrop"),
-  "MetaProgress reward leaked into a RunProgress exit")
+local metaOffPool = targetRow(godExit, "reward", "MetaCurrencyDrop")
+assert(metaOffPool and metaOffPool.enabled == true
+    and metaOffPool.warning == "reward_not_in_current_store",
+  "a MetaProgress reward must be offered on a RunProgress exit with a warning")
 local offDeckHermes = targetRow(godExit, "reward", "HermesUpgrade")
-assert(offDeckHermes and offDeckHermes.enabled == false
-    and offDeckHermes.reason == "reward_not_in_current_store",
-  "reference-store-only reward must stay visible but disabled while native deck has choices")
+assert(offDeckHermes and offDeckHermes.enabled == true
+    and offDeckHermes.warning == "reward_not_in_current_store",
+  "reference-store-only reward must warn while the native deck has choices")
 local originalGodDoor = MapState.OfferedExitDoors[1]
 local originalGodRoom = originalGodDoor.Room
 local appliedGod = M.dispatch("apply_world_exit", {
-  doorToken = godExit.doorToken, kind = "reward",
-  target = "ApolloUpgrade", requestId = "specific-god",
+  doorToken = godExit.doorToken, room = "current",
+  reward = "ApolloUpgrade", requestId = "specific-god",
   includeCatalogs = true,
 })
 assert(originalGodDoor.Room == originalGodRoom
@@ -733,19 +746,27 @@ end
 assert(sparseExit and sparseExit.doorToken == stableDoorToken,
   "sibling reward mutation unexpectedly replaced the selected physical door token")
 local duplicateGod = targetRow(sparseExit, "reward", "ApolloUpgrade")
-assert(duplicateGod and duplicateGod.enabled == false
-    and duplicateGod.reason == "reward_not_available",
+assert(duplicateGod and duplicateGod.enabled == true
+    and duplicateGod.warning == "reward_not_available",
   "sparse status reused a stale catalog after a sibling god reward changed")
 assert(sawApolloExcluded,
   "native GetEligibleLootNames/ReachedMaxGods did not receive sibling-door exclusions")
-local duplicateGodApply = pcall(function()
-  M.dispatch("apply_world_exit", {
-    doorToken = exitByObject(1).doorToken,
-    kind = "reward", target = "ApolloUpgrade",
-    requestId = "blocked-duplicate-god", includeCatalogs = true,
-  })
-end)
-assert(not duplicateGodApply, "duplicate god target was accepted despite being greyed")
+local duplicateGodReply = M.dispatch("apply_world_exit", {
+  doorToken = exitByObject(1).doorToken,
+  room = "current", reward = "ApolloUpgrade",
+  requestId = "warned-duplicate-god", includeCatalogs = true,
+})
+local duplicateGodRow = nil
+for _, row in ipairs(duplicateGodReply.worldActions.exits) do
+  if row.objectId == 1 then duplicateGodRow = row end
+end
+assert(duplicateGodRow and duplicateGodRow.activeLease
+    and duplicateGodRow.activeLease.reward == "ApolloUpgrade",
+  "a god already on a sibling exit must still apply")
+M.dispatch("cancel_world_exit", {
+  doorToken = duplicateGodRow.doorToken, leaseToken = duplicateGodRow.activeLease.leaseToken,
+  requestId = "cancel-warned-duplicate-god", includeCatalogs = true,
+})
 CurrentRun.CurrentRoom.OfferedRewards[2] = nil
 local sparseAfterSiblingClear = sparseWorld()
 local restoredExit = nil
@@ -756,15 +777,15 @@ assert(restoredExit and targetExists(restoredExit, "reward", "ApolloUpgrade"),
   "sparse status failed to re-enable a god after its sibling reservation was removed")
 GetEligibleLootNames = function() return { "ApolloUpgrade" } end
 local unavailableGod = targetRow(exitByObject(1), "reward", "ZeusUpgrade")
-assert(unavailableGod and unavailableGod.enabled == false
-    and unavailableGod.reason == "god_not_eligible",
-  "unavailable god must remain in the catalog with a native reason")
+assert(unavailableGod and unavailableGod.enabled == true
+    and unavailableGod.warning == "god_not_eligible",
+  "a god unavailable this run must warn, not disable")
 CurrentRun.LootTypeHistory = { ApolloUpgrade = true }
 GetEligibleLootNames = function(excluded) return { "ApolloUpgrade" } end
 ReachedMaxGods = function(excluded) return true end
 local maxGod = targetRow(exitByObject(1), "reward", "ZeusUpgrade")
-assert(maxGod and maxGod.enabled == false and maxGod.reason == "god_limit",
-  "the native max-gods-per-run limit was not exposed as a disabled target")
+assert(maxGod and maxGod.enabled == true and maxGod.warning == "god_limit",
+  "the native max-gods-per-run limit must warn, not disable")
 CurrentRun.LootTypeHistory = {}
 ReachedMaxGods = function(excluded) return false end
 
@@ -773,7 +794,8 @@ ReachedMaxGods = function(excluded) return false end
 -- those refill candidates, but must never borrow a different store.
 CurrentRun.RewardStores.RunProgress = {}
 local refilled = exitByObject(1)
-assert(targetExists(refilled, "reward", "HermesUpgrade"),
+assert(targetExists(refilled, "reward", "HermesUpgrade")
+    and targetRow(refilled, "reward", "HermesUpgrade").warning == nil,
   "empty native RunProgress deck did not expose its own refill candidates")
 local metaRoom = originalGodDoor.Room
 local priorStoreName = metaRoom.RewardStoreName
@@ -811,48 +833,48 @@ DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
 local early = exitByObject(1)
 for _, name in ipairs({ "P_MiniBoss01", "P_MiniBoss02" }) do
   local choice = targetRow(early, "roomCategory", name)
-  assert(choice and choice.enabled == false
-      and choice.reason == "biome_depth_too_low",
-    "early P miniboss must be listed as disabled")
+  assert(choice and choice.enabled == true
+      and choice.warning == "biome_depth_too_low",
+    "early P miniboss must warn, not disable")
 end
 CurrentRun.BiomeDepthCache = 5
 local mature = exitByObject(1)
 assert(targetExists(mature, "roomCategory", "P_MiniBoss01")
+    and targetRow(mature, "roomCategory", "P_MiniBoss01").warning == nil
     and targetExists(mature, "roomCategory", "P_MiniBoss02"),
   "P minibosses were not enabled at native depth five")
 CurrentRun.RoomCreations.P_MiniBoss01 = 1
 local spent = targetRow(exitByObject(1), "roomCategory", "P_MiniBoss01")
-assert(spent and spent.enabled == false
-    and spent.reason == "max_creations_this_run",
-  "used-once P miniboss must remain visible and disabled")
+assert(spent and spent.enabled == true
+    and spent.warning == "max_creations_this_run",
+  "used-once P miniboss must warn, not disable")
 assert(targetExists(exitByObject(1), "roomCategory", "P_MiniBoss02"),
   "spent miniboss incorrectly blocked a different miniboss option")
 CurrentRun.RoomCreations.P_Story01 = 1
 local spentStory = targetRow(exitByObject(1), "roomCategory", "story")
-assert(spentStory and spentStory.enabled == false,
-  "one-per-run story destination must remain visible and disabled")
+assert(spentStory and spentStory.enabled == true and spentStory.acceptsReward == false
+    and spentStory.warning == "max_creations_this_run",
+  "one-per-run story destination must warn, not disable")
 
 RoomData.P_MiniBoss02.MaxCreationsPerRoom = 1
 CurrentRun.CurrentRoom.RoomCreations.P_MiniBoss02 = 1
 local perRoomLimit = targetRow(exitByObject(1), "roomCategory", "P_MiniBoss02")
-assert(perRoomLimit and perRoomLimit.enabled == false
-    and perRoomLimit.reason == "room_max_creations_per_room",
+assert(perRoomLimit and perRoomLimit.enabled == true
+    and perRoomLimit.warning == "room_max_creations_per_room",
   "per-room creation limit did not explain the disabled miniboss")
 RoomData.P_MiniBoss02.MaxCreationsPerRoom = nil
 CurrentRun.CurrentRoom.RoomCreations.P_MiniBoss02 = nil
 
 RoomData.P_MiniBoss02.RequiresLinked = true
 local linkedOnly = targetRow(exitByObject(1), "roomCategory", "P_MiniBoss02")
-assert(linkedOnly and linkedOnly.enabled == false
-    and linkedOnly.reason == "room_linked_route_required",
+assert(linkedOnly and linkedOnly.enabled == true
+    and linkedOnly.warning == "room_linked_route_required",
   "linked-room requirement did not explain the disabled target")
 RoomData.P_MiniBoss02.RequiresLinked = nil
 
 RoomData.P_MiniBoss02.DebugOnly = true
-local debugOnly = targetRow(exitByObject(1), "roomCategory", "P_MiniBoss02")
-assert(debugOnly and debugOnly.enabled == false
-    and debugOnly.reason == "room_debug_only",
-  "developer-only room was not retained with a disabled reason")
+assert(targetRow(exitByObject(1), "roomCategory", "P_MiniBoss02") == nil,
+  "a DebugOnly template is not a buildable room")
 RoomData.P_MiniBoss02.DebugOnly = nil
 
 local currentDoor1 = MapState.OfferedExitDoors[1]
@@ -860,14 +882,14 @@ local originalChooseArgs = currentDoor1.ChooseRoomArgs
 RoomData.P_MiniBoss02.Tags = { "Outdoor" }
 currentDoor1.ChooseRoomArgs = { RequireTags = { "Indoor" } }
 local requiredTags = targetRow(exitByObject(1), "roomCategory", "P_MiniBoss02")
-assert(requiredTags and requiredTags.enabled == false
-    and requiredTags.reason == "room_required_tags_missing",
+assert(requiredTags and requiredTags.enabled == true
+    and requiredTags.warning == "room_required_tags_missing",
   "required native room tags did not explain the disabled target")
 currentDoor1.ChooseRoomArgs = { OutdoorRequiresIndoorTag = true }
 CurrentRun.CurrentRoom.Tags = { "Outdoor" }
 local indoorOnly = targetRow(exitByObject(1), "roomCategory", "P_MiniBoss02")
-assert(indoorOnly and indoorOnly.enabled == false
-    and indoorOnly.reason == "room_requires_indoor",
+assert(indoorOnly and indoorOnly.enabled == true
+    and indoorOnly.warning == "room_requires_indoor",
   "outdoor-to-indoor route restriction did not explain the disabled target")
 currentDoor1.ChooseRoomArgs = originalChooseArgs
 CurrentRun.CurrentRoom.Tags = nil
@@ -876,8 +898,8 @@ RoomData.P_MiniBoss02.Tags = nil
 RoomData.P_Story01.MaxAppearancesThisRun = 1
 CurrentRun.RoomCountCache.P_Story01 = 1
 local seenStory = targetRow(exitByObject(1), "roomCategory", "story")
-assert(seenStory and seenStory.enabled == false
-    and seenStory.reason == "room_max_appearances_this_run",
+assert(seenStory and seenStory.enabled == true
+    and seenStory.warning == "room_max_appearances_this_run",
   "run-wide room appearance limit did not explain the disabled story room")
 RoomData.P_Story01.MaxAppearancesThisRun = nil
 CurrentRun.RoomCountCache.P_Story01 = nil

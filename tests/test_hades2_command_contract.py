@@ -479,13 +479,13 @@ assert probe.calls == [("set_chaos_gate_desired", 50.0)]
 probe.calls.clear()
 _, world_apply = dispatch_runtime(
     "apply_world_exit",
-    {"doorToken": "exit:1:2:3:4:5", "kind": "reward", "target": "WeaponUpgrade"},
+    {"doorToken": "exit:1:2:3:4:5", "room": "combat", "reward": "WeaponUpgrade"},
     "world-exit-apply",
 )
 assert world_apply == {
     "doorToken": "exit:1:2:3:4:5",
-    "kind": "reward",
-    "target": "WeaponUpgrade",
+    "room": "combat",
+    "reward": "WeaponUpgrade",
     "requestId": "world-exit-apply",
 }
 _, world_cancel = dispatch_runtime(
@@ -500,9 +500,27 @@ assert world_cancel == {
 }
 expect_error(
     "apply_world_exit",
-    {"doorToken": "", "kind": "reward", "target": "WeaponUpgrade"},
+    {"doorToken": "", "room": "combat", "reward": "WeaponUpgrade"},
     "World exit token is invalid or stale",
 )
+# #832: a room type alone is a complete target; the reward is optional.
+_, room_only = dispatch_runtime(
+    "apply_world_exit",
+    {"doorToken": "exit:1:2:3:4:5", "room": "story"},
+    "world-exit-room",
+)
+assert room_only == {
+    "doorToken": "exit:1:2:3:4:5",
+    "room": "story",
+    "requestId": "world-exit-room",
+}
+for invalid in (
+    {"doorToken": "exit:1", "reward": "WeaponUpgrade"},
+    {"doorToken": "exit:1", "room": "", "reward": "WeaponUpgrade"},
+    {"doorToken": "exit:1", "room": "combat", "reward": ""},
+    {"doorToken": "exit:1", "room": "combat", "reward": 3},
+):
+    expect_error("apply_world_exit", invalid, "World exit target is invalid")
 _, occurrence_apply = dispatch_runtime(
     "apply_world_occurrence",
     {"target": "npc:Nemesis"},

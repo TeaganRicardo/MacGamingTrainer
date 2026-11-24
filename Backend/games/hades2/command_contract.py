@@ -391,17 +391,20 @@ def _world_occurrence_cancel(raw):
 
 
 def _world_exit_apply(raw):
+    """One Apply carries a room type and, optionally, the reward behind it."""
     params = _params(raw)
     door_token = params.get("doorToken")
-    kind = params.get("kind")
-    target = params.get("target")
+    room = params.get("room")
+    reward = params.get("reward")
     if not isinstance(door_token, str) or not door_token or len(door_token) > 512:
         raise ValueError("World exit token is invalid or stale")
-    if kind not in ("reward", "roomCategory"):
-        raise ValueError("World exit target kind is invalid")
-    if not isinstance(target, str) or not target or len(target) > 256:
+    if not isinstance(room, str) or not room or len(room) > 256:
         raise ValueError("World exit target is invalid")
-    return {"doorToken": door_token, "kind": kind, "target": target}
+    if reward is None:
+        return {"doorToken": door_token, "room": room}
+    if not isinstance(reward, str) or not reward or len(reward) > 256:
+        raise ValueError("World exit target is invalid")
+    return {"doorToken": door_token, "room": room, "reward": reward}
 
 
 def _world_exit_cancel(raw):
