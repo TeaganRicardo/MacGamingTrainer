@@ -106,6 +106,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var feedbackDetailsNoticeID: UUID? { services.feedback.detailsNoticeID }
     var currentIssues: [TrainerCurrentIssue] { services.feedback.currentIssues }
     private var receiptPresentedDuringReply = false
+    private var presentedDataMigrationWarning = false
     @Published private(set) var receivedActionResultText: TrainerTextToken?
     @Published private(set) var runtimeIssuePresentations: [Hades2RuntimeIssuePresentation] = []
     private var runtimeFeatureErrors: [String: String] = [:]
@@ -439,6 +440,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             if scene == "main_menu" { return Hades2Presentation.token("hades2.status.mainMenu") }
             return Hades2Presentation.token("hades2.status.awaitingScene")
         case "not_running": return Hades2Presentation.token("hades2.status.notRunning")
+        case "not_installed": return Hades2Presentation.token("hades2.status.notInstalled")
         case "incompatible": return Hades2Presentation.token("hades2.status.incompatible")
         case "restart_required": return Hades2Presentation.token("hades2.status.restartRequired")
         case "backend_stopped": return Hades2Presentation.token("hades2.status.backendStopped")
@@ -844,7 +846,16 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             }
         }
         if patch.gardenScopeToken.isPresent { gardenScopeToken = patch.gardenScopeToken.value }
-        if patch.warningText.isPresent { warning = patch.warningText.value ?? "" }
+        if patch.warningText.isPresent {
+            let nextWarning = patch.warningText.value ?? ""
+            warning = nextWarning
+            if !presentedDataMigrationWarning,
+               nextWarning.split(separator: "\n").contains("hades2.warning.dataMigrationFailed") {
+                presentedDataMigrationWarning = true
+                services.feedback.suppressNextStatus()
+                presentFeedback(presentation("hades2.warning.dataMigrationFailed"), tone: .warning)
+            }
+        }
         if let receipt = patch.lastAction { presentActionReceipt(receipt) }
         if let value = patch.boons {
             let oldAcquisitionCapabilities = boons.map {

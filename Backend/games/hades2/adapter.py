@@ -154,7 +154,10 @@ class Hades2Adapter(GameAdapter):
                     'dormantFeatures':{},
                     'featureErrorPresentations':{},
                     'capabilities':disconnected_capabilities()}
-        migrate_legacy_root_data_dir(self.context.data_dir)
+        migration_failures = migrate_legacy_root_data_dir(self.context.data_dir)
+        self._startup_warnings = ['hades2.warning.dataMigrationFailed'] if migration_failures else []
+        if self._startup_warnings:
+            self.state['warnings'] = list(self._startup_warnings)
         self.preference_store=Hades2PreferenceStore(self.context.data_dir/'desired-state.json')
         self.preferences,self.preference_initialized=self.preference_store.load()
         self.preference_write_blocked=self.preference_store.write_blocked_error is not None
@@ -814,11 +817,15 @@ class Hades2Adapter(GameAdapter):
             version = str(identity['version'])
             self.state.update(
                 version=version if version.startswith('1.') else '1.' + version,
-                warnings=identity.get('warnings', []),
+                warnings=list(dict.fromkeys([*self._startup_warnings, *identity.get('warnings', [])])),
                 steamBuild=identity['steam_build'],
             )
-        except Exception:
-            self.state['status'] = 'incompatible'
+        except Exception as error:
+            self.state['status'] = (
+                'not_installed'
+                if getattr(error, 'code', None) == 'not_installed'
+                else 'incompatible'
+            )
             raise
 
         previous_pid = self.state.get('pid')

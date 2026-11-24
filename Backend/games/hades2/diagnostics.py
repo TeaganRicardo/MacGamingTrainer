@@ -133,7 +133,13 @@ def build_diagnostics(adapter):
             detail += ' · ' + '; '.join(map(str, warnings))
         add('gameBuild', 'hades2.diagnostics.check.gameBuild', identity.get('compatible') is True, detail)
     else:
-        add('gameBuild', 'hades2.diagnostics.check.gameBuild', False, identity_error)
+        add(
+            'gameBuild',
+            'hades2.diagnostics.check.gameBuild',
+            False,
+            getattr(identity_error, 'presentation', None) or identity_error,
+            detail_arguments=getattr(identity_error, 'arguments', None),
+        )
     try:
         names = localization.official_display_names({'WeaponUpgrade'}, 'zh-CN', game_path=game_dir)
         resolved = names.get('WeaponUpgrade')

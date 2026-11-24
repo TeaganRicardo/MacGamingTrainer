@@ -34,7 +34,6 @@ _ELIGIBILITY = StructuredSaveEligibility(
     editor_files=editor_files,
     is_source=lambda relative_path: profile_file_identity(relative_path) is not None,
 )
-_UNSET = object()
 
 
 _CATALOG = json.loads(Path(__file__).with_name('save_catalog.json').read_text())
@@ -238,9 +237,8 @@ class HadesSaveWorkspace:
                 'recoveryPaths': list(self.session.recovery_paths),
                 'recoveryUnresolved': self.session.recovery_unresolved}
 
-    def set_target(self, target, *, baseline_generation=_UNSET):
-        if baseline_generation is not _UNSET:
-            self._require_generation(baseline_generation)
+    def set_target(self, target, *, baseline_generation):
+        self._require_generation(baseline_generation)
         self.session.set_target(target)
         return self.summary()
 
@@ -701,9 +699,8 @@ class HadesSaveWorkspace:
         if language not in ('en', 'zh-CN'): raise ValueError('Unsupported editor language.')
         return self._plan(tuple(self.pending.values()), language)[1]
 
-    def apply(self, *, baseline_generation=_UNSET):
-        if baseline_generation is not _UNSET:
-            self._require_generation(baseline_generation)
+    def apply(self, *, baseline_generation):
+        self._require_generation(baseline_generation)
         if not self.pending: raise ValueError('There are no staged changes to apply.')
         candidate, _ = self._plan(tuple(self.pending.values()), 'en')
         result = self.session.apply(candidate)

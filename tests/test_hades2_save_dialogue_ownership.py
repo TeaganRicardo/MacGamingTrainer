@@ -1,13 +1,20 @@
 """Native dialogue reset authority must not derive from a recorded boolean."""
 
+import dataclasses
+import struct
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from games.hades2.save_document import LuaTable
+from core.adapter import GameAdapterContext
+from core.module_manifest import GameModuleManifest, SaveManagementSpec, SaveRootSpec
+from core.protocol import JsonlRequestRouter
+from games.hades2.adapter import Hades2Adapter
+from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2 import save_narrative
 from games.hades2.save_workspace import Hades2SaveWorkspace
 
@@ -209,5 +216,94 @@ except ValueError:
     pass
 else:
     raise AssertionError("ambiguous GameState dialogue owner was staged")
+
+# #821: DialogueWriteBlocked retains its specific error code (e.g. notResettable)
+# across JsonlRequestRouter rather than being flattened to invalid_request.
+with tempfile.TemporaryDirectory(prefix="mgt-821-dialogue-code-") as tmp:
+    temp_root = Path(tmp)
+    saves = temp_root / "saves"
+    saves.mkdir(parents=True)
+    profile = b"Profile1"
+    (saves / "activeProfile").write_bytes(b"SGB1" + struct.pack("<I", len(profile)) + profile)
+    doc_root = table([
+        ("GameState", table([
+            ("Resources", table([("MetaCurrency", 5.0)])),
+            ("GameplayTime", 10.0),
+            ("TotalTime", 20.0),
+            ("TextLinesRecord", table([(SAFE, True), (UNKNOWN, True)])),
+            ("GiftTextLinesOrderRecord", empty_gifts),
+            ("TextLinesChoiceRecord", choice_record),
+        ])),
+        ("CurrentRun", table([])),
+    ])
+    header = Hades2SaveHeader(
+        game_version=0x12,
+        save_flags=0,
+        timestamp=100,
+        location="Crossroads",
+        completed_runs=1,
+        accumulated_meta_points=0,
+        active_shrine_points=0,
+        meta_upgrade_level=0,
+        cosmetics_points=0,
+        easy_mode=0,
+        hard_mode=0,
+        notable_lua_data=("GameState", "CurrentRun"),
+        map_name="Hub_Main",
+        next_map_name="F_Opening01",
+    )
+    (saves / "Profile1.sav").write_bytes(Hades2SaveDocument(header, [doc_root]).to_bytes())
+    manifest = GameModuleManifest.load(ROOT / "Backend/games/hades2/module.json")
+    spec = SaveManagementSpec(
+        roots=(SaveRootSpec("main", str(saves), ("Profile*.sav", "activeProfile")),),
+        provider="games.hades2.save_provider:Hades2SaveProvider",
+        hot_backup=True,
+        restore_policy="hotPreferred",
+        staged_restore=True,
+    )
+    context = dataclasses.replace(
+        GameAdapterContext.from_manifest(manifest, home=temp_root / "home"),
+        save_management=spec,
+    )
+    stub_session = SimpleNamespace(
+        pid=None,
+        pending_resume_pid=None,
+        cleanup_pending=False,
+        alive=lambda: False,
+        close=lambda: None,
+        invalidate_generation=lambda: None,
+    )
+    adapter = Hades2Adapter(
+        context=context,
+        resident_session=stub_session,
+        time_warp_controller=object(),
+        game_path=temp_root / "AbsentHades2.app",
+    )
+    router = JsonlRequestRouter(
+        adapter,
+        save_data_root=temp_root / "router-data",
+        target_running_probe=lambda: False,
+    )
+    try:
+        opened = router.handle({"id": "open-1", "command": "save_editor_open", "params": {"language": "en"}})
+        assert opened["ok"] is True, opened
+        ws_id = opened["result"]["workspaceId"]
+        gen = opened["result"]["baselineGeneration"]
+        blocked_reply = router.handle({
+            "id": "stage-blocked-dialogue",
+            "command": "save_editor_stage",
+            "params": {
+                "workspaceId": ws_id,
+                "baselineGeneration": gen,
+                "entryId": "dialogueReset:" + UNKNOWN,
+                "operation": "set",
+                "value": False,
+                "language": "en",
+            },
+        })
+        assert blocked_reply["ok"] is False, blocked_reply
+        assert blocked_reply["error"]["code"] == "notResettable", blocked_reply
+    finally:
+        router.close()
 
 print("hades2_save_dialogue_ownership_ok")

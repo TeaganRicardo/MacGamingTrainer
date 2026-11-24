@@ -21,7 +21,14 @@ extension Hades2TrainerModel {
         } else {
             append("runtime", TrainerTextToken(key: runtimeIssue))
         }
-        append("warning", TrainerTextToken(key: warning))
+        let warningLines = warning.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+        if warningLines.count <= 1 {
+            append("warning", TrainerTextToken(key: warning))
+        } else {
+            for (index, line) in warningLines.enumerated() {
+                append(index == 0 ? "warning" : "warning.\(index)", TrainerTextToken(key: line))
+            }
+        }
         if status == "incompatible" {
             append("compatibility", TrainerTextToken(key: "hades2.status.unverifiedBanner"))
         } else if status == "restart_required" {

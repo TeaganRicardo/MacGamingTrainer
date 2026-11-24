@@ -19,6 +19,7 @@ from .config import (
     GAME_EXECUTABLE_NAME, GAME_SAVES, MODULE_MANIFEST, STEAM_MANIFEST,
     SUPPORTED_BUILD, resolve_game_install, steam_manifest_for_bundle,
 )
+from .error_presentation import Hades2PresentationError
 from .operation_budgets import PROCESS_QUERY_TIMEOUT_SECONDS, SUBPROCESS_TIMEOUT_SECONDS
 from .persistence import migrate_legacy_root_data_dir
 
@@ -140,6 +141,13 @@ def compatibility(strict=False, game_path=None, *, query_running=True):
     """Report version drift without blocking supported operations by default."""
     game, exe, steam = resolve_paths(game_path=game_path, query_running=query_running)
     info_path = game / 'Contents/Info.plist'
+    if not game.exists() or not info_path.is_file() or not exe.is_file():
+        raise Hades2PresentationError(
+            'not_installed',
+            'hades2.error.gameNotInstalled',
+            (DISPLAY_NAME,),
+            diagnostic=f'{DISPLAY_NAME} is not installed (expected at {game}).',
+        )
     cache_key = None
     try:
         cache_key = (
@@ -160,7 +168,11 @@ def compatibility(strict=False, game_path=None, *, query_running=True):
 
     info = plistlib.loads(info_path.read_bytes())
     version = info.get('CFBundleVersion')
-    match = re.search(r'"buildid"\s+"([0-9]+)"', steam.read_text())
+    try:
+        manifest_text = steam.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        manifest_text = ''
+    match = re.search(r'"buildid"\s+"([0-9]+)"', manifest_text)
     build = match.group(1) if match else None
     uuid = _uuid(exe)
     compatible = version == VERSION and build == STEAM_BUILD and uuid == UUID

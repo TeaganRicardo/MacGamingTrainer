@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.adapter import GameAdapterContext
 from core.module_manifest import GameModuleManifest
+from core.protocol import JsonlRequestRouter
 from core.target_probe import (
     AmbiguousTargetError,
     BoundedCommandTimeoutError,
@@ -542,5 +543,63 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-hades1-") as tmp:
             pass
         else:
             raise AssertionError("Hades I recovery process_identity timeout was swallowed")
+
+# 5. #821: Missing Hades II install surfaces not_installed / gameNotInstalled cleanly.
+class _MissingInstallController:
+    pass
+
+
+class _MissingInstallSession:
+    pid = None
+    pending_resume_pid = None
+    cleanup_pending = False
+
+    def alive(self):
+        return False
+
+    def close(self):
+        pass
+
+    def invalidate_generation(self):
+        pass
+
+
+preparation.invalidate_compatibility_cache()
+with tempfile.TemporaryDirectory(prefix="mgt-821-not-installed-") as tmp:
+    empty_home = Path(tmp)
+    empty_context = GameAdapterContext.from_manifest(HADES2_MANIFEST, home=empty_home)
+    not_installed_adapter = Hades2Adapter(
+        context=empty_context,
+        resident_session=_MissingInstallSession(),
+        time_warp_controller=_MissingInstallController(),
+    )
+    not_installed_router = JsonlRequestRouter(
+        not_installed_adapter,
+        save_data_root=empty_home / "data",
+        target_running_probe=lambda: False,
+    )
+    try:
+        with patch.dict(os.environ, {"HOME": str(empty_home)}), patch(
+            "games.hades2.preparation.locate_target", return_value=None
+        ), patch("games.hades2.adapter.locate_target", return_value=None):
+            reply = not_installed_router.handle(
+                {"id": "scan-not-installed", "command": "scan", "params": {}}
+            )
+            diag = diagnostics.build_diagnostics(not_installed_adapter)
+    finally:
+        not_installed_router.close()
+
+    assert reply["ok"] is False, reply
+    error = reply["error"]
+    assert error["code"] == "not_installed", error
+    assert error["presentation"] == "hades2.error.gameNotInstalled", error
+    assert error.get("arguments") == ["Hades II"], error
+    assert "FileNotFoundError" not in error.get("diagnostic", ""), error
+    assert "Info.plist" not in error.get("diagnostic", ""), error
+    assert reply["state"]["status"] == "not_installed", reply["state"]
+    game_build = next(row for row in diag["checks"] if row["id"] == "gameBuild")
+    assert game_build["ok"] is False, game_build
+    assert game_build["detail"] == "hades2.error.gameNotInstalled", game_build
+    assert game_build.get("detailArguments") == ["Hades II"], game_build
 
 print("target_locator_and_budgets_ok")

@@ -98,6 +98,24 @@ class StructuredSaveEditRecoveryError(PresentableError, ValueError):
             super().__init__(self.code, "host.save.error.recoveryUnresolved", diagnostic=diagnostic, message=diagnostic)
 
 
+class StructuredSaveEditWorkspaceLimitError(PresentableError, ValueError):
+    """All open Save Editor workspace slots are pinned by staged edits or unresolved recovery."""
+
+    code = "workspace_limit"
+
+    def __init__(self) -> None:
+        diagnostic = (
+            "Save Editor open workspace limit reached while existing workspaces have "
+            "unsaved edits or unresolved recovery. Close an existing Save Editor window first."
+        )
+        super().__init__(
+            self.code,
+            "host.save.error.workspaceLimit",
+            diagnostic=diagnostic,
+            message=diagnostic,
+        )
+
+
 @dataclass(frozen=True)
 class StructuredSaveEligibility:
     """Game-owned save file eligibility, source validation, and default-source selection."""
@@ -527,6 +545,19 @@ class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
         if callable(close_fn):
             close_fn()
 
+    @staticmethod
+    def _is_protected(workspace: object) -> bool:
+        if getattr(workspace, "pending", None) or getattr(workspace, "_pending", None):
+            return True
+        if getattr(workspace, "recovery_unresolved", False):
+            return True
+        session = getattr(workspace, "session", None)
+        if session is None:
+            session = getattr(workspace, "_session", None)
+        if session is not None and getattr(session, "recovery_unresolved", False):
+            return True
+        return False
+
     def clear(self) -> None:
         while self._workspaces:
             _identifier, workspace = self._workspaces.popitem(last=False)
@@ -553,6 +584,10 @@ class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
 
     def open(self, params: Optional[Mapping[str, Any]] = None, *, language: Optional[str] = None) -> dict[str, Any]:
         service = self._require_save_service()
+        if len(self._workspaces) >= self._max_open and not any(
+            not self._is_protected(existing) for existing in self._workspaces.values()
+        ):
+            raise StructuredSaveEditWorkspaceLimitError()
         raw = params or {}
         workspace = self._open_workspace(
             service,
@@ -570,7 +605,14 @@ class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
             self._close_workspace(workspace)
             raise
         while len(self._workspaces) >= self._max_open:
-            _evicted_id, evicted = self._workspaces.popitem(last=False)
+            evict_id = next(
+                (wid for wid, existing in self._workspaces.items() if not self._is_protected(existing)),
+                None,
+            )
+            if evict_id is None:
+                self._close_workspace(workspace)
+                raise StructuredSaveEditWorkspaceLimitError()
+            evicted = self._workspaces.pop(evict_id)
             self._close_workspace(evicted)
 
         self._workspaces[workspace_id] = workspace

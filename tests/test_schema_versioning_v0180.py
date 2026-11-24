@@ -1,8 +1,10 @@
 import json
 import logging
+import os
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
@@ -284,6 +286,80 @@ try:
     (legacy_root / 'desired-state.json').write_text(json.dumps(dict(loaded, invincibility=False)), encoding='utf-8')
     mig_adapter_reload = Hades2Adapter(context=mig_context, transport=FutureSchemaTransport())
     assert mig_adapter_reload.preferences['invincibility'] is True
+
+    # #821: OSError / PermissionError during legacy migration leaves files in place,
+    # logs one warning, sets hades2.warning.dataMigrationFailed, and lets Hades2Adapter keep running.
+    fail_context = hades2_adapter_context(base / 'migration-failure')
+    fail_legacy_root = fail_context.data_dir.parent
+    fail_legacy_root.mkdir(parents=True, exist_ok=True)
+    fail_desired = fail_legacy_root / 'desired-state.json'
+    fail_desired.write_text(json.dumps(dict(loaded, invincibility=True)), encoding='utf-8')
+    fail_desired_bytes = fail_desired.read_bytes()
+    fail_legacy_profiles = Hades2ProfileService(fail_legacy_root / 'profiles')
+    fail_legacy_profiles.save('blocked-preset', legacy_desired, {'invincibility': {'keyCode': 18, 'modifiers': 6144, 'keyLabel': '1'}})
+    fail_profile_path = fail_legacy_profiles.path('blocked-preset')
+    fail_profile_bytes = fail_profile_path.read_bytes()
+
+    captured_warnings = []
+
+    class _CaptureWarningHandler(logging.Handler):
+        def emit(self, record):
+            if record.levelno >= logging.WARNING:
+                captured_warnings.append(record.getMessage())
+
+    handler = _CaptureWarningHandler()
+    root_logger = logging.getLogger()
+    root_logger.addHandler(handler)
+    logging.disable(logging.NOTSET)
+    try:
+        real_replace = os.replace
+
+        def deny_legacy_replace(src, dst):
+            if str(fail_legacy_root) in str(src):
+                raise PermissionError(13, 'Permission denied', str(src))
+            return real_replace(src, dst)
+
+        with patch('games.hades2.persistence.os.replace', side_effect=deny_legacy_replace):
+            fail_adapter = Hades2Adapter(context=fail_context, transport=FutureSchemaTransport())
+    finally:
+        logging.disable(logging.CRITICAL)
+        root_logger.removeHandler(handler)
+
+    assert len(captured_warnings) == 1, captured_warnings
+    assert fail_desired.read_bytes() == fail_desired_bytes
+    assert fail_profile_path.read_bytes() == fail_profile_bytes
+    assert not (fail_context.data_dir / 'desired-state.json').exists()
+    assert not (fail_context.data_dir / 'profiles' / 'blocked-preset.json').exists()
+    assert fail_adapter.state['warnings'] == ['hades2.warning.dataMigrationFailed']
+    with patch('games.hades2.adapter.locate_target', return_value=None), patch(
+        'games.hades2.preparation.compatibility',
+        return_value={
+            'compatible': True,
+            'version': '143476',
+            'steam_build': '25481925',
+            'warnings': ['hades2.warning.dataMigrationFailed'],
+        },
+    ):
+        scanned = fail_adapter.scan()
+    assert scanned['warnings'] == ['hades2.warning.dataMigrationFailed']
+
+    # Real filesystem permission check: read-only legacy profiles/ while target hades2/profiles/ exists.
+    if os.geteuid() != 0:
+        ro_context = hades2_adapter_context(base / 'migration-readonly')
+        ro_legacy_root = ro_context.data_dir.parent
+        (ro_context.data_dir / 'profiles').mkdir(parents=True, exist_ok=True)
+        ro_profiles = Hades2ProfileService(ro_legacy_root / 'profiles')
+        ro_profiles.save('ro-preset', legacy_desired, {'invincibility': {'keyCode': 18, 'modifiers': 6144, 'keyLabel': '1'}})
+        ro_profile_path = ro_profiles.path('ro-preset')
+        ro_dir = ro_legacy_root / 'profiles'
+        os.chmod(ro_dir, 0o555)
+        try:
+            ro_adapter = Hades2Adapter(context=ro_context, transport=FutureSchemaTransport())
+        finally:
+            os.chmod(ro_dir, 0o755)
+        assert ro_profile_path.is_file()
+        assert not (ro_context.data_dir / 'profiles' / 'ro-preset.json').exists()
+        assert ro_adapter.state['warnings'] == ['hades2.warning.dataMigrationFailed']
 finally:
     logging.disable(logging.NOTSET)
 
