@@ -8,10 +8,10 @@ to receive the complete Lua tree just to browse or search it.
 import json
 import math
 from pathlib import Path
-import uuid
 from types import SimpleNamespace
 
 from core.errors import PresentableError
+from core.save_editor import CoreSaveWorkspace
 from core.structured_save_edit import StructuredSaveEditSession, StructuredSaveEligibility
 
 from . import save_advanced, save_container, save_equipment, save_history, save_long_term, save_narrative, save_relationships, save_quest_rewards
@@ -186,31 +186,29 @@ def _json_scalar(value):
     return None
 
 
-class Hades2SaveWorkspace:
+class Hades2SaveWorkspace(CoreSaveWorkspace):
     """One semantic workspace with independent, explicitly selected source/target."""
 
-    __slots__ = ("_session", "_preview_document", "_game_path", "_pending", "_investigation", "_presentation_language", "profile", "identifier", "baseline_generation")
+    __slots__ = ("_preview_document", "_game_path", "_investigation", "_presentation_language", "profile")
 
     def __init__(self, session, profile, game_path=None):
-        self._session = session
+        super().__init__(
+            session,
+            stale_baseline_error=lambda: save_advanced.AdvancedMutationError(
+                "Save Editor document baseline is stale; refresh before editing.", conflict=True
+            ),
+        )
         self._preview_document = None
         self._game_path = game_path
-        self._pending = {}
         self._investigation = None
         self._presentation_language = "en"
         self.profile = profile
-        self.identifier = uuid.uuid4().hex
-        self.baseline_generation = uuid.uuid4().hex
-
-    @property
-    def relative_path(self):
-        return self._session.relative_path
 
     @property
     def document(self):
         if self._preview_document is not None:
             return self._preview_document
-        return self._session.document
+        return self.session.document
 
     @classmethod
     def inventory(cls, save_service, snapshot_id=None):
@@ -1140,77 +1138,66 @@ class Hades2SaveWorkspace:
             "items": rows[offset:offset + limit],
         }
 
-    def require_baseline(self, generation):
-        if generation != self.baseline_generation:
-            raise save_advanced.AdvancedMutationError(
-                "Save Editor document baseline is stale; refresh before editing.", conflict=True)
-
     def summary(self):
-        return {
-            "profile": self.profile,
-            "workspaceId": self.identifier,
-            "baselineGeneration": self.baseline_generation,
-            "relativePath": self.relative_path,
-            "source": dict(self._session.source),
-            "sourceSHA256": self._session.source_sha256,
-            "target": self._session.target,
-            "recoveryPath": self._session.recovery_path,
-            "recoveryPaths": list(self._session.recovery_paths),
-            "recoveryUnresolved": self._session.recovery_unresolved,
-            "domains": list(SAVE_EDITOR_DOMAINS),
-            "pendingCount": len(self._pending),
-            "coverage": [
-                {
-                    "id": "resources",
-                    "discoverability": "supported",
-                    "understanding": "supported",
-                    "write": "supported",
-                    "reasonCode": "verifiedDescriptors",
-                },
-                {
-                    "id": "playerHistory",
-                    "discoverability": "partial",
-                    "understanding": "partial",
-                    "write": "partial",
-                    "reasonCode": "playerHistoryPartial",
-                },
-                {
-                    "id": "narrative",
-                    "discoverability": "supported",
-                    "understanding": "partial",
-                    "write": "partial",
-                    "reasonCode": "narrativePartial",
-                },
-                {
-                    "id": "relationships",
-                    "discoverability": "supported",
-                    "understanding": "partial",
-                    "write": "partial",
-                    "reasonCode": "relationshipsPartial",
-                },
-                {
-                    "id": "progression",
-                    "discoverability": "supported",
-                    "understanding": "partial",
-                    "write": "partial",
-                    "reasonCode": "progressionPartial",
-                },
-                {
-                    "id": "equipment",
-                    "discoverability": "supported",
-                    "understanding": "partial",
-                    "write": "partial",
-                    "reasonCode": "equipmentPartial",
-                },
-                {
-                    "id": "unknown",
-                    "discoverability": "supported",
-                    "understanding": "partial",
-                    "write": "supported",
-                    "reasonCode": "typedAdvanced",
-                },
-            ],
-        }
+        return self.summary_envelope(
+            domains=list(SAVE_EDITOR_DOMAINS),
+            extra={
+                "profile": self.profile,
+                "relativePath": self.relative_path,
+                "pendingCount": len(self._pending),
+                "coverage": [
+                    {
+                        "id": "resources",
+                        "discoverability": "supported",
+                        "understanding": "supported",
+                        "write": "supported",
+                        "reasonCode": "verifiedDescriptors",
+                    },
+                    {
+                        "id": "playerHistory",
+                        "discoverability": "partial",
+                        "understanding": "partial",
+                        "write": "partial",
+                        "reasonCode": "playerHistoryPartial",
+                    },
+                    {
+                        "id": "narrative",
+                        "discoverability": "supported",
+                        "understanding": "partial",
+                        "write": "partial",
+                        "reasonCode": "narrativePartial",
+                    },
+                    {
+                        "id": "relationships",
+                        "discoverability": "supported",
+                        "understanding": "partial",
+                        "write": "partial",
+                        "reasonCode": "relationshipsPartial",
+                    },
+                    {
+                        "id": "progression",
+                        "discoverability": "supported",
+                        "understanding": "partial",
+                        "write": "partial",
+                        "reasonCode": "progressionPartial",
+                    },
+                    {
+                        "id": "equipment",
+                        "discoverability": "supported",
+                        "understanding": "partial",
+                        "write": "partial",
+                        "reasonCode": "equipmentPartial",
+                    },
+                    {
+                        "id": "unknown",
+                        "discoverability": "supported",
+                        "understanding": "partial",
+                        "write": "supported",
+                        "reasonCode": "typedAdvanced",
+                    },
+                ],
+            },
+        )
 
     def _descriptor(self, entry_id):
         if not isinstance(entry_id, str) or not entry_id:
@@ -1530,21 +1517,17 @@ class Hades2SaveWorkspace:
                     if save_container.is_id(entry_id) else save_advanced.normalize_set(descriptor, value))
                 no_change = descriptor["beforePresent"] and save_advanced.same_typed_value(
                     descriptor["typedBefore"], typed_after, container=save_container.is_id(entry_id))
-            snapshot = dict(self._pending)
-            if no_change and not self._overlaps_pending_transaction(descriptor):
-                self._pending.pop(entry_id, None)
-            else:
-                self._pending[entry_id] = {
-                    **{key: descriptor[key] for key in ("id", "domain", "rawId", "path", "before", "beforePresent", "typedBefore")},
-                    "operation": operation, "after": after, "typedAfter": typed_after,
-                    "afterPresent": operation != "unset",
-                }
-            try:
-                return self.review(language=language)
-            except Exception:
-                self._pending.clear()
-                self._pending.update(snapshot)
-                raise
+            def update():
+                if no_change and not self._overlaps_pending_transaction(descriptor):
+                    self._pending.pop(entry_id, None)
+                else:
+                    self._pending[entry_id] = {
+                        **{key: descriptor[key] for key in ("id", "domain", "rawId", "path", "before", "beforePresent", "typedBefore")},
+                        "operation": operation, "after": after, "typedAfter": typed_after,
+                        "afterPresent": operation != "unset",
+                    }
+
+            return self._mutate_pending(update, lambda: self.review(language=language))
         if descriptor["domain"] == "questRewards":
             value = save_quest_rewards.validate(descriptor, operation, value)
         elif descriptor["domain"] == "history":
@@ -1589,44 +1572,33 @@ class Hades2SaveWorkspace:
                         )
                     value = float(value)
         before = descriptor["before"]
-        snapshot = dict(self._pending)
         no_change = (save_narrative.is_noop(self.document.lua_state, descriptor, value)
                      if descriptor["domain"] in ("flags", "dialogue", "progression", "questObservation", "speechHistory")
                      and entry_id.startswith(("flag:", "dialogue:", "dialogueReset:", "dialogueChoice:", "quest:", "questObservation:", "speech:"))
                      else value == before)
-        if no_change and descriptor.get("beforePresent", True) and not self._overlaps_pending_transaction(descriptor):
-            self._pending.pop(entry_id, None)
-        else:
-            self._pending[entry_id] = {
-                "id": descriptor["id"],
-                "domain": descriptor["domain"],
-                "rawId": descriptor["rawId"],
-                "path": descriptor["path"],
-                "operation": operation,
-                "before": before,
-                "after": value,
-                **({"ownerEvidence": descriptor["ownerEvidence"]} if descriptor["domain"] == "questRewards" else {}),
-                **({"beforePresent": descriptor["beforePresent"]} if descriptor["domain"] in ("history", "resources") else {}),
-            }
-        try:
-            return self.review(language=language)
-        except Exception:
-            # A rejected preview must not leave an invisible pending mutation.
-            self._pending.clear()
-            self._pending.update(snapshot)
-            raise
+        def update():
+            if no_change and descriptor.get("beforePresent", True) and not self._overlaps_pending_transaction(descriptor):
+                self._pending.pop(entry_id, None)
+            else:
+                self._pending[entry_id] = {
+                    "id": descriptor["id"],
+                    "domain": descriptor["domain"],
+                    "rawId": descriptor["rawId"],
+                    "path": descriptor["path"],
+                    "operation": operation,
+                    "before": before,
+                    "after": value,
+                    **({"ownerEvidence": descriptor["ownerEvidence"]} if descriptor["domain"] == "questRewards" else {}),
+                    **({"beforePresent": descriptor["beforePresent"]} if descriptor["domain"] in ("history", "resources") else {}),
+                }
+
+        return self._mutate_pending(update, lambda: self.review(language=language))
 
     def unstage(self, entry_id, language="en"):
         if not isinstance(entry_id, str) or entry_id not in self._pending:
             raise ValueError("Save Editor staged action is unavailable.")
-        snapshot = dict(self._pending)
-        self._pending.pop(entry_id)
-        try:
-            return self.review(language=language)
-        except Exception:
-            self._pending.clear()
-            self._pending.update(snapshot)
-            raise
+
+        return self._mutate_pending(lambda: self._pending.pop(entry_id), lambda: self.review(language=language))
 
     def _apply_and_validate_intents(self, candidate, intents, language="en"):
         # A staged batch represents a set of user intents, not a sequence of
@@ -1775,7 +1747,7 @@ class Hades2SaveWorkspace:
         }
 
     def cancel(self, language="en"):
-        self._pending.clear()
+        self.clear_pending()
         return self.review(language=language)
 
     def _project_intent_batch_root(self, intents):
@@ -1906,14 +1878,8 @@ class Hades2SaveWorkspace:
                     continuous.append(entry_id)
         finally:
             self._preview_document = None
-        result = self._session.apply(candidate)
-
         change_count = len(self._pending)
-        self._pending.clear()
-        self.baseline_generation = uuid.uuid4().hex
-        return {
-            **result,
-            "continuousDraftEntryIds": continuous,
-            "changeCount": change_count,
-            "baselineGeneration": self.baseline_generation,
-        }
+        return self.commit_candidate(
+            candidate,
+            extra={"continuousDraftEntryIds": continuous, "changeCount": change_count},
+        )

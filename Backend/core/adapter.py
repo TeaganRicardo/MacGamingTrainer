@@ -86,10 +86,19 @@ class GameAdapter(ABC):
     def __init__(self, context: GameAdapterContext):
         self.context = context
         self.save_service = None
+        self.save_workspaces: Optional[Any] = None
 
     def bind_save_service(self, save_service):
         """Bind the Host-owned generic Save service for optional game semantics."""
         self.save_service = save_service
+        if self.save_workspaces is not None:
+            self.save_workspaces.clear()
+
+    def dispatch_save_editor(self, command: str, params: Mapping[str, Any]) -> dict[str, Any]:
+        """Dispatch standard Save Editor commands through the module's Core workspace registry."""
+        if self.save_workspaces is None:
+            raise ValueError('Save Editor is not configured for this game.')
+        return self.save_workspaces.handle(command, params)
 
     def save_provider_context(self) -> SaveProviderContext:
         """Supply the declared module directory and any module-owned install path."""

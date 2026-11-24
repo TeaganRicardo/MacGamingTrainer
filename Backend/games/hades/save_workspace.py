@@ -3,8 +3,8 @@ from dataclasses import fields
 import json
 import math
 from pathlib import Path
-import uuid
 
+from core.save_editor import CoreSaveWorkspace, paginate_owner_groups
 from core.structured_save_edit import StructuredSaveEditSession, StructuredSaveEligibility
 
 from .catalog import trait_names, resource_catalog
@@ -178,23 +178,16 @@ def _address(document, keys):
         except KeyError: continue
 
 
-class HadesSaveWorkspace:
+class HadesSaveWorkspace(CoreSaveWorkspace):
     def __init__(self, session):
-        self.session = session
-        self.identifier = uuid.uuid4().hex
-        self.pending = {}
-        self.baseline_generation = uuid.uuid4().hex
-
-    @property
-    def document(self): return self.session.document
+        super().__init__(session)
 
     def _identifier(self, path): return values.identifier(path, self.baseline_generation)
 
     def _parse_id(self, identifier): return values.parse_id(identifier, self.baseline_generation)
 
     def _require_generation(self, generation):
-        if generation != self.baseline_generation:
-            raise ValueError('This control belongs to an earlier document baseline. Refresh the editor before editing.')
+        self.require_baseline(generation)
 
     @staticmethod
     def inventory(service, snapshot_id=None):
@@ -230,17 +223,10 @@ class HadesSaveWorkspace:
         return cls(session)
 
     def summary(self, language='en'):
-        return {'workspaceId': self.identifier, 'baselineGeneration': self.baseline_generation, 'source': self.session.source,
-                'sourceSHA256': self.session.source_sha256, 'target': self.session.target,
-                'domains': list(DOMAINS), 'review': self.review(language),
-                'recoveryPath': self.session.recovery_path,
-                'recoveryPaths': list(self.session.recovery_paths),
-                'recoveryUnresolved': self.session.recovery_unresolved}
+        return self.summary_envelope(domains=list(DOMAINS), review=self.review(language))
 
     def set_target(self, target, *, baseline_generation):
-        self._require_generation(baseline_generation)
-        self.session.set_target(target)
-        return self.summary()
+        return self.set_target_for_baseline(target, baseline_generation=baseline_generation)
 
     def _row(self, path, keys, language, *, full=False, key_row=False):
         node = values.resolve(self.document, path)
@@ -464,17 +450,9 @@ class HadesSaveWorkspace:
         # Domains may intentionally include the same owner through multiple roots.
         unique = {row['id']: row for row in rows}
         rows = list(unique.values())
-        groups = {}
-        for row in rows: groups.setdefault(row['ownerId'], []).append(row)
-        selected, cursor, start = [], 0, offset
-        for group in groups.values():
-            end = cursor + len(group)
-            if end > offset and len(selected) < limit:
-                if not selected: start = cursor
-                selected.extend(group)
-            cursor = end
+        selected, start, next_offset = paginate_owner_groups(rows, offset=offset, limit=limit)
         return {'workspaceId': self.identifier, 'baselineGeneration': self.baseline_generation, 'rows': selected, 'total': len(rows),
-                'offset': start, 'limit': len(selected), 'nextOffset': start + len(selected),
+                'offset': start, 'limit': len(selected), 'nextOffset': next_offset,
                 'parentId': parentId, 'breadcrumbs': breadcrumbs}
 
     def detail(self, entry_id, language='en'):
@@ -516,8 +494,8 @@ class HadesSaveWorkspace:
         return self.review(language)
 
     def cancel(self, language='en', *, baseline_generation):
-        self._require_generation(baseline_generation)
-        self.pending.clear()
+        self.require_baseline(baseline_generation)
+        self.clear_pending()
         return self.review(language)
 
     def _plan(self, intents, language):
@@ -700,13 +678,7 @@ class HadesSaveWorkspace:
         return self._plan(tuple(self.pending.values()), language)[1]
 
     def apply(self, *, baseline_generation):
-        self._require_generation(baseline_generation)
+        self.require_baseline(baseline_generation)
         if not self.pending: raise ValueError('There are no staged changes to apply.')
         candidate, _ = self._plan(tuple(self.pending.values()), 'en')
-        result = self.session.apply(candidate)
-        self.pending.clear()
-        self.baseline_generation = uuid.uuid4().hex
-        return {**result, 'baselineGeneration': self.baseline_generation, 'verified': True, 'workspaceId': self.identifier,
-                'source': self.session.source, 'target': self.session.target,
-                'sourceSHA256': self.session.source_sha256,
-                'installedSHA256': self.session.original_sha256}
+        return self.commit_candidate(candidate)

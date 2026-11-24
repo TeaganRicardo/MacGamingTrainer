@@ -1113,10 +1113,6 @@ class Hades2Adapter(GameAdapter):
             return self._game_path
         return self.install_path()
 
-    def bind_save_service(self, save_service):
-        super().bind_save_service(save_service)
-        self.save_workspaces.clear()
-
     def _require_save_workspace(self, identifier):
         return self.save_workspaces.require(identifier)
 

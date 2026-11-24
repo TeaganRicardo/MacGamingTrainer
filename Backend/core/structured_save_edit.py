@@ -8,6 +8,7 @@ There is deliberately no apply-bytes entrypoint.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 import tempfile
@@ -17,7 +18,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Generic, Optional, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Optional, Protocol, TypeVar, cast
 
 from .errors import PresentableError
 from .save_resolution import ResolvedSaveFile
@@ -43,7 +44,25 @@ class SaveEditorWorkspaceProtocol(Protocol):
     baseline_generation: str
 
     def summary(self, *args: Any, **kwargs: Any) -> dict[str, Any]: ...
-    def set_target(self, target: object) -> dict[str, Any]: ...
+    def set_target(self, *args: Any, **kwargs: Any) -> dict[str, Any]: ...
+
+
+class FullSaveEditorWorkspaceProtocol(SaveEditorWorkspaceProtocol, Protocol):
+    """Extended workspace surface for standard Save Editor query and mutation dispatch."""
+
+    def query(self, **kwargs: Any) -> dict[str, Any]: ...
+    def detail(self, entry_id: str, language: Any = "en") -> dict[str, Any]: ...
+    def stage(self, *args: Any, **kwargs: Any) -> dict[str, Any]: ...
+    def unstage(self, *args: Any, **kwargs: Any) -> dict[str, Any]: ...
+    def review(self, language: Any = "en") -> dict[str, Any]: ...
+    def cancel(self, *args: Any, **kwargs: Any) -> dict[str, Any]: ...
+    def apply(self, *args: Any, **kwargs: Any) -> dict[str, Any]: ...
+
+
+def _as_dict_result(value: object, command: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise TypeError(f"Save Editor operation {command!r} must return a mapping.")
+    return value
 
 
 class StructuredSaveCodec(Protocol[_Document]):
@@ -500,10 +519,24 @@ class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
             "open",
             "close",
             "target",
+            "query",
+            "detail",
+            "stage",
+            "unstage",
+            "review",
+            "cancel",
+            "apply",
             "save_editor_inventory",
             "save_editor_open",
             "save_editor_close",
             "save_editor_target",
+            "save_editor_query",
+            "save_editor_detail",
+            "save_editor_stage",
+            "save_editor_unstage",
+            "save_editor_review",
+            "save_editor_cancel",
+            "save_editor_apply",
         }
     )
 
@@ -582,7 +615,7 @@ class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
             raise ValueError("Save Editor snapshot identity must be a string.")
         return self._inventory(service, raw_snapshot)
 
-    def open(self, params: Optional[Mapping[str, Any]] = None, *, language: Optional[str] = None) -> dict[str, Any]:
+    def open(self, params: Optional[Mapping[str, Any]] = None, *, language: Any = None) -> dict[str, Any]:
         service = self._require_save_service()
         if len(self._workspaces) >= self._max_open and not any(
             not self._is_protected(existing) for existing in self._workspaces.values()
@@ -645,20 +678,48 @@ class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
         self._close_workspace(workspace)
         return {"closed": True}
 
-    def target(self, params: Mapping[str, Any], *, require_baseline: bool = True) -> dict[str, Any]:
+    @staticmethod
+    def _accepts_kwarg(fn: object, name: str) -> bool:
+        if not callable(fn):
+            return False
+        try:
+            signature = inspect.signature(fn)
+        except (TypeError, ValueError):
+            return False
+        parameter = signature.parameters.get(name)
+        if parameter is not None and parameter.kind in (
+            inspect.Parameter.KEYWORD_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            return True
+        return any(item.kind is inspect.Parameter.VAR_KEYWORD for item in signature.parameters.values())
+
+    def target(
+        self,
+        params: Mapping[str, Any],
+        *,
+        require_baseline: bool = True,
+        language: Any = None,
+    ) -> dict[str, Any]:
         identifier = params.get("workspaceId")
+        baseline = params.get("baselineGeneration")
         if require_baseline:
-            workspace = self.require_baseline(identifier, params.get("baselineGeneration"))
+            workspace = self.require_baseline(identifier, baseline)
         else:
             workspace = self.require(identifier)
-        return workspace.set_target(params["target"])
+        kwargs: dict[str, Any] = {}
+        if self._accepts_kwarg(workspace.set_target, "baseline_generation"):
+            kwargs["baseline_generation"] = baseline
+        if language is not None and self._accepts_kwarg(workspace.set_target, "language"):
+            kwargs["language"] = language
+        return _as_dict_result(workspace.set_target(params["target"], **kwargs), "target")
 
     def handle(
         self,
         command: str,
         params: Optional[Mapping[str, Any]] = None,
         *,
-        language: Optional[str] = None,
+        language: Any = None,
         require_baseline: bool = True,
     ) -> dict[str, Any]:
         name = command[len("save_editor_") :] if command.startswith("save_editor_") else command
@@ -666,9 +727,68 @@ class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
         if name == "inventory":
             return self.inventory(payload)
         if name == "open":
-            return self.open(payload, language=language)
+            open_language = language if language is not None else payload.get("language")
+            return self.open(payload, language=open_language)
         if name == "close":
             return self.close(payload)
         if name == "target":
-            return self.target(payload, require_baseline=require_baseline)
+            target_language = language if language is not None else payload.get("language")
+            return self.target(payload, require_baseline=require_baseline, language=target_language)
+        identifier = payload.get("workspaceId")
+        baseline = payload.get("baselineGeneration")
+        resolved_language = language if language is not None else payload.get("language", "en")
+        if name == "query":
+            workspace = cast(FullSaveEditorWorkspaceProtocol, self.require(identifier))
+            query_params = {k: v for k, v in payload.items() if k not in ("workspaceId", "baselineGeneration")}
+            if (
+                language is not None
+                and "language" not in query_params
+                and self._accepts_kwarg(workspace.query, "language")
+            ):
+                query_params["language"] = language
+            return _as_dict_result(workspace.query(**query_params), name)
+        if name == "detail":
+            workspace = cast(FullSaveEditorWorkspaceProtocol, self.require(identifier))
+            return _as_dict_result(workspace.detail(payload["entryId"], resolved_language), name)
+        if name == "review":
+            workspace = cast(FullSaveEditorWorkspaceProtocol, self.require(identifier))
+            return _as_dict_result(workspace.review(resolved_language), name)
+        workspace = cast(
+            FullSaveEditorWorkspaceProtocol,
+            self.require_baseline(identifier, baseline) if require_baseline else self.require(identifier),
+        )
+        if name == "stage":
+            if self._accepts_kwarg(workspace.stage, "baseline_generation"):
+                return _as_dict_result(
+                    workspace.stage(
+                        payload["entryId"],
+                        payload["operation"],
+                        payload.get("value"),
+                        resolved_language,
+                        baseline_generation=baseline,
+                    ),
+                    name,
+                )
+            return _as_dict_result(
+                workspace.stage(payload["entryId"], payload["operation"], payload.get("value"), resolved_language),
+                name,
+            )
+        if name == "unstage":
+            if self._accepts_kwarg(workspace.unstage, "baseline_generation"):
+                return _as_dict_result(
+                    workspace.unstage(payload["entryId"], resolved_language, baseline_generation=baseline),
+                    name,
+                )
+            return _as_dict_result(workspace.unstage(payload["entryId"], resolved_language), name)
+        if name == "cancel":
+            if self._accepts_kwarg(workspace.cancel, "baseline_generation"):
+                return _as_dict_result(workspace.cancel(resolved_language, baseline_generation=baseline), name)
+            return _as_dict_result(workspace.cancel(resolved_language), name)
+        if name == "apply":
+            apply_kwargs: dict[str, Any] = {}
+            if self._accepts_kwarg(workspace.apply, "baseline_generation"):
+                apply_kwargs["baseline_generation"] = baseline
+            if self._accepts_kwarg(workspace.apply, "draft_entry_ids"):
+                apply_kwargs["draft_entry_ids"] = payload.get("draftEntryIds", ())
+            return _as_dict_result(workspace.apply(**apply_kwargs), name)
         raise ValueError("Unknown standard Save Editor operation.")
