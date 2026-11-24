@@ -219,10 +219,12 @@ CurrentHubRoom = {}
 -- Durable global hooks should arm immediately instead of waiting for the
 -- combat-ready aggregate predicate.
 do
-  -- The multiplier is the durable damage intent; the toggle is its projection.
   local state = setFeature("damageMultiplier", 2)
-  check(state.desiredFeatures.damageEnabled, "damage desired state was not retained")
-  check(state.activeFeatures.damageEnabled, "global damage hook did not arm in Crossroads")
+  eq(state.damageMultiplier, 2, "damage desired multiplier was not retained")
+  check(state.desiredFeatures.damageEnabled == nil, "retired damage toggle leaked into desiredFeatures")
+  check(state.activeFeatures.damageMultiplier, "global damage hook did not arm in Crossroads")
+  local retiredOk = pcall(function() setFeature("damageEnabled", true) end)
+  check(not retiredOk, "retired damageEnabled toggle was accepted by set_feature")
 
   state = setFeature("infiniteHealth", true)
   check(state.desiredFeatures.infiniteHealth, "health desired state was not retained")
@@ -491,7 +493,7 @@ CurrentHubRoom = nil
 CurrentRun = nil
 CurrentHubRoom = {}
 local hub = status()
-check(hub.desiredFeatures.damageEnabled and hub.activeFeatures.damageEnabled,
+check(hub.damageMultiplier == 2 and hub.activeFeatures.damageMultiplier,
   "global damage hook did not survive the Hero-less Crossroads")
 check(hub.desiredFeatures.infiniteAmmo and hub.activeFeatures.infiniteAmmo,
   "global ammo hook did not survive the Hero-less Crossroads")

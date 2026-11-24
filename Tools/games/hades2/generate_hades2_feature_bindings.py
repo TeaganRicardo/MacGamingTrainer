@@ -171,10 +171,21 @@ def render_lua_multiplier_dispatch():
         ])
         if key == "damageMultiplier":
             lines.extend([
-                "        runtimeState.previousDamageMultiplier = M.damageMultiplier",
+                "        local previous = M.damageMultiplier",
                 "        M.damageMultiplier = value",
-                '        feature = "damageEnabled"',
-                "        value = value ~= 1",
+                "        M.featureErrors.damageMultiplier = nil",
+                "        if value == 1 then releaseDamage() end",
+                '        local ok, message = pcall(function() reconcileDesired(true, "damageMultiplier") end)',
+                "        if not ok then",
+                "          if M.terminalActionUnknown then error(message) end",
+                "          M.damageMultiplier = previous",
+                "          M.featureErrors.damageMultiplier = nil",
+                '          reconcileDesired(false, "damageMultiplier")',
+                '          error("Feature unavailable: " .. tostring(message))',
+                "        end",
+                "        if anyDesired() then installGuard()",
+                "        elseif not anyRuntimeActive() then releaseGuard() end",
+                "        return state(params.includeCatalogs)",
             ])
         else:
             lines.extend([

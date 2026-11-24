@@ -18,7 +18,7 @@ _LEGACY_V3_DIGIT_KEYCODES = {
     0:29, 1:18, 2:19, 3:20, 4:21, 5:23, 6:22, 7:26, 8:28, 9:25,
 }
 _SHORTCUT_ACTION_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
-_RETIRED_SHORTCUT_ACTIONS = frozenset(('godMode','gardenQoL'))
+_RETIRED_SHORTCUT_ACTIONS = frozenset(('godMode','gardenQoL','damageEnabled'))
 
 
 def _normalize_shortcuts(raw):

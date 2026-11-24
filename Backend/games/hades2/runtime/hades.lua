@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 141 then
+if previousModule and previousModule.revision ~= 142 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,14 +15,13 @@ if previousModule and previousModule.revision ~= 141 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 141,
+    version = 1, revision = 142,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
     infiniteMana = false,
     infiniteMoney = false,
     infiniteRerolls = false,
-    damageEnabled = false,
     instantCastCooldown = false,
     hexAlwaysReady = false,
     infiniteAmmo = false,
@@ -45,7 +44,6 @@ if __MacGamingTrainerV1 == nil then
       infiniteMana = false,
       infiniteMoney = false,
       infiniteRerolls = false,
-      damageEnabled = false,
       instantCastCooldown = false,
       hexAlwaysReady = false,
       infiniteAmmo = false,
@@ -670,7 +668,6 @@ if __MacGamingTrainerV1 == nil then
     releaseHook("ManaDelta")
   end
   local function releaseDamage()
-    M.damageEnabled = false
     releaseHook("CalculateDamageMultipliers")
   end
   -- The cast gate is engine-level, not just an ActiveEffect flag.  Current
@@ -1518,12 +1515,12 @@ if __MacGamingTrainerV1 == nil then
   end
   local function anyDesired()
     for _, value in pairs(M.desiredFeatures) do if value then return true end end
-    return M.biomeTimerFrozen or next(M.resourceLocks) ~= nil or next(M.vitalLocks) ~= nil or next(M.elementLocks) ~= nil or M.rerollsLock ~= nil
+    return M.damageMultiplier ~= 1 or M.biomeTimerFrozen or next(M.resourceLocks) ~= nil or next(M.vitalLocks) ~= nil or next(M.elementLocks) ~= nil or M.rerollsLock ~= nil
       or next(M.statTargets) ~= nil or M.nextOccurrenceTarget ~= nil
       or next(M.gatheringProbabilities) ~= nil or M.chaosGateProbability ~= nil
   end
   local function anyRuntimeActive()
-    return M.invincibility or M.infiniteHealth or M.infiniteMana or M.damageEnabled
+    return M.invincibility or M.infiniteHealth or M.infiniteMana or owns("CalculateDamageMultipliers")
       or M.instantCastCooldown or M.hexAlwaysReady or M.infiniteAmmo or M.autoMiniGames or M.boonRarityEnabled
       or M.infiniteMoney or M.infiniteRerolls or M.moneyMultiplierEnabled or M.resourceMultiplierEnabled
       or owns("HeroHasTrait") or owns("OpenUpgradeChoiceMenu") or owns("CreateBoonLootButtons")
@@ -1638,7 +1635,7 @@ if __MacGamingTrainerV1 == nil then
     if M.invincibility and (not owns("Damage") or not invincibilityProtection.active(hero)) then releaseInvincibility() end
     if M.infiniteHealth and (not owns("Damage") or not owns("SacrificeHealth")) then releaseHealth() end
     if M.infiniteMana and not owns("ManaDelta") then releaseMana() end
-    if M.damageEnabled and not owns("CalculateDamageMultipliers") then releaseDamage() end
+    if M.hooks.CalculateDamageMultipliers ~= nil and not owns("CalculateDamageMultipliers") then releaseDamage() end
     if M.instantCastCooldown and (not owns("SetEffectProperty") or not owns("SetWeaponProperty")) then M.castControl.release() end
     if M.hexAlwaysReady and not owns("SpellFire") then releaseHex() end
     if M.infiniteAmmo and not owns("UpdateWeaponAmmo") then releaseAmmo() end
@@ -3131,7 +3128,11 @@ if __MacGamingTrainerV1 == nil then
       end
       supportMap[key] = entry ~= nil and evaluate(entry.support, true) or false
       activeMap[key] = entry ~= nil and evaluate(entry.active, false) or false
-      local desired = entry and (entry.desired and evaluate(entry.desired, false) or not not M.desiredFeatures[key]) or false
+      local desired = false
+      if entry ~= nil then
+        if entry.desired ~= nil then desired = evaluate(entry.desired, false)
+        else desired = not not M.desiredFeatures[key] end
+      end
       local waitingForEnvironment = desired and not activeMap[key] and not featureAvailable(entry)
       if entry and (evaluate(entry.dormant, false) or waitingForEnvironment) then dormantMap[key] = true end
     end
@@ -8549,7 +8550,6 @@ if __MacGamingTrainerV1 == nil then
         infiniteMana = M.desiredFeatures.infiniteMana,
         infiniteMoney = M.desiredFeatures.infiniteMoney,
         infiniteRerolls = M.desiredFeatures.infiniteRerolls,
-        damageEnabled = M.desiredFeatures.damageEnabled,
         instantCastCooldown = M.desiredFeatures.instantCastCooldown,
         hexAlwaysReady = M.desiredFeatures.hexAlwaysReady,
         infiniteAmmo = M.desiredFeatures.infiniteAmmo,
@@ -8563,7 +8563,7 @@ if __MacGamingTrainerV1 == nil then
       activeFeatures = activeFeatureMap,
       dormantFeatures = dormantFeatureMap,
       invincibility = M.desiredFeatures.invincibility, infiniteHealth = M.desiredFeatures.infiniteHealth,
-      infiniteMana = M.desiredFeatures.infiniteMana, damageEnabled = M.desiredFeatures.damageEnabled,
+      infiniteMana = M.desiredFeatures.infiniteMana,
       infiniteMoney = M.desiredFeatures.infiniteMoney, infiniteRerolls = M.desiredFeatures.infiniteRerolls,
       instantCastCooldown = M.desiredFeatures.instantCastCooldown,
       hexAlwaysReady = M.desiredFeatures.hexAlwaysReady, infiniteAmmo = M.desiredFeatures.infiniteAmmo,
@@ -10988,14 +10988,13 @@ if __MacGamingTrainerV1 == nil then
   end
   local function installDamage()
     requireFunctions("damage multiplier", { "CalculateDamageMultipliers" })
-    if M.damageEnabled then return end
+    if owns("CalculateDamageMultipliers") then return end
     installHook("CalculateDamageMultipliers", function(original, attacker, victim, weaponData, triggerArgs)
       local result = original(attacker, victim, weaponData, triggerArgs)
       local hero = M.runtimeOwners.hero()
-      if M.damageEnabled and hero ~= nil and attacker == hero then return result * M.damageMultiplier end
+      if M.damageMultiplier ~= 1 and hero ~= nil and attacker == hero then return result * M.damageMultiplier end
       return result
     end)
-    M.damageEnabled = true
   end
   local function installEconomy()
     requireResources()
@@ -11211,10 +11210,11 @@ if __MacGamingTrainerV1 == nil then
       support = function() return type(ManaDelta) == "function" end,
       active = function() return M.infiniteMana and owns("ManaDelta") and SessionState.UnlimitedMana end,
     },
-    damageEnabled = {
+    damageMultiplier = {
+      desired = function() return M.damageMultiplier ~= 1 end,
       install = installDamage, release = releaseDamage, available = function() return true end,
       support = function() return type(CalculateDamageMultipliers) == "function" end,
-      active = function() return M.damageEnabled and owns("CalculateDamageMultipliers") end,
+      active = function() return M.damageMultiplier ~= 1 and owns("CalculateDamageMultipliers") end,
     },
     instantCastCooldown = {
       install = M.castControl.install, release = M.castControl.release, available = M.runtimeOwners.heroAvailable,
@@ -11249,9 +11249,9 @@ if __MacGamingTrainerV1 == nil then
     },
   }
   featureOrder = {
-    "invincibility", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
+    "invincibility", "infiniteHealth", "infiniteMana", "instantCastCooldown",
     "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "boonRarityEnabled",
-    "forceEnableRerolls",
+    "forceEnableRerolls", "damageMultiplier",
   }
   statOrder = { "grasp", "dodge", "crit", "chargeSpeed", "moveSpeed", "sprintSpeed", "dashSpeed", "attackSpeed", "manaRegen", "enemyDamage", "enemyHealth" }
   statRegistry = {
@@ -11370,7 +11370,8 @@ if __MacGamingTrainerV1 == nil then
     end
     for _, key in ipairs(featureOrder) do
       local entry = featureRegistry[key]
-      local desired = entry.desired and entry.desired() or M.desiredFeatures[key]
+      local desired
+      if entry.desired ~= nil then desired = entry.desired() else desired = M.desiredFeatures[key] end
       run(key, desired, entry)
     end
     if onlyKey == nil or onlyKey == "gathering" or onlyKey == "chaosGate" then
@@ -12490,17 +12491,24 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "set_feature" then
       local feature, value = params.feature, params.value
-      -- A legacy Profile may still carry the retired damage toggle. The
-      -- multiplier is authoritative: 1x means normal damage, every other
-      -- accepted value means the effect is enabled.
-      if feature == "damageEnabled" then value = M.damageMultiplier ~= 1 end
       -- BEGIN GENERATED DURABLE MULTIPLIER DISPATCH
       if feature == "damageMultiplier" then
         if not finite(value) or value < 1 or value > 100 then error("Multiplier must be 1..100") end
-        runtimeState.previousDamageMultiplier = M.damageMultiplier
+        local previous = M.damageMultiplier
         M.damageMultiplier = value
-        feature = "damageEnabled"
-        value = value ~= 1
+        M.featureErrors.damageMultiplier = nil
+        if value == 1 then releaseDamage() end
+        local ok, message = pcall(function() reconcileDesired(true, "damageMultiplier") end)
+        if not ok then
+          if M.terminalActionUnknown then error(message) end
+          M.damageMultiplier = previous
+          M.featureErrors.damageMultiplier = nil
+          reconcileDesired(false, "damageMultiplier")
+          error("Feature unavailable: " .. tostring(message))
+        end
+        if anyDesired() then installGuard()
+        elseif not anyRuntimeActive() then releaseGuard() end
+        return state(params.includeCatalogs)
       end
       if feature == "moneyMultiplier" then
         if not finite(value) or value < 1 or value > 100 then error("Multiplier must be 1..100") end
@@ -12534,12 +12542,6 @@ if __MacGamingTrainerV1 == nil then
       local ok, message = pcall(function() reconcileDesired(true, feature) end)
       if not ok then
         if M.terminalActionUnknown then error(message) end
-        if params.feature == "damageMultiplier" then
-          -- Only the multiplier branch stages a previous value; a toggle write
-          -- never changes the multiplier, so it has nothing to roll back.
-          M.damageMultiplier = runtimeState.previousDamageMultiplier
-          runtimeState.previousDamageMultiplier = nil
-        end
         M.desiredFeatures[feature] = previous
         if feature == "infiniteMoney" then M.resourceLocks.Money = previousMoneyLock end
         if feature == "infiniteRerolls" then M.rerollsLock = previousRerollsLock end
@@ -12548,7 +12550,6 @@ if __MacGamingTrainerV1 == nil then
         reconcileDesired(false, feature)
         error("Feature unavailable: " .. tostring(message))
       end
-      if params.feature == "damageMultiplier" then runtimeState.previousDamageMultiplier = nil end
       if anyDesired() then installGuard()
       elseif not anyRuntimeActive() then releaseGuard() end
       return state(params.includeCatalogs)

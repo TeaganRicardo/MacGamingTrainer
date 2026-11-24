@@ -17,7 +17,7 @@ _FEATURE_LABEL_KEYS = {
     'infiniteMana': 'hades2.feature.infiniteMana',
     'infiniteMoney': 'hades2.feature.infiniteMoney',
     'infiniteRerolls': 'hades2.feature.infiniteRerolls',
-    'damageEnabled': 'hades2.feature.damageMultiplier',
+    'damageMultiplier': 'hades2.feature.damageMultiplier',
     'instantCastCooldown': 'hades2.feature.instantCastCooldown',
     'hexAlwaysReady': 'hades2.feature.hexAlwaysReady',
     'infiniteAmmo': 'hades2.feature.infiniteAmmo',
@@ -235,8 +235,9 @@ def build_diagnostics(adapter):
     # explicit Core-owned capability projected into the same runtime-support
     # report, so it is appended here rather than copied into another Hades list.
     diagnostic_features = list(schema.TOGGLES)
-    if 'gameSpeed' not in diagnostic_features:
-        diagnostic_features.append('gameSpeed')
+    for key in ('damageMultiplier', 'gameSpeed'):
+        if key not in diagnostic_features:
+            diagnostic_features.append(key)
     for key in diagnostic_features:
         supported = fs.get(key) is True
         add(

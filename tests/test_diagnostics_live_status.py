@@ -109,7 +109,7 @@ def test_feature_support_inventory_tracks_schema_without_a_mirror():
         if item["id"].startswith("featureSupport.")
     ]
     feature_ids = [item["id"].removeprefix("featureSupport.") for item in feature_checks]
-    assert feature_ids == [*schema.TOGGLES, synthetic, "gameSpeed"], feature_ids
+    assert feature_ids == [*schema.TOGGLES, synthetic, "damageMultiplier", "gameSpeed"], feature_ids
     assert next(item for item in feature_checks if item["id"].endswith(synthetic))["ok"] is True
 
 

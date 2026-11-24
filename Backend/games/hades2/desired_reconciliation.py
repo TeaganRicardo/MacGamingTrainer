@@ -15,11 +15,6 @@ from .resident_session import ResidentReply
 from .schema import MULTIPLIERS, TOGGLES, VITALS
 from .vital_state import confirmed_replay_vital_lock
 
-# `damageEnabled` is a projection of the authoritative `damageMultiplier`; the
-# resident derives it and ignores a direct write, so reconciliation must not
-# send it as an independent intent.
-DERIVED_TOGGLES = frozenset({"damageEnabled"})
-
 
 @dataclass(frozen=True)
 class DesiredReconciliationOutcome:
@@ -215,8 +210,6 @@ class Hades2DesiredStateReconciler:
         desired_features = _mapping(observed.get("desiredFeatures"))
 
         for key in TOGGLES:
-            if key in DERIVED_TOGGLES:
-                continue
             wanted = bool(desired.get(key, False))
             if force_full or desired_features.get(key) is not wanted:
                 actions.append(

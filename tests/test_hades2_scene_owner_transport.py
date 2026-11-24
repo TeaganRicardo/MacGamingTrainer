@@ -47,7 +47,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-transport-") as tempora
         adapter.preference_dirty = True
         hub = adapter.execute("status", {"includeCatalogs": False})
         assert hub["scene"] == "crossroads"
-        assert hub["activeFeatures"]["damageEnabled"] is True
+        assert hub["activeFeatures"]["damageMultiplier"] is True
+        assert "damageEnabled" not in hub["activeFeatures"]
         assert hub["residentDesiredLocks"]["statLocks"]["moveSpeed"] == 150
         assert hub["residentDesiredLocks"]["vitalLocks"]["health"]["current"] == 60
         assert hub["residentDesiredLocks"]["rerollsLock"] == 4

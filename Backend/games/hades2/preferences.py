@@ -25,47 +25,32 @@ from .schema import (
     normalize_chaos_gate_probability,
 )
 
-DESIRED_STATE_SCHEMA_VERSION = 12
+DESIRED_STATE_SCHEMA_VERSION = 13
 
 
 def _finite_number(value):
     return type(value) in (int,float) and not isinstance(value,bool) and math.isfinite(value)
 
 
-# `damageMultiplier` is the only durable damage intent: 1x is normal damage and
-# every other accepted value enables the effect. `damageEnabled` survives as a
-# derived projection for older profiles, the resident's feature list and the
-# public status payload, so both keys are always written together.
 LEGACY_DAMAGE_MULTIPLIER = 2.0
 
 
-def canonicalize_damage(preferences,legacy_toggle_veto=True):
-    """Collapse the retired damage toggle into the authoritative multiplier.
-
-    A persisted profile from an older schema can carry ``damageEnabled: false``
-    next to the retired 2x default; the toggle only ever vetoed (disabled), so
-    ``legacy_toggle_veto`` normalizes an explicit ``false`` to 1x instead of
-    resurrecting the effect. An enabled toggle without a multiplier keeps the
-    historical 2x default; an explicit multiplier always wins, so a stored 1x
-    stays normal damage.
-
-    Runtime desired state is already a projection of the multiplier, so callers
-    that own an explicit multiplier pass ``legacy_toggle_veto=False``: a stale
-    derived toggle must never veto the value it is derived from.
-    """
-    if not isinstance(preferences,dict):return preferences
-    result=dict(preferences)
+def migrate_legacy_damage_identity(raw):
+    """Collapse the retired damageEnabled toggle into damageMultiplier for schema < 13."""
+    if not isinstance(raw,dict):return raw
+    result=dict(raw)
     rule=MULTIPLIER_RULES['damageMultiplier']
     enabled=result.get('damageEnabled')
     multiplier=result.get('damageMultiplier')
     if not _finite_number(multiplier) or not rule['min']<=multiplier<=rule['max']:
         multiplier=None
-    if legacy_toggle_veto and enabled is False:
+    if enabled is False:
         multiplier=1.0
     elif multiplier is None:
         multiplier=LEGACY_DAMAGE_MULTIPLIER if enabled is True else rule['default']
     result['damageMultiplier']=float(multiplier)
-    result['damageEnabled']=multiplier!=1.0
+    result.pop('damageEnabled',None)
+    result.pop('gardenQoL',None)
     return result
 
 
@@ -171,6 +156,8 @@ def normalize_persisted_desired(raw, schema_version):
     if schema_version < 10 and isinstance(migrated,dict):
         migrated.pop('infiniteMoney',None)
         migrated.pop('infiniteRerolls',None)
+    if schema_version < 13:
+        migrated=migrate_legacy_damage_identity(migrated)
     if isinstance(migrated,dict):
         for key in ('nextRoomReward','nextRoomRewardToken','nextOccurrenceTarget','nextOccurrenceToken'):
             migrated.pop(key,None)
@@ -178,14 +165,7 @@ def normalize_persisted_desired(raw, schema_version):
 
 
 def _prepare_desired_document(preferences, schema_version):
-    # The durable document must state the same intent the runtime acts
-    # on. The multiplier is authoritative here, so persist the projected
-    # pair instead of whatever stale toggle the caller still carried;
-    # the legacy veto belongs to reading an older document, not to
-    # writing the current one.
-    document=canonicalize_damage(preferences,legacy_toggle_veto=False)
-    for key in ('nextRoomReward','nextRoomRewardToken','nextOccurrenceTarget','nextOccurrenceToken'):
-        document.pop(key,None)
+    document=Hades2PreferenceStore.normalize(preferences)
     document['schemaVersion']=schema_version
     return document
 
@@ -243,7 +223,6 @@ class Hades2PreferenceStore:
     def normalize(cls, raw):
         result=cls.defaults()
         if not isinstance(raw,dict):return result
-        raw=canonicalize_damage(raw)
         for key in TOGGLES+MULTIPLIERS:
             value=normalize_desired_feature_value(key,raw.get(key))
             if value is not None:result[key]=value

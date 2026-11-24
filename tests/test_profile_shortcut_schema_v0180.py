@@ -48,7 +48,7 @@ valid = {
     'infiniteMoney': chord(5,6144,'G'),
 }
 assert _normalize_shortcuts(valid) == valid
-assert _normalize_shortcuts({'gardenQoL': chord(5,6144,'G'), **valid}) == valid
+assert _normalize_shortcuts({'gardenQoL': chord(5,6144,'G'), 'damageEnabled': chord(26,6144,'7'), **valid}) == valid
 versioned = {"_layoutVersion": 1, **valid}
 assert _normalize_shortcuts(versioned) == versioned
 future_layout_version = {"_layoutVersion": 2, **valid}

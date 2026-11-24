@@ -182,7 +182,7 @@ measure("status_dispatch_json", function()
 end)
 measure("frame_without_desired", function() UpdateTimers(1 / 60) end, 100)
 
-local enabled = { "infiniteHealth", "infiniteMana", "damageEnabled",
+local enabled = { "infiniteHealth", "infiniteMana",
   "moneyMultiplierEnabled", "resourceMultiplierEnabled", "forceEnableRerolls" }
 local featureCalls = {
   { command = "set_feature", params = { feature = "damageMultiplier", value = 3 } },

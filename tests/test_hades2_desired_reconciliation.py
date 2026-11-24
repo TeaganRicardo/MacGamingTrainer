@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from games.hades2.desired_reconciliation import DERIVED_TOGGLES, Hades2DesiredStateReconciler
+from games.hades2.desired_reconciliation import Hades2DesiredStateReconciler
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.resident_session import ResidentMetrics, ResidentReply
 from games.hades2.schema import MULTIPLIERS, STAT_RULES, TOGGLES
@@ -482,14 +482,11 @@ assert full.confirmed is True
 assert len(full_session.calls) == 1
 full_batch = full_session.calls[0]
 for key in TOGGLES:
-    if key in DERIVED_TOGGLES:
-        continue
     assert any(
         command == "set_feature" and params.get("feature") == key
         for command, params in full_batch
     )
-# `damageEnabled` is projected from the multiplier by the resident, so it must
-# never be replayed as an independent desired write.
+# `damageEnabled` is retired and must never be replayed as a durable intent.
 assert not any(
     command == "set_feature" and params.get("feature") == "damageEnabled"
     for command, params in full_batch
