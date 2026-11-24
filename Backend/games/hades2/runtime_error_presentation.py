@@ -17,6 +17,15 @@ _LUA_SOURCE_PREFIX = re.compile(r'^\[string "[^"]*"\]:\d+:\s*')
 def present_runtime_error(command, error):
     if not isinstance(error, AdapterError) or error.code != 'lua_error':
         return error
+    if (
+        isinstance(error, Hades2PresentationError)
+        or (
+            isinstance(error.presentation, str)
+            and error.presentation.startswith(('host.', 'hades2.'))
+            and ' ' not in error.presentation
+        )
+    ):
+        return error
 
     raw = str(error)
     detail = _LUA_SOURCE_PREFIX.sub('', raw).strip()

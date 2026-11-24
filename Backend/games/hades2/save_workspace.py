@@ -17,8 +17,8 @@ from core.structured_save_edit import StructuredSaveEditSession, StructuredSaveE
 from . import save_advanced, save_container, save_equipment, save_history, save_long_term, save_narrative, save_relationships, save_quest_rewards
 from .save_entities import entity_page
 from .save_investigation import NativeDialogueInvestigation
+from .error_presentation import Hades2ValueError, SaveBatchValidationError
 from .localization import official_display_names
-from .error_presentation import presentation_for
 from .save_native_ids import QUEST_IDS, RESOURCE_IDS
 from .save_mutation_utils import owner as lua_owner
 from .save_document import clone_lua_value, AmbiguousLuaKeyError, Hades2SaveDocument, HadesSaveFormatError, LuaTable
@@ -121,19 +121,6 @@ SAVE_EDITOR_STATE_FILTERS = tuple(dict.fromkeys(
     (*SAVE_EDITOR_INVESTIGATION_FILTERS, *SAVE_EDITOR_DISCOVERY_FILTERS)
 ))
 
-_ACTIONABLE_BATCH_VALIDATION_MESSAGES = {
-    "Save Editor equipment changes conflict.": "equipment",
-    "Save Editor locked weapon has acquired aspects.": "equipment",
-    "Save Editor unlocked weapon lacks default aspect.": "equipment",
-    "Save Editor selected aspect is not purchased.": "equipment",
-    "Save Editor equipped familiar must be unlocked.": "familiar",
-    "Save Editor Arcana level is invalid.": "arcana",
-    "Save Editor equipped Arcana must be unlocked.": "arcana",
-    "Save Editor upgraded Arcana must be unlocked.": "arcana",
-    "Save Editor Arcana changes conflict.": "arcana",
-    "Save Editor linked changes conflict.": "all",
-}
-
 class _SaveEditorActionValidationError(PresentableError, ValueError):
     """ValueError-compatible batch rejection with a Hades-owned presentation."""
 
@@ -144,9 +131,9 @@ class _SaveEditorActionValidationError(PresentableError, ValueError):
 
 def _page(offset, limit):
     if type(offset) is not int or offset < 0:
-        raise ValueError("Save Editor query offset must be a non-negative integer.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor query offset must be a non-negative integer.")
     if type(limit) is not int or not 1 <= limit <= 200:
-        raise ValueError("Save Editor query limit must be 1..200.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor query limit must be 1..200.")
     return offset, limit
 
 
@@ -154,11 +141,11 @@ def _lua_path(root, path):
     current = root
     for key in path:
         if not isinstance(current, LuaTable):
-            raise ValueError("Save Editor path does not identify a table.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor path does not identify a table.")
         try:
             current = current[key]
         except KeyError as error:
-            raise ValueError("Save Editor path is missing.") from error
+            raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor path is missing.") from error
     return current
 
 
@@ -236,7 +223,10 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
         )
         identity = profile_file_identity(session.source["relativePath"])
         if identity is None:
-            raise ValueError("Save Editor source is not a supported profile document.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.operationFailed",
+                "Save Editor source is not a supported profile document.",
+            )
         return cls(session, identity[0], game_path=game_path)
 
     def set_target(self, identity):
@@ -247,9 +237,9 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
         try:
             game_state = self.document.lua_state["GameState"]
         except KeyError as error:
-            raise ValueError("Save Editor GameState is unavailable.") from error
+            raise Hades2ValueError("hades2.saveEditor.error.operationFailed", "Save Editor GameState is unavailable.") from error
         if not isinstance(game_state, LuaTable):
-            raise ValueError("Save Editor GameState is malformed.")
+            raise Hades2ValueError("hades2.saveEditor.error.operationFailed", "Save Editor GameState is malformed.")
         return game_state
 
     def _resources(self):
@@ -260,12 +250,15 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             # the table on its isolated candidate when an edit requests it.
             return LuaTable()
         if not isinstance(resources, LuaTable):
-            raise ValueError("Save Editor resource inventory is malformed.")
+            raise Hades2ValueError("hades2.saveEditor.error.operationFailed", "Save Editor resource inventory is malformed.")
         return resources
 
     def _resource_descriptor(self, identifier):
         if not isinstance(identifier, str) or identifier not in RESOURCE_IDS:
-            raise ValueError("Save Editor resource identity is not supported by the native catalog.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.operationFailed",
+                "Save Editor resource identity is not supported by the native catalog.",
+            )
         resources = self._resources()
         # Native ResourceData declares the identity; absence from the save
         # represents a zero balance, not an unknown resource.
@@ -275,7 +268,10 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             or isinstance(value, bool)
             or not float(value).is_integer()
         ):
-            raise ValueError("Save Editor resource is not an editable integer.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.operationFailed",
+                "Save Editor resource is not an editable integer.",
+            )
         return {
             "id": "resource:{}".format(identifier),
             "domain": "resources",
@@ -378,7 +374,10 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             None,
         )
         if field is None:
-            raise ValueError("Save Editor player statistic is not writable.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.operationFailed",
+                "Save Editor player statistic is not writable.",
+            )
 
         game_state = self._game_state()
         try:
@@ -392,11 +391,17 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             or not math.isfinite(float(value))
             or float(value) < 0
         ):
-            raise ValueError("Save Editor player statistic is malformed.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.operationFailed",
+                "Save Editor player statistic is malformed.",
+            )
 
         if field["valueType"] == "integer":
             if not float(value).is_integer():
-                raise ValueError("Save Editor player statistic must be integral.")
+                raise Hades2ValueError(
+                    "hades2.saveEditor.error.operationFailed",
+                    "Save Editor player statistic must be integral.",
+                )
             value = int(value)
         else:
             value = float(value)
@@ -490,7 +495,10 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
         path = save_advanced.decode_path(path)
         target = save_advanced.resolve_path(self.document.lua_state, path)
         if not isinstance(target, LuaTable):
-            raise ValueError("Save Editor Advanced path must identify a table.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidQuery",
+                "Save Editor Advanced path must identify a table.",
+            )
         rows = []
         for physical_index, key, value, ambiguous in target.physical_entries():
             try:
@@ -887,7 +895,10 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
                 result["sourcePresent"] = save_advanced.descriptor(self.document.lua_state, entry_id, include_value=False)["beforePresent"]
             return result
         if language not in ("en", "zh-CN") or not isinstance(entry_id, str) or not entry_id.startswith("investigate:") or len(entry_id) > 512:
-            raise ValueError("Save Editor investigation identity is invalid.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidQuery",
+                "Save Editor investigation identity is invalid.",
+            )
         return self._narrative_investigation().detail(
             self.document.lua_state, entry_id[len("investigate:"):],
             language, self._dialogue_write_decisions()
@@ -949,7 +960,10 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
 
     def _entity_query(self, *, scope, search, offset, limit, language):
         if scope not in SAVE_EDITOR_SCOPES:
-            raise ValueError("Save Editor browse scope is invalid.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidQuery",
+                "Save Editor browse scope is invalid.",
+            )
         rows = self._entity_source_rows(language, scope, search)
         aliases = {}
         scenes = {}
@@ -1037,26 +1051,32 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
         scope="all",
     ):
         if domain not in SAVE_EDITOR_DOMAINS:
-            raise ValueError("Save Editor domain is unknown.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor domain is unknown.")
         if not isinstance(search, str) or len(search) > 256:
-            raise ValueError("Save Editor search must be at most 256 characters.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor search must be at most 256 characters.")
         if language not in ("zh-CN", "en"):
-            raise ValueError("Save Editor language is unsupported.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor language is unsupported.")
         offset, limit = _page(offset, limit)
         if domain == "entities":
             if stateFilter != "all" or path not in (None, []):
-                raise ValueError("Save Editor entity query does not support diagnostic filters.")
+                raise Hades2ValueError(
+                    "hades2.saveEditor.error.invalidQuery",
+                    "Save Editor entity query does not support diagnostic filters.",
+                )
             return self._entity_query(
                 scope=scope, search=search, offset=offset, limit=limit, language=language
             )
         if domain == "investigate":
             if stateFilter not in SAVE_EDITOR_INVESTIGATION_FILTERS:
-                raise ValueError("Save Editor investigation filter is invalid.")
+                raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor investigation filter is invalid.")
         elif domain == "discover":
             if stateFilter not in SAVE_EDITOR_DISCOVERY_FILTERS:
-                raise ValueError("Save Editor discovery filter is invalid.")
+                raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor discovery filter is invalid.")
         elif stateFilter != "all":
-            raise ValueError("Save Editor state filter is not supported for this domain.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidQuery",
+                "Save Editor state filter is not supported for this domain.",
+            )
         if domain == "discover":
             rows = self._discovery_rows(search, language, stateFilter)
             total = len(rows)
@@ -1114,7 +1134,7 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             if path is None:
                 path = []
             if not isinstance(path, (list, tuple)):
-                raise ValueError("Save Editor Advanced path is invalid.")
+                raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor Advanced path is invalid.")
             rows = self._advanced_rows(list(path), language)
         else:
             rows = []
@@ -1201,7 +1221,7 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
 
     def _descriptor(self, entry_id):
         if not isinstance(entry_id, str) or not entry_id:
-            raise ValueError("Save Editor entry identity is invalid.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor entry identity is invalid.")
         prefix, separator, identifier = entry_id.partition(":")
         if save_container.is_id(entry_id):
             return save_container.descriptor(self.document, entry_id)
@@ -1236,11 +1256,11 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
         )
         if semantic is not None:
             return semantic
-        raise ValueError("Save Editor entry is not writable.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor entry is not writable.")
 
     def _pending_action_row(self, entry_id, language):
         if language not in ("en", "zh-CN"):
-            raise ValueError("Save Editor language is unsupported.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor language is unsupported.")
         descriptor = self._descriptor(entry_id)
         root = self.document.lua_state
         prefix = entry_id.partition(":")[0]
@@ -1303,13 +1323,11 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
 
     def _actionable_batch_error(self, error, intents, language):
         """Keep combined-intent failures in Hades presentation with the actions involved."""
-        message = str(error)
-        category = _ACTIONABLE_BATCH_VALIDATION_MESSAGES.get(message)
-        if category is None:
+        if not isinstance(error, SaveBatchValidationError):
             return error
-        key, _ = presentation_for(message)
-        if key is None:
-            return error
+        message = error.diagnostic or str(error)
+        key = error.presentation
+        category = error.batch_category
 
         intents = tuple(intents)
         action_ids = set(getattr(error, "action_ids", ()) or ())
@@ -1366,7 +1384,11 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             previous = unique.get(identity)
             if previous is not None:
                 if not self._same_linked_effect(previous, row):
-                    raise ValueError("Save Editor linked changes conflict.")
+                    raise SaveBatchValidationError(
+                        "hades2.saveEditor.error.linkedChangesConflict",
+                        "Save Editor linked changes conflict.",
+                        "all",
+                    )
                 continue
             unique[identity] = row
             order.append(identity)
@@ -1502,7 +1524,10 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
     def stage(self, entry_id, operation, value=None, language="en"):
         descriptor = self._descriptor(entry_id)
         if operation not in descriptor["mutationKinds"]:
-            raise ValueError("Save Editor mutation is not allowed for this entry.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor mutation is not allowed for this entry.",
+            )
         if descriptor["domain"] == "advanced":
             if operation in ("addMembership", "removeMembership"):
                 descriptor, operation, value = (save_container.member_descriptor(
@@ -1557,8 +1582,9 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
                         or isinstance(value, bool)
                         or not constraints["min"] <= value <= maximum
                     ):
-                        raise ValueError(
-                            "Save Editor player statistic must be an in-range integer."
+                        raise Hades2ValueError(
+                            "hades2.saveEditor.error.invalidMutation",
+                            "Save Editor player statistic must be an in-range integer.",
                         )
                 else:
                     if (
@@ -1567,8 +1593,9 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
                         or not math.isfinite(float(value))
                         or float(value) < constraints["min"]
                     ):
-                        raise ValueError(
-                            "Save Editor player statistic must be a finite non-negative number."
+                        raise Hades2ValueError(
+                            "hades2.saveEditor.error.invalidMutation",
+                            "Save Editor player statistic must be a finite non-negative number.",
                         )
                     value = float(value)
         before = descriptor["before"]
@@ -1596,7 +1623,10 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
 
     def unstage(self, entry_id, language="en"):
         if not isinstance(entry_id, str) or entry_id not in self._pending:
-            raise ValueError("Save Editor staged action is unavailable.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor staged action is unavailable.",
+            )
 
         return self._mutate_pending(lambda: self._pending.pop(entry_id), lambda: self.review(language=language))
 
@@ -1615,14 +1645,20 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             # becomes a new source of descriptor identity.
             descriptor = self._descriptor(intent["id"])
             if intent["operation"] not in descriptor["mutationKinds"]:
-                raise ValueError("Save Editor mutation is no longer allowed.")
+                raise Hades2ValueError(
+                    "hades2.saveEditor.error.invalidMutation",
+                    "Save Editor mutation is no longer allowed.",
+                )
             if intent.get("ownerEvidence") != descriptor.get("ownerEvidence"):
                 raise save_advanced.AdvancedMutationError("Save Editor staged reward source has changed; remove and stage the claim again.", conflict=True)
             if ((intent.get("typedBefore") != descriptor.get("typedBefore"))
                     if intent["domain"] == "advanced" else
                     (intent["before"] != descriptor["before"] or (intent["domain"] in ("history", "resources") and
                      intent["beforePresent"] != descriptor["beforePresent"]))):
-                raise ValueError("Save Editor staged owner is ambiguous or has changed.")
+                raise Hades2ValueError(
+                    "hades2.saveEditor.error.invalidMutation",
+                    "Save Editor staged owner is ambiguous or has changed.",
+                )
         self._apply_intent_batch(candidate, intents)
         save_quest_rewards.validate_batch(self.document.lua_state, intents, self._project_intent_batch_root)
         save_relationships.validate_transaction_owners(self.document.lua_state, intents, self._project_intent_batch_root)
@@ -1660,7 +1696,7 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
 
     def review(self, language="en"):
         if language not in ("en", "zh-CN"):
-            raise ValueError("Save Editor language is unsupported.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor language is unsupported.")
         self._presentation_language = language
         intents = tuple(self._pending.values())
         direct = []
@@ -1675,7 +1711,10 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
                         if intent["domain"] == "advanced" else
                         (intent["before"] != descriptor["before"] or (intent["domain"] in ("history", "resources") and
                          intent["beforePresent"] != descriptor["beforePresent"])))):
-                raise ValueError("Save Editor staged owner is ambiguous or has changed.")
+                raise Hades2ValueError(
+                    "hades2.saveEditor.error.invalidMutation",
+                    "Save Editor staged owner is ambiguous or has changed.",
+                )
             direct.append({
                 key: intent[key]
                 for key in ("id", "domain", "rawId", "operation", "before", "after")
@@ -1795,7 +1834,7 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
         owner = (lua_owner(document.lua_state, path[:-1], create=True)
                  if intent["domain"] == "resources" else _lua_path(document.lua_state, path[:-1]))
         if not isinstance(owner, LuaTable):
-            raise ValueError("Save Editor mutation owner is not a table.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor mutation owner is not a table.")
         key = path[-1]
         operation = intent["operation"]
         if operation in ("set", "setEnum", "setCounter"):
@@ -1808,9 +1847,15 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             try:
                 collection = owner[key]
             except KeyError as error:
-                raise ValueError("Save Editor membership target is missing.") from error
+                raise Hades2ValueError(
+                    "hades2.saveEditor.error.invalidMutation",
+                    "Save Editor membership target is missing.",
+                ) from error
             if not isinstance(collection, LuaTable):
-                raise ValueError("Save Editor membership target is not a table.")
+                raise Hades2ValueError(
+                    "hades2.saveEditor.error.invalidMutation",
+                    "Save Editor membership target is not a table.",
+                )
             member = intent["after"]
             if operation == "addMembership":
                 collection[member] = True
@@ -1820,7 +1865,7 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
                 except KeyError:
                     pass
             return
-        raise ValueError("Save Editor mutation operation is unsupported.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor mutation operation is unsupported.")
 
     @staticmethod
     def _draft_path(path):
@@ -1860,7 +1905,7 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
 
     def apply(self, draft_entry_ids=()):
         if not self._pending:
-            raise ValueError("Save Editor has no changes to apply.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor has no changes to apply.")
 
         draft_candidates = self._continuous_draft_candidates(draft_entry_ids)
         source_document = self._session.document

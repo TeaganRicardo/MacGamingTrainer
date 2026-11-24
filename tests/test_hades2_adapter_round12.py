@@ -12,11 +12,11 @@ sys.path.insert(0, str(root/'tests'))
 import core.target_probe as target_probe_module
 import games.hades2.adapter as adapter_module
 from core.adapter import AdapterError
+from core.errors import PresentableError
 from core.protocol import JsonlRequestRouter
 from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.schema import STAT_RULES, TOGGLES, default_boon_rarity
-from games.hades2.error_presentation import Hades2PresentationError
 from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.resident_session import ResidentGenerationInvalidated, ResidentMetrics, ResidentReply
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
@@ -260,7 +260,7 @@ try:
         {'doorToken':'exit:test:1','room':'combat','reward':'WeaponUpgrade'},
         'offline-attempt',
     )
-except Hades2PresentationError as error:
+except PresentableError as error:
     assert error.presentation.startswith('hades2.error.'), error.presentation
 else:
     raise AssertionError('disconnected exact-exit command was accepted')
@@ -299,7 +299,7 @@ for bad in (
 ):
     try:
         a.dispatch(bad[0], bad[1], 'bad')
-    except Hades2PresentationError as error:
+    except PresentableError as error:
         # Invalid input is rejected with a language-neutral presentation key.
         assert error.presentation.startswith('hades2.error.'), error.presentation
     else:

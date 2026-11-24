@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.adapter import AdapterError
+from core.errors import PresentableError
 from games.hades2 import error_presentation
 from games.hades2 import runtime_error_presentation
 
@@ -76,6 +77,7 @@ CASES = (
     ("remove_trait", "Action requires a requestId of 1..128 characters", "hades2.error.requestIdRequired", ()),
     ("remove_trait", "requestId reused for a different action", "hades2.error.requestIdReused", ()),
     ("remove_trait", "MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry", "hades2.error.outcomeUnknownRuntime", ()),
+    ("apply_world_occurrence", "Unsupported next occurrence target", "hades2.error.invalidNextOccurrence", ()),
 )
 
 
@@ -94,127 +96,141 @@ assert presented.code == "lua_error"
 assert presented.presentation == error_presentation.RUNTIME_FALLBACK_KEY
 assert tuple(presented.arguments) == ()
 
-# Backend messages: interpolated values become arguments, never part of the
-# key, and unregistered developer text is not reclassified as player copy.
-assert error_presentation.presentation_for("请先启动 Hades II 并进入存档。") == ("hades2.error.gameNotRunning", ["Hades II"])
-assert error_presentation.presentation_for("查询 Hades II 进程失败（-9）：boom") == (
-    "hades2.error.processQueryFailed", ["Hades II", "-9", "boom"])
-assert error_presentation.presentation_for("未知功能。") == ("hades2.error.unknownFeature", [])
-assert error_presentation.presentation_for("Hades II module manifest is missing a valid steamAppId.")[0] is None
+# The registry is strictly for resident-Lua runtime messages; Python raise sites
+# carry typed PresentableError keys directly.
+assert not hasattr(error_presentation, "presentation_for")
+assert all(isinstance(rule.get("runtime"), dict) for rule in error_presentation.REGISTRY)
 
 # The registry itself has no duplicate, invalid or shadowed rule; a shadowed
 # rule silently sends a player's error to the wrong key.
 assert not error_presentation.check_registry(), error_presentation.check_registry()
 assert not error_presentation._unreachable(error_presentation.REGISTRY)
 
-# Every player-facing message the Hades II backend raises maps to a key, fills
-# every {n} of its English template, and passes no untranslated sentence text
-# as an argument. Messages are read with `ast`, so f-strings, concatenation,
-# `.format` and an assembled `message = ...` are seen as the player sees them.
+# Every player-facing raise site in Hades II carries a valid key whose
+# placeholder count matches its arguments, and zero raw CJK prose raises exist.
 EN = json.loads((ROOT / "Sources/Hades2/Presentation/Localization/hades2.en.json").read_text(encoding="utf-8"))["entries"]
-CJK = re.compile(r"[㐀-鿿]")
-STRING_ARG = re.compile(r"""f?['"]([^'"\n]+)['"]""")
-TABLE_ENTRY = re.compile(r"""['"](?:error|message)['"]\s*:\s*f?['"]([^'"\n]+)['"]""")
-BOUNDARY_DAMAGE = re.compile(r"[　-〿＀-￯]")
-ERROR_SHAPED = re.compile(
-    r"(失败|错误|无法|不可用|未连接|未运行|未解析|未经验证|需要|请先|请在|已保留|保持不变|不支持|"
-    r"已结束|已退出|已断开|超时|不得|不能|拒绝|不再支持|不一致|不存在|未找到|未知)")
-# Modules whose Chinese strings are labels or report data, never raised errors,
-# and functions that return explicit bilingual row data (exempt only while they
-# contain no raise).
-ERROR_FREE_MODULES = {"catalog.py", "diagnostics.py", "save_history.py", "save_investigation.py"}
-BILINGUAL_DATA_FUNCTIONS = {
-    "save_advanced.py": {"row", "warning"},
-    "save_workspace.py": {"_discovery_reason"},
-    "save_narrative.py": {"entry_row"},
-    "save_quest_rewards.py": {"rows"},
+HOST_EN = {
+    match.group(1): match.group(2)
+    for raw in (ROOT / "Resources/Localization/en.lproj/Host.strings").read_text(encoding="utf-8").splitlines()
+    for match in (re.fullmatch(r'"([^"]+)"\s*=\s*"(.*)";', raw.strip()),)
+    if match
 }
+CJK = re.compile(r"[㐀-鿿]")
+BOUNDARY_DAMAGE = re.compile(r"[　-〿＀-￯]")
 
+_TYPED_ERROR_NAMES = frozenset({
+    "Hades2PresentationError",
+    "Hades2ValueError",
+    "Hades2RuntimeError",
+    "SaveBatchValidationError",
+    "SaveEquipmentBatchValidationError",
+    "_SaveEditorActionValidationError",
+    "PersistenceError",
+    "ResidentSessionError",
+    "ResidentConnectionError",
+    "TransportError",
+    "AdapterError",
+    "HostPresentationError",
+})
 
-def shape(node):
-    """The sentence a string expression renders, with runtime values as X."""
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if isinstance(node, ast.JoinedStr):
-        return "".join(shape(value) for value in node.values)
-    if isinstance(node, ast.FormattedValue):
-        if isinstance(node.value, ast.Attribute):
-            return shape(node.value)
-        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-            return node.value.value
-        return "X"
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        left, right = shape(node.left), shape(node.right)
-        return (left + right) if left and right else (left or right or "X")
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
-        return shape(node.left) + "X"
-    if isinstance(node, ast.Call):
-        func = node.func
-        if isinstance(func, ast.Attribute) and func.attr == "format":
-            return re.sub(r"\{\}", "X", shape(func.value))
-        if isinstance(func, ast.Attribute) and func.attr in {"join", "strip"}:
-            return shape(func.value)
-        if isinstance(func, ast.Name) and func.id in {"str", "repr", "format"}:
-            return "X"
-        return ""
-    if isinstance(node, ast.Name):
-        return "X" if node.id in {"message", "detail", "warning", "error"} else node.id
-    if isinstance(node, ast.Attribute):
-        return node.attr
+def _call_name(call: ast.Call) -> str:
+    if isinstance(call.func, ast.Name):
+        return call.func.id
+    if isinstance(call.func, ast.Attribute):
+        return call.func.attr
     return ""
 
+def _string_constants(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node.value]
+    if isinstance(node, ast.IfExp):
+        return _string_constants(node.body) + _string_constants(node.orelse)
+    return []
 
-def raised_messages(tree):
-    found = []
-    for node in ast.walk(tree):
-        arguments = []
-        if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
-            arguments = node.exc.args
-            # `(code, message)` for Hades errors, `(message)` otherwise.
-            if len(arguments) > 1 and isinstance(arguments[0], ast.Constant):
-                arguments = arguments[1:]
-        elif isinstance(node, ast.Assign) and isinstance(node.value, (ast.Constant, ast.JoinedStr)) and any(
-                isinstance(target, ast.Name) and target.id == "message" for target in node.targets):
-            arguments = [node.value]
-        for argument in arguments:
-            text = re.sub(r"\s+([。，、；：）】」』])", r"\1", re.sub(r"\s+", " ", shape(argument)).strip())
-            if CJK.search(text):
-                found.append(text)
-    return found
+def _kwarg(call: ast.Call, name: str):
+    return next((kw.value for kw in call.keywords if kw.arg == name), None)
 
+def _key_and_args(call: ast.Call, fn: str):
+    if fn in ("Hades2ValueError", "Hades2RuntimeError"):
+        key_node = call.args[0] if call.args else _kwarg(call, "key")
+        args_node = call.args[2] if len(call.args) > 2 else _kwarg(call, "arguments")
+        return key_node, args_node, True
+    if fn in ("SaveBatchValidationError", "SaveEquipmentBatchValidationError"):
+        key_node = call.args[0] if call.args else _kwarg(call, "key")
+        return key_node, None, False
+    if fn in ("Hades2PresentationError", "_SaveEditorActionValidationError"):
+        key_node = call.args[1] if len(call.args) > 1 else _kwarg(call, "presentation")
+        args_node = call.args[2] if len(call.args) > 2 else _kwarg(call, "arguments")
+        return key_node, args_node, True
+    if fn == "PersistenceError":
+        key_node = _kwarg(call, "presentation")
+        args_node = _kwarg(call, "arguments")
+        return key_node, args_node, True
+    # AdapterError / TransportError / HostPresentationError / ResidentSessionError / ResidentConnectionError
+    key_node = call.args[1] if len(call.args) > 1 else _kwarg(call, "presentation")
+    args_node = _kwarg(call, "arguments")
+    return key_node, args_node, True
 
-unregistered = []
+raw_cjk_raises = []
+bad_typed_keys = []
 for path in sorted((ROOT / "Backend/games/hades2").glob("*.py")):
     if path.name == "error_presentation.py":
         continue
-    body = path.read_text(encoding="utf-8")
-    tree = ast.parse(body)
-    messages = raised_messages(tree) + [match.group(1) for match in TABLE_ENTRY.finditer(body)]
-    if path.name not in ERROR_FREE_MODULES:
-        data_spans = [
-            (node.lineno, node.end_lineno) for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name in BILINGUAL_DATA_FUNCTIONS.get(path.name, ())
-            and not any(isinstance(child, ast.Raise) for child in ast.walk(node))
-        ]
-        messages += [
-            literal.group(1) for literal in STRING_ARG.finditer(body)
-            if CJK.search(literal.group(1)) and ERROR_SHAPED.search(literal.group(1))
-            and not any(start <= body.count("\n", 0, literal.start()) + 1 <= end for start, end in data_spans)
-        ]
-    for message in messages:
-        if not CJK.search(message):
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
+            if _call_name(node.exc) in ("ValueError", "RuntimeError"):
+                text = ast.unparse(node.exc)
+                if CJK.search(text):
+                    raw_cjk_raises.append(f"{path.name}:{node.lineno}: {text}")
             continue
-        key, arguments = error_presentation.presentation_for(re.sub(r"\{[^}]*\}", "X", message))
-        if key is None:
-            unregistered.append(f"{path.name}: {message!r}")
+        if not isinstance(node, ast.Call):
             continue
-        template = EN.get(key)
-        assert template is not None, f"{key} is missing from the en table"
-        assert len(arguments) == len(re.findall(r"\{(\d+)\}", template)), (path.name, message, key, arguments)
-        for argument in arguments:
-            assert not (argument and (CJK.search(argument) or BOUNDARY_DAMAGE.search(argument))), (
-                f"{path.name}: {message!r} -> {key} argument {argument!r} carries untranslated sentence text")
-assert not unregistered, sorted(set(unregistered))
+        fn = _call_name(node)
+        if fn not in _TYPED_ERROR_NAMES:
+            continue
+        key_node, args_node, check_arg_count = _key_and_args(node, fn)
+        for key in _string_constants(key_node):
+            if CJK.search(key):
+                raw_cjk_raises.append(f"{path.name}:{node.lineno}: {key!r}")
+                continue
+            if not key.startswith(("hades2.", "host.")):
+                continue
+            table = HOST_EN if key.startswith("host.") else EN
+            template = table.get(key)
+            if template is None:
+                bad_typed_keys.append(f"{path.name}:{node.lineno}: missing key {key}")
+                continue
+            if not check_arg_count:
+                continue
+            needed = len(set(re.findall(r"\{(\d+)\}", template)))
+            if isinstance(args_node, (ast.Tuple, ast.List)):
+                if len(args_node.elts) != needed:
+                    bad_typed_keys.append(
+                        f"{path.name}:{node.lineno}: {key} expects {needed} args, got {len(args_node.elts)}"
+                    )
+                for elt in args_node.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        if CJK.search(elt.value) or BOUNDARY_DAMAGE.search(elt.value):
+                            bad_typed_keys.append(
+                                f"{path.name}:{node.lineno}: {key} literal arg has CJK prose: {elt.value!r}"
+                            )
+            elif args_node is None and needed != 0:
+                bad_typed_keys.append(
+                    f"{path.name}:{node.lineno}: {key} expects {needed} args, got none"
+                )
+
+assert not raw_cjk_raises, raw_cjk_raises
+assert not bad_typed_keys, bad_typed_keys
+
+# Hades I Save Editor no longer wraps raw English prose in "hades.saveEditor.error".
+hades1_en = json.loads((ROOT / "Sources/Hades/Presentation/Localization/hades.en.json").read_text(encoding="utf-8"))["entries"]
+assert "hades.saveEditor.error" not in hades1_en
+for path in [
+    *sorted((ROOT / "Backend/games/hades").glob("*.py")),
+    *sorted((ROOT / "Sources/Hades").rglob("*.swift")),
+]:
+    text = path.read_text(encoding="utf-8")
+    assert '"hades.saveEditor.error"' not in text and "'hades.saveEditor.error'" not in text, path
 
 print("hades2_error_registry_single_source_ok")

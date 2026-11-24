@@ -87,7 +87,12 @@ class Hades2LuaTransport:
                 'LLDBAttachProfile outcome=attach_denied total=%.3fs createTarget=%.3fs attachProcess=%.3fs',
                 profile['total'],profile.get('createTarget',0.0),profile.get('attachProcess',0.0),
             )
-            raise TransportError('attach_denied','连接被拒绝：'+str(error)+ '。退出游戏后使用“准备调试”，再重新启动。')
+            raise TransportError(
+                'attach_denied',
+                'hades2.error.attachDenied',
+                arguments=(str(error),),
+                diagnostic='连接被拒绝：' + str(error) + '。退出游戏后使用“准备调试”，再重新启动。',
+            )
 
         self.pid=pid; self.addresses={}; self.tainted=False; self._boundary_initial_stop_pending=False; self._boundary_cleanup_depth=0; self.focus_original=None; self.native_runtime_installer=None; self.native_mailbox_library=None
         self._clear_cleanup_state()
@@ -104,7 +109,12 @@ class Hades2LuaTransport:
                     arch_ok = triple.startswith(required_arch + '-')
                 if not self.runtime_uuid or not arch_ok:
                     requirement = required_arch or '受支持架构'
-                    raise TransportError('incompatible',f'{DISPLAY_NAME} 适配器需要 {requirement} 原生游戏。')
+                    raise TransportError(
+                        'incompatible',
+                        'hades2.error.architectureRequired',
+                        arguments=(DISPLAY_NAME, requirement),
+                        diagnostic=f'{DISPLAY_NAME} 适配器需要 {requirement} 原生游戏。',
+                    )
             finally:
                 profile['identity']=time.monotonic()-phase
 
@@ -156,7 +166,13 @@ class Hades2LuaTransport:
 
     def address(self,name):
         if name in self.addresses:return self.addresses[name]
-        if name not in self.symbols:raise TransportError('incompatible','缺少符号：'+name)
+        if name not in self.symbols:
+            raise TransportError(
+                'incompatible',
+                'hades2.error.missingSymbol',
+                arguments=(name,),
+                diagnostic='缺少符号：' + name,
+            )
         if self.runtime_uuid!=self.known_uuid:
             # A new build may move every address. Resolve only symbols owned by
             # its live main image; never reuse the old build's RVAs or prefixes.
@@ -168,19 +184,36 @@ class Hades2LuaTransport:
                 address=symbol.GetStartAddress().GetLoadAddress(self.target)
                 if symbol.IsValid() and address not in (0,lldb.LLDB_INVALID_ADDRESS):addresses.add(address)
             if len(addresses)!=1:
-                raise TransportError('incompatible','新版本关键符号无法唯一定位：'+name)
+                raise TransportError(
+                    'incompatible',
+                    'hades2.error.symbolNotUnique',
+                    arguments=(name,),
+                    diagnostic='新版本关键符号无法唯一定位：' + name,
+                )
             address=addresses.pop()
             error=lldb.SBError()
             if len(self.process.ReadMemory(address,1,error) or b'')!=1 or error.Fail():
-                raise TransportError('incompatible','新版本关键符号不可读：'+name)
+                raise TransportError(
+                    'incompatible',
+                    'hades2.error.symbolUnreadable',
+                    arguments=(name,),
+                    diagnostic='新版本关键符号不可读：' + name,
+                )
             self.addresses[name]=address;return address
         base=self.target.GetModuleAtIndex(0).GetObjectFileHeaderAddress().GetLoadAddress(self.target)
-        if base==lldb.LLDB_INVALID_ADDRESS:raise TransportError('incompatible','无法定位游戏镜像。')
+        if base==lldb.LLDB_INVALID_ADDRESS:
+            raise TransportError('incompatible', 'hades2.error.imageNotFound', diagnostic='无法定位游戏镜像。')
         entry=self.symbols[name];address=base+entry['rva']
         if 'prefix' in entry:
             error=lldb.SBError();expected=bytes.fromhex(entry['prefix'])
             actual=self.process.ReadMemory(address,len(expected),error)
-            if error.Fail() or actual!=expected:raise TransportError('incompatible','运行中的游戏函数校验失败：'+name)
+            if error.Fail() or actual!=expected:
+                raise TransportError(
+                    'incompatible',
+                    'hades2.error.runtimeVerificationFailed',
+                    arguments=(name,),
+                    diagnostic='运行中的游戏函数校验失败：' + name,
+                )
         self.addresses[name]=address;return address
 
     @profiled("debugger.drain")
@@ -197,7 +230,7 @@ class Hades2LuaTransport:
         self.drain()
         state=self.process.GetState()
         if self._is_terminal_state(state):
-            raise TransportError('disconnected','游戏进程已结束。')
+            raise TransportError('disconnected', 'hades2.error.processExited', diagnostic='游戏进程已结束。')
         return state
 
     def alive(self):
@@ -206,32 +239,32 @@ class Hades2LuaTransport:
 
     def wait_state(self, states, deadline, *, phase='transport.stop', primary_error_code=None):
         if self.process is None:
-            raise TransportError('disconnected','游戏进程已结束。')
+            raise TransportError('disconnected', 'hades2.error.processExited', diagnostic='游戏进程已结束。')
         last_observed_state=None
         while time.monotonic()<deadline:
             if self.process is None:
-                raise TransportError('disconnected','游戏进程已结束。')
+                raise TransportError('disconnected', 'hades2.error.processExited', diagnostic='游戏进程已结束。')
             self.drain()
             state=self.process.GetState()
             last_observed_state=state
             if state in states:return state
             if self._is_terminal_state(state):
-                raise TransportError('disconnected','游戏进程已结束。')
+                raise TransportError('disconnected', 'hades2.error.processExited', diagnostic='游戏进程已结束。')
             time.sleep(.005)
         observation={'phase':phase,'expectedStates':list(states),'lastObservedState':last_observed_state}
         if primary_error_code is not None:observation['primary_error_code']=primary_error_code
-        raise TransportError('process_timeout','游戏进程状态切换超时。',diagnostic=json.dumps(observation,separators=(',',':')))
+        raise TransportError('process_timeout', 'hades2.error.processTimeout', diagnostic=json.dumps(observation,separators=(',',':')))
 
     def _stop_failed_error(self, phase, last_state, *, lldb_error=None, primary_error_code=None):
         observation={'phase':phase,'expectedStates':[lldb.eStateStopped],'lastObservedState':last_state}
         if lldb_error is not None:observation['lldbError']=str(lldb_error)
         if primary_error_code is not None:observation['primary_error_code']=primary_error_code
-        return TransportError('stop_failed','无法在时限内暂停游戏。',diagnostic=json.dumps(observation,separators=(',',':')))
+        return TransportError('stop_failed', 'hades2.error.pauseFailed', diagnostic=json.dumps(observation,separators=(',',':')))
 
     @profiled("debugger.stop")
     def stop(self, deadline, *, phase='transport.stop', primary_error_code=None):
         if self.process is None:
-            raise TransportError('disconnected','游戏进程已结束。')
+            raise TransportError('disconnected', 'hades2.error.processExited', diagnostic='游戏进程已结束。')
         state=self._observe_live_state()
         if state==lldb.eStateStopped:return
         if time.monotonic()>=deadline:
@@ -248,38 +281,68 @@ class Hades2LuaTransport:
     @profiled("debugger.resume")
     def resume(self, deadline, breakpoint_expected=False):
         if self.process is None:
-            raise TransportError('disconnected','游戏进程已结束。')
+            raise TransportError('disconnected', 'hades2.error.processExited', diagnostic='游戏进程已结束。')
         if self._observe_live_state()==lldb.eStateRunning:return
         previous_stop=self.process.GetStopID()
         error=self.process.Continue()
         if error.Fail():
             if self._observe_live_state()==lldb.eStateRunning:return
-            raise TransportError('resume_failed','无法恢复游戏运行：'+str(error))
+            raise TransportError(
+                'resume_failed',
+                'hades2.error.resumeFailed',
+                arguments=(str(error),),
+                diagnostic='无法恢复游戏运行：' + str(error),
+            )
         while time.monotonic()<deadline:
             state=self._observe_live_state()
             if state==lldb.eStateRunning:return
             if breakpoint_expected and state==lldb.eStateStopped and self.process.GetStopID()>previous_stop:return
             time.sleep(.005)
-        raise TransportError('resume_failed','游戏未能恢复运行。')
+        raise TransportError('resume_failed', 'hades2.error.resumeUnverified', diagnostic='游戏未能恢复运行。')
 
     def restore_focus(self):
         if self.focus_original is None:return
         if self.process.GetState()!=lldb.eStateStopped:
-            raise TransportError('restore_failed','后台暂停标志尚未恢复，请保持连接重试断开。')
+            raise TransportError(
+                'restore_failed',
+                'hades2.error.focusNotRestored',
+                diagnostic='后台暂停标志尚未恢复，请保持连接重试断开。',
+            )
         address=self.address('_ZN3sgg13ConfigOptions20RequireFocusToUpdateE')
         error=lldb.SBError()
         count=self.process.WriteMemory(address,self.focus_original,error)
-        if error.Fail() or count!=1:raise TransportError('restore_failed','后台暂停标志恢复失败：'+str(error))
+        if error.Fail() or count!=1:
+            raise TransportError(
+                'restore_failed',
+                'hades2.error.focusRestoreFailed',
+                arguments=(str(error),),
+                diagnostic='后台暂停标志恢复失败：' + str(error),
+            )
         actual=self.process.ReadMemory(address,1,error)
-        if error.Fail() or actual!=self.focus_original:raise TransportError('restore_failed','后台暂停标志恢复校验失败。')
+        if error.Fail() or actual!=self.focus_original:
+            raise TransportError(
+                'restore_failed',
+                'hades2.error.focusRestoreMismatch',
+                diagnostic='后台暂停标志恢复校验失败。',
+            )
         self.focus_original=None
 
     @profiled("debugger.boundary")
     def boundary(self, timeout=LUA_BOUNDARY_TIMEOUT_SECONDS, *, entry_address=None):
         self._boundary_initial_stop_pending=False
         if getattr(self, 'cleanup_pending', False):raise self._quarantined_error()
-        if self.tainted:raise TransportError('restart_required','上次调用结果不明，请重启游戏后重新连接。')
-        if not self.alive():raise TransportError('disconnected','游戏已退出或连接已断开。')
+        if self.tainted:
+            raise TransportError(
+                'restart_required',
+                'hades2.error.restartRequired',
+                diagnostic='上次调用结果不明，请重启游戏后重新连接。',
+            )
+        if not self.alive():
+            raise TransportError(
+                'disconnected',
+                'hades2.error.notAttached',
+                diagnostic='游戏已退出或连接已断开。',
+            )
         deadline=time.monotonic()+timeout
         # Initial stop happens before breakpoint/focus/scratch/Lua mutations;
         # keep its failure distinct from uncertain post-mutation cleanup.
@@ -311,7 +374,8 @@ class Hades2LuaTransport:
         error=lldb.SBError()
         focus=self.address('_ZN3sgg13ConfigOptions20RequireFocusToUpdateE')
         original=self.process.ReadMemory(focus,1,error)
-        if error.Fail() or original not in (b'\x00',b'\x01'):raise TransportError('incompatible','后台运行标志无法验证。')
+        if error.Fail() or original not in (b'\x00',b'\x01'):
+            raise TransportError('incompatible', 'hades2.error.runFlagUnverifiable', diagnostic='后台运行标志无法验证。')
         self.focus_original=original
         if self.process.WriteMemory(focus,b'\x00',error)!=1 or error.Fail():raise TransportError('memory_error',str(error))
         bp=self.target.BreakpointCreateByAddress(
@@ -322,11 +386,13 @@ class Hades2LuaTransport:
             while time.monotonic()<deadline:
                 self.drain()
                 state=self.process.GetState()
-                if state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached):raise TransportError('disconnected','游戏进程已退出。')
+                if state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached):
+                    raise TransportError('disconnected', 'hades2.error.processExitedSecond', diagnostic='游戏进程已退出。')
                 if state!=lldb.eStateStopped:
                     time.sleep(.005);continue
                 matching=[th for th in self.process if th.GetStopReason()==lldb.eStopReasonBreakpoint and th.GetStopReasonDataAtIndex(0)==bp.GetID()]
-                if not matching:raise TransportError('unexpected_stop','游戏发生非预期停顿，已停止当前操作。')
+                if not matching:
+                    raise TransportError('unexpected_stop', 'hades2.error.unexpectedStop', diagnostic='游戏发生非预期停顿，已停止当前操作。')
                 th=matching[0]
                 err=lldb.SBError()
                 L=self.process.ReadPointerFromMemory(self.address('_ZN3sgg13ScriptManager12LuaInterfaceE'),err)
@@ -408,7 +474,11 @@ class Hades2LuaTransport:
         if getattr(self, 'cleanup_pending', False):
             raise self._quarantined_error()
         if self.tainted:
-            raise TransportError('restart_required','上次调用结果不明，请重启游戏后重新连接。')
+            raise TransportError(
+                'restart_required',
+                'hades2.error.restartRequired',
+                diagnostic='上次调用结果不明，请重启游戏后重新连接。',
+            )
         started=time.monotonic(); scratch=None; bp=None; self.last_expression_duration=0; primary_error_code=None
         self._boundary_initial_stop_pending=False
         cleanup_depth=getattr(self,'_boundary_cleanup_depth',0)
@@ -416,7 +486,8 @@ class Hades2LuaTransport:
         try:
             th,L,bp=self.boundary()
             payload=source.encode('utf-8')
-            if len(payload)>LUA_TRANSPORT_SOURCE_LIMIT_BYTES:raise TransportError('invalid_request','功能代码过长。')
+            if len(payload)>LUA_TRANSPORT_SOURCE_LIMIT_BYTES:
+                raise TransportError('invalid_request', 'hades2.error.featureCodeTooLong', diagnostic='功能代码过长。')
             library=getattr(self,'native_runtime_installer',None)
             cap=LUA_TRANSPORT_RESULT_LIMIT_BYTES;size=len(payload)+1+cap
             err=lldb.SBError();scratch=self.process.AllocateMemory(size,lldb.ePermissionsReadable|lldb.ePermissionsWritable,err)
@@ -461,11 +532,20 @@ class Hades2LuaTransport:
                         f'LLDB expression exceeded {expression_timeout_seconds:g}s budget '
                         f'after {self.last_expression_duration:.3f}s; '+detail
                     )
-                raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试：'+detail)
+                raise TransportError(
+                    'outcome_unknown',
+                    'hades2.error.outcomeUnknownTransport',
+                    arguments=(detail,),
+                    diagnostic='游戏调用结果不明，未自动重试：' + detail,
+                )
             text=self.process.ReadCStringFromMemory(out,cap,err)
             if err.Fail():
                 self.tainted=True
-                raise TransportError('outcome_unknown','无法读取操作结果；请检查游戏，不要重复资源操作。')
+                raise TransportError(
+                    'outcome_unknown',
+                    'hades2.error.outcomeUnknownUnreadable',
+                    diagnostic='无法读取操作结果；请检查游戏，不要重复资源操作。',
+                )
             status=result.GetValueAsSigned()
             if status<0:
                 raise TransportError(
@@ -477,8 +557,14 @@ class Hades2LuaTransport:
                 if marker in text:
                     self.tainted=True
                     message=text.split(marker,1)[1].strip()
-                    raise TransportError('outcome_unknown',message or '游戏调用结果不明，未自动重试。')
-                raise TransportError('lua_error',text or 'Lua 执行失败')
+                    raise TransportError(
+                        'outcome_unknown',
+                        'hades2.error.outcomeUnknownRuntime' if message else 'hades2.error.outcomeUnknownEmpty',
+                        diagnostic=text or '游戏调用结果不明，未自动重试。',
+                    )
+                if text:
+                    raise TransportError('lua_error', text)
+                raise TransportError('lua_error', 'hades2.error.luaFailed', diagnostic='Lua 执行失败')
             return text
         except BaseException as exc:
             primary_error_code=getattr(exc,'code',None)

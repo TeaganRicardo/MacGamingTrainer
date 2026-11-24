@@ -108,7 +108,7 @@ class ObservedTransport:
     last_attach_profile = {}
 
     def execute(self, source):
-        raise AdapterError("process_timeout", "游戏进程状态切换超时。", diagnostic=diagnostic)
+        raise AdapterError("process_timeout", "hades2.error.processTimeout", diagnostic=diagnostic)
 
 
 worker = Hades2LLDBWorker(transport=ObservedTransport())
@@ -141,7 +141,7 @@ try:
                    expression_timeout_seconds=None)
 except AdapterError as error:
     assert error.diagnostic == diagnostic
-    presented = Hades2CommandContract._as_presentation_key(present_runtime_error("connect", error))
+    presented = present_runtime_error("connect", error)
 else:
     raise AssertionError("Fixture stop timeout was not propagated")
 
@@ -153,5 +153,14 @@ assert reply["error"] == {
     "code": "process_timeout", "presentation": "hades2.error.processTimeout", "diagnostic": diagnostic,
 }, reply["error"]
 assert not worker.transport.tainted and not client.terminal
+
+# Python-raised lua_error values carrying an explicit presentation key must pass
+# through present_runtime_error intact without falling back to runtimeActionFailed.
+typed_lua_error = AdapterError(
+    "lua_error",
+    "hades2.error.traitTrayCloseTimeout",
+    diagnostic="游戏内祝福菜单未能及时关闭，修改尚未执行。",
+)
+assert present_runtime_error("set_desired", typed_lua_error) is typed_lua_error
 
 print("hades2_runtime_error_presentation_ok")

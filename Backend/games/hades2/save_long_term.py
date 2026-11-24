@@ -6,6 +6,7 @@ Arcana loadout and automatic-card semantics belong to save_arcana.
 """
 
 from . import save_advanced, save_arcana, save_relationships
+from .error_presentation import Hades2ValueError
 from .save_mutation_utils import owner as lua_owner
 from .localization import official_display_names
 from .save_document import AmbiguousLuaKeyError, LuaTable
@@ -116,14 +117,17 @@ def linked_cache_label(raw_id, language, game_path=None):
 def _state(root):
     state = root["GameState"]
     if not isinstance(state, LuaTable):
-        raise ValueError("Save Editor GameState is malformed.")
+        raise Hades2ValueError("hades2.saveEditor.error.operationFailed", "Save Editor GameState is malformed.")
     return state
 
 
 def _table(state, field):
     value = state.get(field)
     if not isinstance(value, LuaTable):
-        raise ValueError("Save Editor {} is unavailable or malformed.".format(field))
+        raise Hades2ValueError(
+            "hades2.saveEditor.error.operationFailed",
+            "Save Editor {} is unavailable or malformed.".format(field),
+        )
     return value
 
 
@@ -298,7 +302,10 @@ def descriptor(root, entry_id, game_path=None):
                     "Save Editor semantic owner is ambiguous."
                 )
             if row.get("ownerState") == "unsupported":
-                raise ValueError("Save Editor semantic owner is unsupported.")
+                raise Hades2ValueError(
+                    "hades2.saveEditor.error.invalidMutation",
+                    "Save Editor semantic owner is unsupported.",
+                )
             return {
                 "id": row["id"], "domain": domain, "rawId": row["rawId"],
                 "path": row["path"], "before": row["value"],
@@ -314,19 +321,31 @@ def validate(descriptor_value, operation, value):
     if descriptor_value["id"].startswith("gift:"):
         return save_relationships.validate(descriptor_value, operation, value)
     if operation not in descriptor_value["mutationKinds"] or operation != "set":
-        raise ValueError("Save Editor long-term mutation is not authorized.")
+        raise Hades2ValueError(
+            "hades2.saveEditor.error.invalidMutation",
+            "Save Editor long-term mutation is not authorized.",
+        )
     if descriptor_value.get("rawTyped"):
         save_advanced.validate_scalar(value, descriptor_value["valueType"])
         return
     if descriptor_value["valueType"] == "boolean":
         if type(value) is not bool:
-            raise ValueError("Save Editor long-term flag must be boolean.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor long-term flag must be boolean.",
+            )
     elif descriptor_value["valueType"] == "integer":
         limits = descriptor_value["constraints"]
         if type(value) is not int or not limits["min"] <= value <= limits["max"]:
-            raise ValueError("Save Editor long-term counter is out of range.")
+            raise Hades2ValueError(
+                "hades2.saveEditor.error.invalidMutation",
+                "Save Editor long-term counter is out of range.",
+            )
     else:
-        raise ValueError("Save Editor long-term mutation type is unsupported.")
+        raise Hades2ValueError(
+            "hades2.saveEditor.error.invalidMutation",
+            "Save Editor long-term mutation type is unsupported.",
+        )
 
 
 def apply_intent(root, intent):
@@ -360,7 +379,10 @@ def apply_intent(root, intent):
         else:
             owner.pop(name, None)
         return
-    raise ValueError("Save Editor long-term mutation is unknown.")
+    raise Hades2ValueError(
+        "hades2.saveEditor.error.invalidMutation",
+        "Save Editor long-term mutation is unknown.",
+    )
 
 
 def linked_changes(root, intents):

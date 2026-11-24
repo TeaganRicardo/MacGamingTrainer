@@ -9,6 +9,7 @@ import json
 import math
 
 from . import save_advanced
+from .error_presentation import Hades2ValueError, SaveBatchValidationError
 from .localization import official_display_names
 from .save_document import clone_lua_value, AmbiguousLuaKeyError, LuaTable
 
@@ -62,7 +63,7 @@ def _table(owner, key, *, create=False):
         if create:
             owner[key] = value
     if not isinstance(value, LuaTable):
-        raise ValueError("Save Editor semantic owner is unsupported.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor semantic owner is unsupported.")
     return value
 
 
@@ -166,7 +167,7 @@ def apply_intent(root, intent):
     _, name, field = intent["id"].split(":", 2)
     cards = _table(root["GameState"], "MetaUpgradeState", create=True)
     if name not in CARDS and name not in cards:
-        raise ValueError("Save Editor Arcana card identity is invalid.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor Arcana card identity is invalid.")
     card = _table(cards, name, create=True)
     after = intent["after"]
     if name not in CARDS:
@@ -188,7 +189,7 @@ def apply_intent(root, intent):
         if after > 1:
             card["Unlocked"] = True
     else:
-        raise ValueError("Save Editor Arcana field is not editable.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor Arcana field is not editable.")
     if card.get("Level") is None:
         card["Level"] = 1
 
@@ -200,17 +201,17 @@ def _layout(state):
                                for index, row in enumerate(LAYOUT, 1)])
         state["MetaUpgradeCardLayout"] = value
     if not isinstance(value, LuaTable):
-        raise ValueError("Save Editor semantic owner is unsupported.")
+        raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor semantic owner is unsupported.")
     result, seen = [], set()
     for row in range(1, 6):
         line = value.get(row)
         if not isinstance(line, LuaTable):
-            raise ValueError("Save Editor semantic owner is unsupported.")
+            raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor semantic owner is unsupported.")
         result.append([])
         for column in range(1, 6):
             name = line.get(column)
             if not isinstance(name, str) or name in seen:
-                raise ValueError("Save Editor semantic owner is ambiguous.")
+                raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor semantic owner is ambiguous.")
             seen.add(name)
             result[-1].append(name)
     return result
@@ -273,27 +274,27 @@ def _choose_manual(cards, layout, own, manual):
     wanted = {name: value for (name, field), value in explicit.items()
               if field == "Equipped" and name in CARDS and CARDS[name][1]}
     if any(value and explicit.get((name, "Unlocked")) is False for name, value in wanted.items()):
-        raise ValueError("Save Editor Arcana changes conflict.")
+        raise SaveBatchValidationError("hades2.saveEditor.error.arcanaChangesConflict", "Save Editor Arcana changes conflict.", "arcana")
     fixed = {name: value for (name, field), value in explicit.items()
              if field == "Equipped" and name in CARDS and not CARDS[name][1]}
     for (name, field), value in explicit.items():
         if field == "Unlocked" and value is False and name in CARDS and not CARDS[name][1]:
             if fixed.get(name) is True:
-                raise ValueError("Save Editor Arcana changes conflict.")
+                raise SaveBatchValidationError("hades2.saveEditor.error.arcanaChangesConflict", "Save Editor Arcana changes conflict.", "arcana")
             fixed[name] = False
     coordinates = {name for line in layout for name in line}
     if any(value and CARDS[name][1] in ("neighbor", "allNeighbors", "otherRowOrColumn")
            and name not in coordinates for name, value in wanted.items()):
-        raise ValueError("Save Editor Arcana changes conflict.")
+        raise SaveBatchValidationError("hades2.saveEditor.error.arcanaChangesConflict", "Save Editor Arcana changes conflict.", "arcana")
     if wanted.get("MaxHealthPerRoom") and wanted.get("CardDraw"):
-        raise ValueError("Save Editor Arcana changes conflict.")
+        raise SaveBatchValidationError("hades2.saveEditor.error.arcanaChangesConflict", "Save Editor Arcana changes conflict.", "arcana")
     known_manual = [name for row in LAYOUT for name in row if not CARDS[name][1]]
     if wanted.get("MaxHealthPerRoom") and any(not any(
         CARDS[name][0] == cost and fixed.get(name) is not False for name in known_manual
     ) for cost in range(1, 6)):
-        raise ValueError("Save Editor Arcana changes conflict.")
+        raise SaveBatchValidationError("hades2.saveEditor.error.arcanaChangesConflict", "Save Editor Arcana changes conflict.", "arcana")
     if sum(CARDS[name][0] for name, value in fixed.items() if value) > 30:
-        raise ValueError("Save Editor Arcana changes conflict.")
+        raise SaveBatchValidationError("hades2.saveEditor.error.arcanaChangesConflict", "Save Editor Arcana changes conflict.", "arcana")
     free = [name for name in known_manual if name not in fixed]
     initial = (manual - set(fixed)) | {name for name, value in fixed.items() if value}
     for distance in range(len(free) + 1):
@@ -323,7 +324,7 @@ def _choose_manual(cards, layout, own, manual):
                 best = rank, selected, equipped
         if best is not None:
             return best[1:]
-    raise ValueError("Save Editor Arcana changes conflict.")
+    raise SaveBatchValidationError("hades2.saveEditor.error.arcanaChangesConflict", "Save Editor Arcana changes conflict.", "arcana")
 
 
 def finalize_batch(root, intents, source=None):
@@ -369,7 +370,7 @@ def finalize_batch(root, intents, source=None):
     while loadout_change and capacity(level) < cost and level < 15:
         level += 1
     if loadout_change and capacity(level) < cost:
-        raise ValueError("Save Editor Arcana changes conflict.")
+        raise SaveBatchValidationError("hades2.saveEditor.error.arcanaChangesConflict", "Save Editor Arcana changes conflict.", "arcana")
     if level or "MetaUpgradeLimitLevel" in state:
         state["MetaUpgradeLimitLevel"] = level
     state["MaxMetaUpgradeCostCache"] = capacity(level)
@@ -392,7 +393,7 @@ def validate_batch(root, intents):
         actual = (card.get(field) if name not in CARDS else
                   _level(card) if field == "Level" else _truth(card.get(field)))
         if actual != intent["after"]:
-            raise ValueError("Save Editor Arcana changes conflict.")
+            raise SaveBatchValidationError("hades2.saveEditor.error.arcanaChangesConflict", "Save Editor Arcana changes conflict.", "arcana")
 
 
 def linked_changes(root, intents):

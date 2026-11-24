@@ -12,6 +12,7 @@ import struct
 import zlib
 
 from core import lz4_block
+from core.errors import PresentableError
 
 
 VERSION = 0x10
@@ -21,12 +22,34 @@ MAX_HEADER = 0x4000
 MAX_TABLE_DEPTH = 249
 
 
-class SaveFormatError(ValueError):
-    pass
+class HadesSaveValueError(PresentableError, ValueError):
+    """Hades Save validation/codec error carrying a typed presentation key."""
+
+    def __init__(
+        self,
+        key: str,
+        diagnostic: str,
+        *,
+        code: str = 'save_editor_invalid',
+        arguments=(),
+    ) -> None:
+        super().__init__(
+            code,
+            key,
+            diagnostic=diagnostic,
+            arguments=arguments,
+            message=diagnostic,
+        )
 
 
-class AmbiguousKeyError(ValueError):
-    pass
+class SaveFormatError(HadesSaveValueError):
+    def __init__(self, diagnostic: str, *, key: str = 'hades.saveEditor.error.invalidFormat') -> None:
+        super().__init__(key, diagnostic)
+
+
+class AmbiguousKeyError(HadesSaveValueError):
+    def __init__(self, diagnostic: str) -> None:
+        super().__init__('hades.saveEditor.error.ambiguousKey', diagnostic)
 
 
 class LuaNumber(float):
@@ -230,9 +253,15 @@ class HadesSaveDocument:
         if reader.take(4) != b'SGB1':
             raise SaveFormatError('Native Hades Save magic is missing.')
         if reader.number('I') != zlib.adler32(data[8:]) & 0xffffffff:
-            raise SaveFormatError('Native Hades Save checksum does not match.')
+            raise SaveFormatError(
+                'Native Hades Save checksum does not match.',
+                key='hades.saveEditor.error.checksumMismatch',
+            )
         if reader.number('I') != VERSION:
-            raise SaveFormatError('This Hades Save version is unsupported; version 16 is required.')
+            raise SaveFormatError(
+                'This Hades Save version is unsupported; version 16 is required.',
+                key='hades.saveEditor.error.unsupportedVersion',
+            )
         header = HadesSaveHeader(reader.number('Q'), reader.text(), reader.number('I'),
             reader.number('I'), reader.number('I'), reader.number('B'), reader.number('B'))
         count = reader.number('I')

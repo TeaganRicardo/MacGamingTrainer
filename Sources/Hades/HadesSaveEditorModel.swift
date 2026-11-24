@@ -307,8 +307,7 @@ final class HadesSaveEditorModel: ObservableObject {
         client.owns(workspaceID: workspace, baseline: baseline) && canEditRows
     }
     private func stale(_ scope: String) {
-        failures[scope] = TrainerTextToken(key: "hades.saveEditor.error", arguments: [
-            "This control belongs to an earlier document baseline. Refresh the editor before editing."])
+        failures[scope] = TrainerTextToken(key: "hades.saveEditor.error.staleBaseline")
     }
     func open(language: TrainerPresentationLanguage) {
         self.language = language

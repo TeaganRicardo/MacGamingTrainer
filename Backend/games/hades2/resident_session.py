@@ -18,6 +18,7 @@ from pathlib import Path
 from core.adapter import AdapterError
 
 from .catalog import localize_catalog
+from .error_presentation import Hades2ValueError
 from .localization import invalidate_display_names
 from .operation_budgets import REPLAY_EXPRESSION_TIMEOUT_SECONDS, TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS
 
@@ -105,7 +106,7 @@ def lua_value(value):
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         if not math.isfinite(value):
-            raise ValueError("必须输入有限数值。")
+            raise Hades2ValueError("hades2.error.statFinite", "必须输入有限数值。")
         return str(value)
     if isinstance(value, str):
         return '"' + "".join(
@@ -117,7 +118,7 @@ def lua_value(value):
             "[" + lua_value(key) + "]=" + lua_value(item)
             for key, item in value.items()
         ) + "}"
-    raise ValueError("参数类型不支持。")
+    raise Hades2ValueError("hades2.error.invalidParamsObject", "参数类型不支持。")
 
 
 class Hades2ResidentSession:
@@ -276,7 +277,11 @@ class Hades2ResidentSession:
         if self._connection_error is not None:
             raise self._connection_error
         if not self.has_attachment:
-            raise TransportError("disconnected", "请先连接游戏。")
+            raise TransportError(
+                "disconnected",
+                "hades2.error.notConnected",
+                diagnostic="请先连接游戏。",
+            )
 
         runtime_params = dict(params)
         if "includeCatalogs" not in runtime_params:
@@ -290,7 +295,11 @@ class Hades2ResidentSession:
                 and time.monotonic() - trait_tray_started
                 >= _TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS
             ):
-                raise TransportError("waiting", "游戏内祝福菜单未能及时关闭，修改尚未执行。")
+                raise TransportError(
+                    "waiting",
+                    "hades2.error.traitTrayCloseTimeout",
+                    diagnostic="游戏内祝福菜单未能及时关闭，修改尚未执行。",
+                )
 
             dispatch = self._dispatch_source(command, runtime_params, batch)
             if command != "status":
@@ -336,16 +345,25 @@ class Hades2ResidentSession:
             if handoff == "unsupported":
                 raise TransportError(
                     "incompatible",
-                    "游戏内祝福菜单缺少受支持的关闭流程，无法安全继续修改。",
+                    "hades2.error.traitTrayCloseUnsupported",
+                    diagnostic="游戏内祝福菜单缺少受支持的关闭流程，无法安全继续修改。",
                 )
             if handoff != "closing":
-                raise TransportError("lua_error", "游戏内祝福菜单未能及时关闭，修改尚未执行。")
+                raise TransportError(
+                    "lua_error",
+                    "hades2.error.traitTrayCloseTimeout",
+                    diagnostic="游戏内祝福菜单未能及时关闭，修改尚未执行。",
+                )
             if trait_tray_started is None:
                 trait_tray_started = boundary_started
             trait_tray_boundaries += 1
             elapsed = time.monotonic() - trait_tray_started
             if elapsed >= _TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS:
-                raise TransportError("waiting", "游戏内祝福菜单未能及时关闭，修改尚未执行。")
+                raise TransportError(
+                    "waiting",
+                    "hades2.error.traitTrayCloseTimeout",
+                    diagnostic="游戏内祝福菜单未能及时关闭，修改尚未执行。",
+                )
             time.sleep(
                 min(
                     _TRAIT_TRAY_HANDOFF_POLL_SECONDS,
@@ -545,8 +563,9 @@ class Hades2ResidentSession:
             if crossed:
                 raise ResidentSessionError(
                     "outcome_unknown",
-                    "游戏调用结果不明，未自动重试；请检查游戏并重启。",
+                    "hades2.error.outcomeUnknownGeneric",
                     metrics,
+                    diagnostic="游戏调用结果不明，未自动重试；请检查游戏并重启。",
                 ) from error
             if isinstance(error, AdapterError):
                 raise ResidentSessionError.from_adapter_error(error, metrics) from error

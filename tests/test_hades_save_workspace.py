@@ -10,7 +10,8 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests/fixtures'))
 
 from hades_save import Entries, build_save, environment, root_state, sized
-from core.adapter import GameAdapterContext, AdapterError
+from core.adapter import GameAdapterContext
+from core.errors import PresentableError
 from core.protocol import JsonlRequestRouter
 from games.hades.adapter import HadesAdapter
 from games.hades.preferences import HadesPreferenceStore
@@ -209,7 +210,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-journeys-') as tempora
     identifier = opened['result']['workspaceId']
     other = HadesAdapter(context, runtime=NoRuntime(), preferences=HadesPreferenceStore(base / 'other-prefs.json'))
     other.bind_save_service(service)
-    rejects(AdapterError, lambda: other.dispatch('save_editor_review', {'workspaceId': identifier}, 'cross-game-workspace'))
+    cross_err = rejects(PresentableError, lambda: other.dispatch('save_editor_review', {'workspaceId': identifier}, 'cross-game-workspace'))
+    assert cross_err.presentation == 'hades.saveEditor.error.notOpen'
     request = {'id': 'stage', 'command': 'save_editor_stage', 'params':
                {'workspaceId': identifier, 'baselineGeneration': opened['result']['baselineGeneration'], 'entryId': 'resource:MetaPoints', 'operation': 'set', 'value': scalar(3)}}
     encoded = router.handle_encoded(request)
@@ -217,18 +219,22 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-journeys-') as tempora
     assert json.loads(encoded)['result']['count'] == 1
     generation = opened['result']['baselineGeneration']
     assert json.loads(encoded)['result']['baselineGeneration'] == generation
-    missing_generation = router.handle_encoded({'id': 'missing-baseline', 'command': 'save_editor_stage',
-        'params': {'workspaceId': identifier, 'entryId': 'resource:MetaPoints', 'operation': 'set', 'value': scalar(8)}})
-    assert not json.loads(missing_generation)['ok']
+    missing_generation = json.loads(router.handle_encoded({'id': 'missing-baseline', 'command': 'save_editor_stage',
+        'params': {'workspaceId': identifier, 'entryId': 'resource:MetaPoints', 'operation': 'set', 'value': scalar(8)}}))
+    assert not missing_generation['ok']
+    assert missing_generation['error']['presentation'] == 'hades.saveEditor.error.staleBaseline'
+    assert 'arguments' not in missing_generation['error']
     selected = router.handle_encoded({'id': 'target', 'command': 'save_editor_target', 'params':
         {'workspaceId': identifier, 'target': target, 'baselineGeneration': generation}})
     assert json.loads(selected)['ok']
     applied = json.loads(router.handle_encoded({'id': 'apply', 'command': 'save_editor_apply', 'params':
         {'workspaceId': identifier, 'baselineGeneration': generation}}))
     assert applied['ok'] and applied['result']['baselineGeneration'] != generation
-    stale = router.handle_encoded({'id': 'stale-after-apply', 'command': 'save_editor_stage', 'params':
-        {**request['params'], 'value': scalar(8)}})
-    assert not json.loads(stale)['ok']
+    stale = json.loads(router.handle_encoded({'id': 'stale-after-apply', 'command': 'save_editor_stage', 'params':
+        {**request['params'], 'value': scalar(8)}}))
+    assert not stale['ok']
+    assert stale['error']['presentation'] == 'hades.saveEditor.error.staleBaseline'
+    assert 'arguments' not in stale['error']
     assert adapter.save_workspaces[identifier].review()['count'] == 0
     # Old delivery acknowledgements stay idempotent and carry their old
     # generation, so the UI can discard them after accepting the Apply receipt.
@@ -236,8 +242,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-journeys-') as tempora
     assert adapter.save_workspaces[identifier].review()['count'] == 0
     closed = router.handle_encoded({'id': 'close', 'command': 'save_editor_close', 'params': {'workspaceId': identifier}})
     assert json.loads(closed)['result']['closed']
-    assert not json.loads(router.handle_encoded({'id': 'closed', 'command': 'save_editor_review',
-        'params': {'workspaceId': identifier}}))['ok']
+    closed_review = json.loads(router.handle_encoded({'id': 'closed', 'command': 'save_editor_review',
+        'params': {'workspaceId': identifier}}))
+    assert not closed_review['ok']
+    assert closed_review['error']['presentation'] == 'hades.saveEditor.error.notOpen'
+    assert 'arguments' not in closed_review['error']
 
     precision_saves, precision_service = environment(base / 'precision')
     precision_state = root_state()
@@ -252,5 +261,55 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-journeys-') as tempora
     assert action['effects'] == [], 'A raw physical edit has no linked semantic effects'
     apply(precision)
     assert state(precision_saves / 'Profile2.sav')['UnknownFutureField']['Precise'] == 1.0000000000000002
+
+    def assert_typed_error(response_json, expected_key):
+        payload = json.loads(response_json)
+        assert not payload['ok'], payload
+        err = payload['error']
+        assert err['presentation'] == 'hades.saveEditor.error.' + expected_key, err
+        assert 'arguments' not in err, err
+        assert err.get('diagnostic'), err
+
+    unconfigured_context = GameAdapterContext('hades', 'Hades', 2, ROOT / 'Backend/games/hades', {})
+    unconfigured = HadesAdapter(unconfigured_context, runtime=NoRuntime(), preferences=HadesPreferenceStore(base / 'unconfigured-prefs.json'))
+    unavail_err = rejects(PresentableError, lambda: unconfigured.dispatch('save_editor_open', {'source': source}, 'unavail'))
+    assert unavail_err.presentation == 'hades.saveEditor.error.unavailable'
+    assert not unavail_err.arguments
+    assert unavail_err.diagnostic
+
+    err_saves, err_service = environment(base / 'typed-errors')
+    err_context = GameAdapterContext('hades', 'Hades', 2, ROOT / 'Backend/games/hades', {}, save_management=err_service.spec)
+    err_adapter = HadesAdapter(err_context, runtime=NoRuntime(), preferences=HadesPreferenceStore(base / 'err-prefs.json'))
+    err_router = JsonlRequestRouter(err_adapter, save_data_root=base / 'err-router-data', target_running_probe=lambda: False)
+    (err_saves / 'Profile1.sav').write_bytes(b'NOT_SGB1_FORMAT')
+    assert_typed_error(err_router.handle_encoded({'id': 'bad-fmt', 'command': 'save_editor_open', 'params': {'source': source}}), 'invalidFormat')
+    bad_sum = bytearray(build_save())
+    bad_sum[4] ^= 0xFF
+    (err_saves / 'Profile1.sav').write_bytes(bytes(bad_sum))
+    assert_typed_error(err_router.handle_encoded({'id': 'bad-sum', 'command': 'save_editor_open', 'params': {'source': source}}), 'checksumMismatch')
+    from hades_save import container, lua
+    (err_saves / 'Profile1.sav').write_bytes(container(b'\x01' + lua(root_state()), version=15))
+    assert_typed_error(err_router.handle_encoded({'id': 'bad-ver', 'command': 'save_editor_open', 'params': {'source': source}}), 'unsupportedVersion')
+
+    (err_saves / 'Profile1.sav').write_bytes(build_save())
+    err_open = json.loads(err_router.handle_encoded({'id': 'err-open', 'command': 'save_editor_open', 'params': {'source': source}}))
+    assert err_open['ok'], err_open
+    err_id = err_open['result']['workspaceId']
+    err_gen = err_open['result']['baselineGeneration']
+    assert_typed_error(err_router.handle_encoded({'id': 'bad-query', 'command': 'save_editor_detail', 'params': {'workspaceId': err_id, 'baselineGeneration': err_gen, 'entryId': 'unknown:missing'}}), 'invalidQuery')
+    raw_unknown = entry(err_adapter.save_workspaces[err_id], ('GameState', 'UnknownFutureField'))
+    assert_typed_error(err_router.handle_encoded({'id': 'req-adv', 'command': 'save_editor_query', 'params': {
+        'workspaceId': err_id, 'baselineGeneration': err_gen, 'domain': 'resources', 'parentId': raw_unknown}}), 'requiresAdvanced')
+    assert_typed_error(err_router.handle_encoded({'id': 'bad-mut', 'command': 'save_editor_stage', 'params': {
+        'workspaceId': err_id, 'baselineGeneration': err_gen, 'entryId': 'resource:MetaPoints', 'operation': 'delete'}}), 'invalidMutation')
+    assert json.loads(err_router.handle_encoded({'id': 'sel-target', 'command': 'save_editor_target', 'params': {
+        'workspaceId': err_id, 'target': target, 'baselineGeneration': err_gen}}))['ok']
+    assert_typed_error(err_router.handle_encoded({'id': 'no-changes', 'command': 'save_editor_apply', 'params': {
+        'workspaceId': err_id, 'baselineGeneration': err_gen}}), 'noChanges')
+    assert json.loads(err_router.handle_encoded({'id': 'stage-1', 'command': 'save_editor_stage', 'params': {
+        'workspaceId': err_id, 'baselineGeneration': err_gen, 'entryId': 'resource:MetaPoints', 'operation': 'set', 'value': scalar(5)}}))['ok']
+    raw_meta = entry(err_adapter.save_workspaces[err_id], ('GameState', 'Resources', 'MetaPoints'))
+    assert_typed_error(err_router.handle_encoded({'id': 'overlap', 'command': 'save_editor_stage', 'params': {
+        'workspaceId': err_id, 'baselineGeneration': err_gen, 'entryId': raw_meta, 'operation': 'set', 'value': scalar(6), 'advanced': True}}), 'overlappingActions')
 
 print('hades_save_workspace_complete_pinned_journeys_and_isolation_ok')

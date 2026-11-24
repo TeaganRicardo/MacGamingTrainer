@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 from types import MappingProxyType
 
+from .error_presentation import Hades2ValueError
 from .localization import _sjson_unescape, _clean_display_name
 from .save_document import AmbiguousLuaKeyError, LuaTable
 from .save_native_ids import STORY_RESET_TEXT_IDS
@@ -674,7 +675,10 @@ class NativeDialogueInvestigation:
         rows = self.quest_rows(save_root, language, include_absent=True)
         overview = next((row for row in rows if row['id'] == 'investigate:quest:' + name), None)
         if overview is None:
-            raise ValueError('Save Editor native quest identity is unknown.')
+            raise Hades2ValueError(
+                'hades2.saveEditor.error.invalidQuery',
+                'Save Editor native quest identity is unknown.',
+            )
         definitions, visited, active, unresolved = [], set(), set(), []
 
         def collect(identity):
@@ -881,7 +885,10 @@ class NativeDialogueInvestigation:
         self._refresh(force=True)
         records, ambiguous = self._records(save_root)
         if scene not in records and scene not in STORY_RESET_TEXT_IDS and scene not in self.native['scenes'] and scene not in self.native['events']:
-            raise ValueError('Save Editor native scene identity is unknown.')
+            raise Hades2ValueError(
+                'hades2.saveEditor.error.invalidQuery',
+                'Save Editor native scene identity is unknown.',
+            )
         overview = self._summary_row(scene, language, records, ambiguous, permissions)
         definitions = []
         for definition in self.native['scenes'].get(scene, ()):

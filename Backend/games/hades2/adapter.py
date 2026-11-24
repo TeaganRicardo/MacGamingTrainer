@@ -16,6 +16,7 @@ from core.target_probe import AmbiguousTargetError, BoundedCommandTimeoutError, 
 from . import localization, preparation, save_advanced
 from .command_contract import Hades2CommandContract
 from .desired_reconciliation import Hades2DesiredStateReconciler
+from .error_presentation import Hades2RuntimeError, Hades2ValueError
 from .operation_budgets import PROCESS_QUERY_TIMEOUT_SECONDS
 from .vital_state import normalize_vital_locks, observed_vital_lock, observed_vital_values
 from .config import DISPLAY_NAME, GAME_EXECUTABLE_NAME, MODULE_MANIFEST
@@ -181,8 +182,14 @@ class Hades2Adapter(GameAdapter):
                 game_path=self._workspace_game_path(),
                 **kwargs,
             ),
-            unavailable_error=lambda: ValueError("Save Editor save management is unavailable."),
-            not_open_error=lambda _identifier: ValueError("Save Editor workspace is not open."),
+            unavailable_error=lambda: Hades2ValueError(
+                "hades2.saveEditor.error.unavailable",
+                "Save Editor save management is unavailable.",
+            ),
+            not_open_error=lambda _identifier: Hades2ValueError(
+                "hades2.saveEditor.error.notOpen",
+                "Save Editor workspace is not open.",
+            ),
             stale_baseline_error=lambda: save_advanced.AdvancedMutationError(
                 "Save Editor document baseline is stale; refresh before editing.",
                 conflict=True,
@@ -698,7 +705,8 @@ class Hades2Adapter(GameAdapter):
                 if outcome.reply.outcome_unknown:
                     raise TransportError(
                         'outcome_unknown',
-                        '游戏调用结果不明，未自动重试；请检查游戏并重启。',
+                        'hades2.error.outcomeUnknownGeneric',
+                        diagnostic='游戏调用结果不明，未自动重试；请检查游戏并重启。',
                     )
         except ResidentGenerationInvalidated as invalidated:
             self._mark_runtime_generation_invalidated()
@@ -752,9 +760,18 @@ class Hades2Adapter(GameAdapter):
         try:
             located = locate_target(MODULE_MANIFEST, timeout=PROCESS_QUERY_TIMEOUT_SECONDS)
         except AmbiguousTargetError as error:
-            raise RuntimeError(f'检测到多个 {DISPLAY_NAME} 进程，请保留一个。') from error
+            raise Hades2RuntimeError(
+                'hades2.error.multipleProcesses',
+                f'检测到多个 {DISPLAY_NAME} 进程，请保留一个。',
+                (DISPLAY_NAME,),
+            ) from error
         except BoundedCommandTimeoutError as error:
-            raise RuntimeError(str(error)) from error
+            program = error.argv[0] if error.argv else 'subprocess'
+            raise Hades2RuntimeError(
+                'hades2.error.timeout',
+                str(error),
+                (program, f'{error.budget:g}'),
+            ) from error
         except (OSError, subprocess.CalledProcessError) as error:
             if isinstance(error, subprocess.CalledProcessError):
                 code = str(error.returncode)
@@ -764,7 +781,11 @@ class Hades2Adapter(GameAdapter):
             else:
                 code = str(getattr(error, 'errno', None) or 'error')
                 detail = str(error).strip() or type(error).__name__
-            raise RuntimeError(f'查询 {DISPLAY_NAME} 进程失败（{code}）：{detail}') from error
+            raise Hades2RuntimeError(
+                'hades2.error.processQueryFailed',
+                f'查询 {DISPLAY_NAME} 进程失败（{code}）：{detail}',
+                (DISPLAY_NAME, code, detail),
+            ) from error
 
         pid = located.pid if located is not None else None
         running_bundle = located.bundle_path if located is not None else None
@@ -828,7 +849,13 @@ class Hades2Adapter(GameAdapter):
         started=time.monotonic();profile={};attach_profile={};outcome='ok'
         try:
             phase=time.monotonic();self.scan();profile['scan']=time.monotonic()-phase
-            if not self.state['pid']:raise TransportError('not_running',f'请先启动 {DISPLAY_NAME} 并进入存档。')
+            if not self.state['pid']:
+                raise TransportError(
+                    'not_running',
+                    'hades2.error.gameNotRunning',
+                    arguments=(DISPLAY_NAME,),
+                    diagnostic=f'请先启动 {DISPLAY_NAME} 并进入存档。',
+                )
             # A reconnect invalidates the prior native helper observation.
             # Resident-session attach separately owns Lua generation/bootstrap.
             self._invalidate_game_speed_observation()
@@ -959,7 +986,7 @@ class Hades2Adapter(GameAdapter):
         # Host projection/persistence remains Adapter-owned. The resident session
         # owns the debugger/Lua transaction, generation, bootstrap, handoff and trust.
         if host_observation_only and command!='status':
-            raise ValueError('runtime observation 仅允许 status。')
+            raise Hades2ValueError('hades2.error.runtimeObservationOnly', 'runtime observation 仅允许 status。')
         project_desired=not host_observation_only
         connection_error=getattr(self.runtime,'connection_error',None)
         if connection_error is not None:
@@ -1024,7 +1051,11 @@ class Hades2Adapter(GameAdapter):
             if host_observation_only:self._project_time_warp()
             # Session trust is already tainted before this evidence reaches Adapter.
             if asynchronous_unknown:
-                raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试；请检查游戏并重启。')
+                raise TransportError(
+                    'outcome_unknown',
+                    'hades2.error.outcomeUnknownGeneric',
+                    diagnostic='游戏调用结果不明，未自动重试；请检查游戏并重启。',
+                )
             if not host_observation_only and command not in ('status',) and command not in _PREPERSISTED_RUNTIME_COMMANDS:
                 if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,raw_decoded):
                     self._save_preferences()

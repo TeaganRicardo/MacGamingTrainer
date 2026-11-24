@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.adapter import GameAdapter, GameAdapterContext
 from core.protocol import JsonlRequestRouter
-from games.hades2 import error_presentation
+from games.hades2.adapter import Hades2Adapter
 from games.hades2.command_contract import Hades2CommandContract
 
 
@@ -98,21 +98,39 @@ _TABLES = {
     )["entries"]
     for language in ("zh-CN", "en")
 }
-_PROBES = {
-    "hades2.error.gameNotRunning": "请先启动 Hades II 并进入存档。",
-    "hades2.error.processQueryFailed": "查询 Hades II 进程失败（-9）：boom",
-}
-for _key, _message in _PROBES.items():
-    _mapped, _arguments = error_presentation.presentation_for(_message)
-    assert _mapped == _key, (_message, _mapped)
-    for _language, _entries in _TABLES.items():
-        _needed = max(int(index) for index in _re.findall(r"\{(\d+)\}", _entries[_key])) + 1
-        assert len(_arguments) == _needed, (_key, _language, _needed, _arguments)
-        # Every placeholder must be consumed, or the UI shows a literal {n}.
-        _rendered = _entries[_key]
-        for _index, _value in enumerate(_arguments):
-            _rendered = _rendered.replace("{%d}" % _index, _value)
-        assert not _re.search(r"\{\d+\}", _rendered), (_key, _language, _rendered)
+from unittest.mock import patch as _patch
+import subprocess as _subprocess
+import games.hades2.adapter as _hades2_adapter_module
+from hades2_resident_session_fakes import FakeResidentSession as _FakeResidentSession, FakeTimeWarpController as _FakeTimeWarpController, hades2_adapter_context as _hades2_adapter_context
+
+with tempfile.TemporaryDirectory(prefix="mgt-hades2-error-probes-") as _probe_dir:
+    _probe_adapter = Hades2Adapter(
+        context=_hades2_adapter_context(Path(_probe_dir)),
+        resident_session=_FakeResidentSession(),
+        time_warp_controller=_FakeTimeWarpController(),
+    )
+    _probe_router = JsonlRequestRouter(_probe_adapter, save_data_root=Path(_probe_dir))
+    _compat = {"version": "139672", "steam_build": "24556151", "warnings": [], "compatible": True, "uuid": "U", "game": "/tmp/Hades II.app"}
+    _probe_errors = []
+    with _patch.object(_hades2_adapter_module.preparation, "compatibility", return_value=_compat):
+        with _patch("games.hades2.adapter.locate_target", return_value=None):
+            _probe_errors.append(("hades2.error.gameNotRunning", _probe_router.handle({"id": "not-running", "command": "connect", "params": {}})))
+        with _patch("games.hades2.adapter.locate_target", side_effect=_subprocess.CalledProcessError(2, ["/bin/ps"], output=b"", stderr=b"boom")):
+            _probe_errors.append(("hades2.error.processQueryFailed", _probe_router.handle({"id": "query-failed", "command": "scan", "params": {}})))
+    _probe_router.close()
+    for _key, _reply in _probe_errors:
+        assert _reply["ok"] is False, _reply
+        _err = _reply["error"]
+        assert _err["presentation"] == _key, _err
+        _arguments = _err["arguments"]
+        for _language, _entries in _TABLES.items():
+            _needed = max(int(index) for index in _re.findall(r"\{(\d+)\}", _entries[_key])) + 1
+            assert len(_arguments) == _needed, (_key, _language, _needed, _arguments)
+            # Every placeholder must be consumed, or the UI shows a literal {n}.
+            _rendered = _entries[_key]
+            for _index, _value in enumerate(_arguments):
+                _rendered = _rendered.replace("{%d}" % _index, _value)
+            assert not _re.search(r"\{\d+\}", _rendered), (_key, _language, _rendered)
 
 # The envelope field is Core-owned and optional: an error without arguments must
 # not gain an empty list on the wire, and one with arguments must keep them.

@@ -6,10 +6,10 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
+from core.errors import PresentableError
 from games.hades2 import operation_budgets as budgets
 import games.hades2.command_contract as command_contract_module
 from games.hades2.command_contract import Hades2CommandContract, command_metadata
-from games.hades2.error_presentation import Hades2PresentationError
 
 
 class TransportProbe:
@@ -624,7 +624,7 @@ finally:
 # One final presentation-key funnel owns Hades player-facing error identity.
 try:
     contract.dispatch("not_a_command", {}, "unknown-request")
-except Hades2PresentationError as error:
+except PresentableError as error:
     assert error.presentation == "hades2.error.invalidCommand"
     assert error.diagnostic == "未知命令。"
 else:
