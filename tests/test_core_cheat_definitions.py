@@ -483,6 +483,16 @@ assert HADES2_CHEAT_CATALOG.resolve_id("applyNextRoomReward") == "applyWorldExit
 assert HADES2_CHEAT_CATALOG.resolve_shortcut_id("applyNextRoomReward") == "applyWorldExit"
 assert HADES2_CHEAT_CATALOG.resolve_id("gardenQoL") is None
 assert HADES2_CHEAT_CATALOG.resolve_id("damageEnabled") is None
+assert HADES2_CHEAT_CATALOG.migrate_shortcut_payload(
+    {
+        "_layoutVersion": 1,
+        "applyNextRoomReward": {"keyCode": 13, "modifiers": 6144, "keyLabel": "W"},
+        "applyWorldExit": {"keyCode": 14, "modifiers": 6144, "keyLabel": "E"},
+    }
+) == {
+    "_layoutVersion": 1,
+    "applyWorldExit": {"keyCode": 14, "modifiers": 6144, "keyLabel": "E"},
+}
 
 with tempfile.TemporaryDirectory(prefix="mgt-hades2-cheat-defs-") as td2:
     hades2_service = Hades2ProfileService(Path(td2))
@@ -547,6 +557,7 @@ import Hades2CheatsFixture
 struct PythonCheatSpec: Decodable {
     struct ActionSpec: Decodable {
         let command: String
+        let valueParam: String?
     }
     let id: String
     let kind: String
@@ -636,6 +647,7 @@ struct CheatDefinitionHarness {
             check(py.id == sw.id, "id drifted: \\(py.id) vs \\(sw.id)")
             check(py.kind == sw.kind.rawValue, "kind drifted for \\(py.id)")
             check(py.action.command == sw.action.command, "command drifted for \\(py.id)")
+            check(py.action.valueParam == sw.action.valueParam, "valueParam drifted for \\(py.id)")
             check(py.shortcutId == sw.shortcutID, "shortcutID drifted for \\(py.id)")
             check((py.aliases ?? []) == sw.aliases, "aliases drifted for \\(py.id)")
         }
@@ -647,6 +659,7 @@ struct CheatDefinitionHarness {
             check(py.id == sw.id, "hades2 id drifted: \\(py.id) vs \\(sw.id)")
             check(py.kind == sw.kind.rawValue, "hades2 kind drifted for \\(py.id)")
             check(py.action.command == sw.action.command, "hades2 command drifted for \\(py.id)")
+            check(py.action.valueParam == sw.action.valueParam, "hades2 valueParam drifted for \\(py.id)")
             check(py.shortcutId == sw.shortcutID, "hades2 shortcutID drifted for \\(py.id)")
             check((py.aliases ?? []) == sw.aliases, "hades2 aliases drifted for \\(py.id)")
         }

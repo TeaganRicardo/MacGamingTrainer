@@ -158,6 +158,14 @@ struct Hades2ShortcutStore {
             return nil
         }
         let legacyVersion = defaults.integer(forKey: legacyLayoutVersionKey)
+        if storedVersion == 7 {
+            // Version 7 already promoted overrides to `hades2.shortcut.action.*`. Never let
+            // leftover unprefixed keys or stale v1-v5 markers overwrite or wipe committed v7 bindings.
+            if legacyVersion >= 6 {
+                return migrateV6Unprefixed(defaults)
+            }
+            return migrateV7Namespaced(defaults)
+        }
         if legacyVersion >= 6 { return migrateV6Unprefixed(defaults) }
         if legacyVersion == 5 { return migrateV5Identity(defaults) }
         if legacyVersion == 4 { return migrateV4Layout(defaults) }
@@ -166,7 +174,7 @@ struct Hades2ShortcutStore {
             // Pre-v3 layouts have already had two historical migrations in released builds.
             return [:]
         }
-        if storedVersion == 7 || hasNamespacedAliasKeys(defaults) {
+        if hasNamespacedAliasKeys(defaults) {
             return migrateV7Namespaced(defaults)
         }
         return nil

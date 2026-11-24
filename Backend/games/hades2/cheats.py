@@ -237,7 +237,7 @@ def _build_catalog() -> CheatCatalog:
             id="runGold",
             kind="value",
             label=label("hades2.vital.runGold"),
-            action=CheatBackendAction("set_resource", {"resource": "Money"}, "value"),
+            action=CheatBackendAction("set_resource", {"resource": "Money"}, "amount"),
         ),
         CheatDefinition(
             id="rerolls",

@@ -373,6 +373,34 @@ precondition(interruptedDefaults.object(forKey: "shortcut.layoutVersion") == nil
 precondition(interruptedDefaults.object(forKey: unprefixedShortcutKey(.invincibility)) == nil)
 precondition(interruptedDefaults.object(forKey: "shortcut.action.gardenQoL") == nil)
 
+// v7 store with already-deleted shortcut.layoutVersion but leftover unprefixed keys must preserve v7 bindings.
+let v7WorldExitChord = HotkeyChord(keyCode: 9, modifiers: HotkeyChord.commandModifier, keyLabel: "V")
+let v7LeftoverDefaults = makeDefaults()
+v7LeftoverDefaults.set(7, forKey: "hades2.shortcut.layoutVersion")
+v7LeftoverDefaults.set(custom.payload, forKey: shortcutKey(.invincibility))
+v7LeftoverDefaults.set(v7WorldExitChord.payload, forKey: legacyWorldExitKey)
+v7LeftoverDefaults.set(seedCustom.payload, forKey: "shortcut.action.godMode")
+v7LeftoverDefaults.set(seedCustom.payload, forKey: "shortcut.action.gardenQoL")
+let v7LeftoverMigrated = Hades2ShortcutStore(defaults: v7LeftoverDefaults)
+precondition(v7LeftoverMigrated.chord(.invincibility) == custom)
+precondition(v7LeftoverMigrated.chord(.applyWorldExit) == v7WorldExitChord)
+precondition(v7LeftoverDefaults.integer(forKey: "hades2.shortcut.layoutVersion") == 8)
+precondition(v7LeftoverDefaults.object(forKey: "shortcut.action.godMode") == nil)
+precondition(v7LeftoverDefaults.object(forKey: "shortcut.action.gardenQoL") == nil)
+precondition(v7LeftoverDefaults.object(forKey: legacyWorldExitKey) == nil)
+
+// v7 store with stale v5 marker and unprefixed keys must keep committed v7 overrides over v5.
+let v7WithStaleV5Defaults = makeDefaults()
+v7WithStaleV5Defaults.set(7, forKey: "hades2.shortcut.layoutVersion")
+v7WithStaleV5Defaults.set(custom.payload, forKey: shortcutKey(.invincibility))
+v7WithStaleV5Defaults.set(5, forKey: "shortcut.layoutVersion")
+v7WithStaleV5Defaults.set(seedCustom.payload, forKey: "shortcut.action.godMode")
+let v7StaleV5Migrated = Hades2ShortcutStore(defaults: v7WithStaleV5Defaults)
+precondition(v7StaleV5Migrated.chord(.invincibility) == custom)
+precondition(v7WithStaleV5Defaults.integer(forKey: "hades2.shortcut.layoutVersion") == 8)
+precondition(v7WithStaleV5Defaults.object(forKey: "shortcut.layoutVersion") == nil)
+precondition(v7WithStaleV5Defaults.object(forKey: "shortcut.action.godMode") == nil)
+
 var imported = Hades2ShortcutStore(defaults: makeDefaults())
 let applied = imported.applyProfile([
     "_layoutVersion": 1,

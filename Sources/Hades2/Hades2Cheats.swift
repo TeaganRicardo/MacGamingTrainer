@@ -291,7 +291,7 @@ package enum Hades2CheatCatalog {
             kind: .value,
             label: .key("hades2.vital.runGold"),
             icon: TrainerSemanticIcon.Concept.currency,
-            action: TrainerCheatActionSpec(command: "set_resource", valueParam: "value")
+            action: TrainerCheatActionSpec(command: "set_resource", valueParam: "amount")
         ),
         TrainerCheatDefinition(
             id: "rerolls",
