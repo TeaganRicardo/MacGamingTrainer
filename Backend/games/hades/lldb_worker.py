@@ -8,11 +8,41 @@ import uuid
 
 from core.adapter import AdapterError
 from core.sidecar import serve_jsonl_requests
+from .cheats import HADES_CHEAT_CATALOG, to_runtime_feature, to_runtime_features
 from .operation_budgets import PROCESS_CONTROL_TIMEOUT_SECONDS
 from .schema import (DEFAULT_FEATURES, DEFERRED_TRAIT_COMMANDS, LOCK_FIELDS, MUTATING_COMMANDS, ONE_SHOT_COMMANDS, WORLD_COMMANDS, boon_rarity_target,
-                     feature_document, feature_value)
+                     feature_value, invalid_value)
 from .world import (mutation_params as world_mutation_params, runtime_definitions,
                     runtime_definitions_identity)
+
+_RUNTIME_FEATURE_DEFAULTS = to_runtime_features(DEFAULT_FEATURES, DEFAULT_FEATURES)
+
+
+def _runtime_feature_entry(name, value):
+    if not isinstance(name, str):
+        raise invalid_value()
+    canonical = HADES_CHEAT_CATALOG.resolve_id(name)
+    if canonical is None:
+        raise invalid_value()
+    return to_runtime_feature(canonical), feature_value(canonical, value)
+
+
+def _runtime_feature_document(values):
+    if not isinstance(values, dict) or len(values) != len(DEFAULT_FEATURES):
+        raise invalid_value()
+    translated = {}
+    seen_canonicals = set()
+    for key, value in values.items():
+        if not isinstance(key, str):
+            raise invalid_value()
+        canonical = HADES_CHEAT_CATALOG.resolve_id(key)
+        if canonical is None or canonical not in DEFAULT_FEATURES or canonical in seen_canonicals:
+            raise invalid_value()
+        seen_canonicals.add(canonical)
+        translated[to_runtime_feature(canonical)] = feature_value(canonical, value)
+    if seen_canonicals != set(DEFAULT_FEATURES):
+        raise invalid_value()
+    return translated
 
 
 def lua_literal(value):
@@ -38,7 +68,7 @@ class HadesLLDBWorker:
             transport = HadesLuaTransport()
         self.transport = transport
         self.source = Path(__file__).with_name('runtime.lua').read_text()
-        self.features = dict(DEFAULT_FEATURES)
+        self.features = dict(_RUNTIME_FEATURE_DEFAULTS)
         # The resident's last acknowledged lock and rarity intent. A same-process
         # Lua reset recreates the runtime table, so the bootstrap replays the
         # complete acknowledged desired state, not only the boolean features.
@@ -135,7 +165,7 @@ class HadesLLDBWorker:
             if type(pid) is not int or pid <= 0 or not isinstance(executable, str) or not executable:
                 raise ValueError('connect requires a target pid and executable path')
             if 'features' in params:
-                self.features = feature_document(params['features'])
+                self.features = _runtime_feature_document(params['features'])
             # A new connection reconciles locks and rarity from durable desired
             # state; never replay intent acknowledged by an earlier connection.
             self.locks = (None, None, None)
@@ -171,16 +201,15 @@ class HadesLLDBWorker:
                 if not isinstance(target, dict) or not isinstance(target.get('heroId'), str) or not target['heroId']:
                     raise AdapterError('stale_target', 'hades.error.staleTarget')
             if method == 'set_feature':
-                name = params.get('feature')
-                value = feature_value(name, params.get('value'))
-                result = self._invoke(method, (name, value))
-                self.features[name] = value
+                runtime_name, value = _runtime_feature_entry(params.get('feature'), params.get('value'))
+                result = self._invoke(method, (runtime_name, value))
+                self.features[runtime_name] = value
                 return result
             if method == 'set_boon_rarity':
                 target = boon_rarity_target(params.get('target'))
                 return self._invoke(method, (target,))
             if method == 'configure':
-                values = feature_document(params.get('features'))
+                values = _runtime_feature_document(params.get('features'))
                 result = self._invoke(method, (values,))
                 self.features = values
                 return result
@@ -211,7 +240,7 @@ class HadesLLDBWorker:
             }[method]
             result = self._invoke(method, arguments, target=target)
             if method == 'disable_all':
-                self.features = dict(DEFAULT_FEATURES)
+                self.features = dict(_RUNTIME_FEATURE_DEFAULTS)
             return result
         else:
             raise ValueError('unsupported Hades worker method: ' + method)

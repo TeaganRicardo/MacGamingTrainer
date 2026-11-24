@@ -69,14 +69,22 @@ context = GameAdapterContext('hades', 'Hades', 2, ROOT / 'Backend/games/hades', 
 with tempfile.TemporaryDirectory(prefix='hades-speed-') as directory:
     path = Path(directory) / 'preferences.json'
     store = HadesPreferenceStore(path)
-    historical = {name: value for name, value in DEFAULT_FEATURES.items()
-                  if name not in {'fullHealth', 'infiniteAmmo', 'forceRerolls', 'incomingDamageMultiplier'}}
+    to_legacy = {
+        'infiniteHealth': 'fullHealth',
+        'infiniteMoney': 'moneyNoDecrease',
+        'infiniteRerolls': 'rerollsNoDecrease',
+        'forceEnableRerolls': 'forceRerolls',
+    }
+    historical = {
+        to_legacy.get(name, name): value for name, value in DEFAULT_FEATURES.items()
+        if name not in {'infiniteHealth', 'infiniteAmmo', 'forceEnableRerolls', 'incomingDamageMultiplier'}
+    }
     legacy = dict(historical)
     legacy.pop('boonRarityEnabled')
     path.write_text(json.dumps({'schemaVersion': 1, 'features': legacy}))
-    assert store.load() == {**DEFAULT_PREFERENCES, **legacy}
+    assert store.load() == DEFAULT_PREFERENCES
     path.write_text(json.dumps({'schemaVersion': 1, 'features': historical}))
-    assert store.load() == {**DEFAULT_PREFERENCES, **historical}
+    assert store.load() == DEFAULT_PREFERENCES
 
     runtime = Runtime()
     adapter = HadesAdapter(context, runtime=runtime,

@@ -279,10 +279,14 @@ for command, params in (
         raise AssertionError((command, params))
 with tempfile.TemporaryDirectory(prefix='hades-combat-preferences-') as directory:
     store = HadesPreferenceStore(Path(directory) / 'preferences.json')
-    historical = {name: value for name, value in DEFAULT_PREFERENCES.items()
-                  if name not in {'fullHealth', 'infiniteAmmo', 'forceRerolls',
-                                  'incomingDamageMultiplier', 'boonRarityTarget',
-                                  'healthLock', 'moneyLock', 'rerollsLock'}}
+    historical = {
+        {'infiniteHealth': 'fullHealth', 'infiniteMoney': 'moneyNoDecrease',
+         'infiniteRerolls': 'rerollsNoDecrease', 'forceEnableRerolls': 'forceRerolls'}.get(name, name): value
+        for name, value in DEFAULT_PREFERENCES.items()
+        if name not in {'infiniteHealth', 'infiniteAmmo', 'forceEnableRerolls',
+                        'incomingDamageMultiplier', 'boonRarityTarget',
+                        'healthLock', 'moneyLock', 'rerollsLock'}
+    }
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': historical}))
     assert store.load() == DEFAULT_PREFERENCES
     historical['unexpectedSetting'] = False

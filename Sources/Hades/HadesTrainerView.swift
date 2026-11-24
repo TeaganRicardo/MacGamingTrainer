@@ -107,7 +107,7 @@ struct HadesTrainerView: View {
                         title: text("hades.money"), icon: TrainerSemanticIcon.Concept.currency, tint: .yellow,
                         text: draft(.value(.money)), focus: $focusedField, focusValue: .value(.money),
                         locked: model.moneyLocked, editable: model.canMutate,
-                        lockEnabled: !model.isEnabled(.moneyNoDecrease),
+                        lockEnabled: !model.isEnabled(.infiniteMoney),
                         onLock: { model.lockMoney(!model.moneyLocked) },
                         onCommit: completing(.value(.money))
                     )
@@ -115,7 +115,7 @@ struct HadesTrainerView: View {
                         title: text("hades.rerolls"), icon: TrainerSemanticIcon.Concept.randomize, tint: theme.accent,
                         text: draft(.value(.rerolls)), focus: $focusedField, focusValue: .value(.rerolls),
                         locked: model.rerollsLocked, editable: model.canMutate,
-                        lockEnabled: !model.isEnabled(.rerollsNoDecrease),
+                        lockEnabled: !model.isEnabled(.infiniteRerolls),
                         onLock: { model.lockRerolls(!model.rerollsLocked) },
                         onCommit: completing(.value(.rerolls))
                     )
@@ -148,9 +148,9 @@ struct HadesTrainerView: View {
                        icon: HadesWorkbenchSection.common.icon) {
             VStack(spacing: 1) {
                 ForEach(HadesFeature.allCases.filter { $0.isToggle && $0 != .boonRarityEnabled }) { feature in
-                    TrainerFeatureToggleRow(
-                        title: text(feature.key), icon: feature.icon, state: featureState(feature),
-                        helpText: text(feature.helpKey),
+                    TrainerCheatToggleRow(
+                        definition: feature.cheatDefinition,
+                        state: featureState(feature),
                         shortcutText: HadesShortcutAction(rawValue: feature.rawValue).map(model.shortcutText)
                     ) {
                         model.setFeature(feature, value: !model.isEnabled(feature))
@@ -193,10 +193,12 @@ struct HadesTrainerView: View {
     }
 
     private var gameSpeedPanel: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let definition = HadesFeature.gameSpeed.cheatDefinition
+        let title = definition.label.resolve(using: localization)
+        return VStack(alignment: .leading, spacing: 4) {
             TrainerLabeledControlRow(
-                title: text(HadesFeature.gameSpeed.key),
-                icon: TrainerSemanticIcon.Concept.timeScale,
+                title: title,
+                icon: definition.icon,
                 tint: model.canEditIntent ? theme.accent : theme.inactive,
                 emphasized: model.canEditIntent,
                 helpText: localization.localized("host.timeWarp.hint")
@@ -204,7 +206,7 @@ struct HadesTrainerView: View {
                 TrainerNumberField(
                     text: gameSpeedInputBinding,
                     placeholder: "1.0",
-                    accessibilityLabel: text(HadesFeature.gameSpeed.key),
+                    accessibilityLabel: title,
                     width: theme.inlineFieldWidth,
                     enabled: model.canEditIntent,
                     onEditingChanged: { active in
@@ -229,7 +231,7 @@ struct HadesTrainerView: View {
                     TrainerMappedSlider(
                         value: gameSpeedSliderValue,
                         mapping: gameSpeedMapping,
-                        accessibilityLabel: text(HadesFeature.gameSpeed.key),
+                        accessibilityLabel: title,
                         accessibilityHint: localization.localized("host.timeWarp.hint"),
                         enabled: model.canEditIntent && pageVisible,
                         onPreviewValue: { preview in
@@ -260,14 +262,16 @@ struct HadesTrainerView: View {
     }
 
     private var boonRarityPanel: some View {
+        let definition = HadesFeature.boonRarityEnabled.cheatDefinition
+        let title = definition.label.resolve(using: localization)
         let controlState = featureState(.boonRarityEnabled)
         return TrainerLabeledControlRow(
-            title: text(HadesFeature.boonRarityEnabled.key),
-            icon: HadesFeature.boonRarityEnabled.icon,
+            title: title,
+            icon: definition.icon,
             tint: controlState.indicatorColor,
             emphasized: controlState.isOn,
             opacity: controlState.opacity,
-            helpText: text(HadesFeature.boonRarityEnabled.helpKey)
+            helpText: definition.help?.resolve(using: localization) ?? ""
         ) {
             Picker(text("hades.minimumRarity"), selection: Binding(
                 get: { model.boonRarityTarget },
@@ -281,7 +285,7 @@ struct HadesTrainerView: View {
             .trainerPicker(.compactValue, state: model.canEditIntent ? .interactive : .unavailable)
             TrainerShortcutBadgeSlot(text: model.shortcutText(.boonRarityEnabled))
             TrainerToggleControl(
-                title: text(HadesFeature.boonRarityEnabled.key),
+                title: title,
                 isOn: model.isEnabled(.boonRarityEnabled),
                 enabled: controlState.isInteractive,
                 helpText: controlState.helpText,

@@ -2,29 +2,14 @@ import Foundation
 import TrainerCore
 
 enum HadesFeature: String, CaseIterable, Identifiable {
-    case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls, boonRarityEnabled, gameSpeed
+    case invincibility, infiniteHealth, infiniteMoney, infiniteRerolls, fullGodGauge, infiniteAmmo, forceEnableRerolls, boonRarityEnabled, gameSpeed
     case damageMultiplier, incomingDamageMultiplier, moveSpeedMultiplier, attackSpeedMultiplier, dashBonus
 
     var id: String { rawValue }
-    var key: String { "hades.\(rawValue)" }
-    var isToggle: Bool {
-        switch self {
-        case .invincibility, .fullHealth, .moneyNoDecrease, .rerollsNoDecrease,
-             .fullGodGauge, .infiniteAmmo, .forceRerolls, .boonRarityEnabled: true
-        default: false
-        }
-    }
-    var helpKey: String {
-        switch self {
-        case .fullGodGauge: "hades.fullGodGaugeHelp"
-        case .invincibility: "hades.invincibilityHelp"
-        case .boonRarityEnabled: "hades.boonRarityHelp"
-        case .forceRerolls: "hades.forceRerollsHelp"
-        case .infiniteAmmo: "hades.infiniteAmmoHelp"
-        case .fullHealth: "hades.fullHealthHelp"
-        default: "hades.noConsumptionHelp"
-        }
-    }
+    var cheatDefinition: TrainerCheatDefinition { HadesCheatCatalog.definition(id: rawValue)! }
+    var key: String { cheatDefinition.label.rawKey ?? "hades.\(rawValue)" }
+    var isToggle: Bool { cheatDefinition.kind == .toggle }
+    var helpKey: String { cheatDefinition.help?.rawKey ?? "hades.noConsumptionHelp" }
     var neutralValue: Double { self == .dashBonus ? 0 : 1 }
 }
 
@@ -306,7 +291,7 @@ struct HadesNumberDraft {
 }
 
 enum HadesShortcutAction: String, CaseIterable, Identifiable {
-    case invincibility, fullHealth, moneyNoDecrease, rerollsNoDecrease, fullGodGauge, infiniteAmmo, forceRerolls
+    case invincibility, infiniteHealth, infiniteMoney, infiniteRerolls, fullGodGauge, infiniteAmmo, forceEnableRerolls
     case decreaseGameSpeed, increaseGameSpeed
     case boonRarityEnabled, generateFishing
     case applyWorldExit, applyWorldOccurrence, generateChamberObject, generateChaosGate
@@ -327,7 +312,7 @@ enum HadesShortcutAction: String, CaseIterable, Identifiable {
         case .spawnSpecial: "hades.shortcut.spawnSpecial"
         case .acquireChaosPair: "hades.shortcut.acquireChaosPair"
         case .acquireExactBoon: "hades.shortcut.acquireExactBoon"
-        default: "hades.\(rawValue)"
+        default: HadesCheatCatalog.definition(id: rawValue)?.label.rawKey ?? "hades.\(rawValue)"
         }
     }
     /// The Generate row whose shown selection this shortcut generates.
@@ -336,6 +321,20 @@ enum HadesShortcutAction: String, CaseIterable, Identifiable {
 }
 
 struct HadesShortcutStore {
+    static let currentLayoutVersion = 2
+    private static let moduleNamespace = "hades"
+    static var layoutVersionKey: String { "\(moduleNamespace).shortcut.layoutVersion" }
+
+    static let legacyActionAliases: [String: HadesShortcutAction] = {
+        var aliases: [String: HadesShortcutAction] = [:]
+        for (legacyKey, canonicalID) in HadesCheatCatalog.legacyAliases {
+            if let action = HadesShortcutAction(rawValue: canonicalID) {
+                aliases[legacyKey] = action
+            }
+        }
+        return aliases
+    }()
+
     private var core: TrainerShortcutStore<HadesShortcutAction>
 
     static func defaultLayout() -> [HadesShortcutAction: HotkeyChord] {
@@ -345,6 +344,64 @@ struct HadesShortcutStore {
         )
     }
 
+    private static func shortcutDefaultsKey(for actionID: String) -> String {
+        "hades.shortcut.\(actionID)"
+    }
+
+    private static func migrateHistoricalOverrides(_ defaults: UserDefaults) -> [HadesShortcutAction: HotkeyChord]? {
+        let storedVersion = defaults.integer(forKey: layoutVersionKey)
+        if storedVersion >= currentLayoutVersion {
+            return nil
+        }
+        let sortedAliases = legacyActionAliases.keys.sorted()
+        let hasLegacyAliases = sortedAliases.contains { defaults.object(forKey: shortcutDefaultsKey(for: $0)) != nil }
+        guard hasLegacyAliases else {
+            return nil
+        }
+
+        var aliasesByAction: [HadesShortcutAction: [String]] = [:]
+        for alias in sortedAliases {
+            if let action = legacyActionAliases[alias] {
+                aliasesByAction[action, default: []].append(alias)
+            }
+        }
+
+        var migrated: [HadesShortcutAction: HotkeyChord] = [:]
+        var used = Set<String>()
+        for action in HadesWorkbenchCatalog.orderedShortcutActions where action != .disableAll {
+            var candidate: Any?
+            if let canonicalValue = defaults.object(forKey: shortcutDefaultsKey(for: action.rawValue)) {
+                candidate = canonicalValue
+            } else if let aliases = aliasesByAction[action] {
+                for alias in aliases {
+                    if let legacyValue = defaults.object(forKey: shortcutDefaultsKey(for: alias)) {
+                        candidate = legacyValue
+                        break
+                    }
+                }
+            }
+            guard let rawValue = candidate,
+                  let parsed = HotkeyChord(payload: rawValue),
+                  !TrainerHotkeyLayout.sameKeys(parsed, TrainerHotkeyLayout.disableAllChord) else { continue }
+            let identity = TrainerHotkeyLayout.identity(parsed)
+            guard used.insert(identity).inserted else { continue }
+            migrated[action] = parsed
+        }
+        return migrated
+    }
+
+    private static func finalizePersistence(_ defaults: UserDefaults) {
+        let storedVersion = defaults.integer(forKey: layoutVersionKey)
+        guard storedVersion <= currentLayoutVersion else { return }
+        if storedVersion < currentLayoutVersion {
+            defaults.set(currentLayoutVersion, forKey: layoutVersionKey)
+        }
+        defaults.removeObject(forKey: shortcutDefaultsKey(for: "heal"))
+        for legacyKey in legacyActionAliases.keys.sorted() {
+            defaults.removeObject(forKey: shortcutDefaultsKey(for: legacyKey))
+        }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.core = TrainerShortcutStore(
             orderedActions: HadesWorkbenchCatalog.orderedShortcutActions,
@@ -352,10 +409,16 @@ struct HadesShortcutStore {
             lockedActions: [.disableAll: TrainerHotkeyLayout.disableAllChord],
             storage: TrainerShortcutStorage(
                 moduleID: "hades",
-                defaults: defaults
+                defaults: defaults,
+                finalizePersistence: {
+                    Self.finalizePersistence(defaults)
+                }
             ),
             cleanupLegacy: {
-                defaults.removeObject(forKey: "hades.shortcut.heal")
+                Self.finalizePersistence(defaults)
+            },
+            migrateOverrides: {
+                Self.migrateHistoricalOverrides(defaults)
             }
         )
     }
@@ -378,6 +441,6 @@ struct HadesShortcutStore {
 
     @discardableResult
     mutating func applyProfile(_ values: [String: Any]) -> TrainerShortcutProfileApplyResult {
-        core.applyProfile(values)
+        core.applyProfile(values, legacyActionAliases: Self.legacyActionAliases)
     }
 }

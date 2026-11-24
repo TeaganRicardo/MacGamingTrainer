@@ -124,22 +124,46 @@ package struct TrainerShortcutStore<Action: Hashable & RawRepresentable> where A
     package mutating func applyProfile(
         _ values: [String: Any],
         legacyDefaultTables: [[String: HotkeyChord]] = [],
-        completeLegacyLayouts: [[String]] = []
+        completeLegacyLayouts: [[String]] = [],
+        legacyActionAliases: [String: Action] = [:]
     ) -> TrainerShortcutProfileApplyResult {
         let importedLayoutVersion = values[Self.profileLayoutVersionKey] as? Int
         if let importedLayoutVersion, importedLayoutVersion != Self.currentProfileLayoutVersion {
             return .unsupportedLayoutVersion(importedLayoutVersion)
         }
         let isCurrentPayload = importedLayoutVersion == Self.currentProfileLayoutVersion
+        var legacyKeysByAction: [Action: [String]] = [:]
+        for (legacyKey, canonicalAction) in legacyActionAliases {
+            legacyKeysByAction[canonicalAction, default: []].append(legacyKey)
+        }
+        for action in legacyKeysByAction.keys {
+            legacyKeysByAction[action]?.sort()
+        }
+
         var patch: [Action: HotkeyChord] = [:]
         var patchTokens = Set<String>()
 
         for action in orderedActions where lockedActions[action] == nil {
-            guard let value = values[action.rawValue],
+            var matchedKey: String?
+            var rawValue: Any?
+            if let canonicalValue = values[action.rawValue] {
+                matchedKey = action.rawValue
+                rawValue = canonicalValue
+            } else if let aliases = legacyKeysByAction[action] {
+                for alias in aliases {
+                    if let aliasValue = values[alias] {
+                        matchedKey = alias
+                        rawValue = aliasValue
+                        break
+                    }
+                }
+            }
+            guard let matchedKey,
+                  let value = rawValue,
                   let proposed = HotkeyChord(payload: value),
                   lockedAction(matching: proposed) == nil else { continue }
             if !isCurrentPayload,
-               legacyDefaultTables.contains(where: { $0[action.rawValue] == proposed }) {
+               legacyDefaultTables.contains(where: { $0[matchedKey] == proposed || $0[action.rawValue] == proposed }) {
                 // Historical full-layout Profiles persisted computed defaults as
                 // explicit bindings; re-derive them under the active order.
                 continue

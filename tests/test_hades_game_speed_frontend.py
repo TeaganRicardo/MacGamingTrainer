@@ -16,7 +16,7 @@ payload = {
                          'errorPresentation': 'host.timeWarp.error.setFailed', 'errorArguments': ['7']},
     'gameSpeedUnknown': {'desired': 3.0, 'actual': None, 'active': None,
                          'errorPresentation': 'host.timeWarp.error.outcomeUnknown', 'errorArguments': ['x']},
-    'moneyNoDecrease': True,
+    'infiniteMoney': True,
     'damageMultiplier': 3.0,
 }
 harness = '''
@@ -36,7 +36,7 @@ guard values["gameSpeedUnknown"]?.number == 3.0,
       values["gameSpeedUnknown"]?.actualNumber == nil,
       values["gameSpeedUnknown"]?.bool == false,
       values["gameSpeedUnknown"]?.errorPresentation == "host.timeWarp.error.outcomeUnknown" else { fatalError("unknown speed projection decode failed") }
-guard values["moneyNoDecrease"]?.bool == true,
+guard values["infiniteMoney"]?.bool == true,
       values["damageMultiplier"]?.number == 3.0 else { fatalError("legacy feature decoding regressed") }
 print("hades_game_speed_projection_decode_ok")
 '''

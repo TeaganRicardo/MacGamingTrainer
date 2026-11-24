@@ -124,51 +124,70 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     store = HadesPreferenceStore(Path(directory) / 'preferences.json')
     runtime = Runtime()
     adapter = HadesAdapter(context, runtime=runtime, locate_process=lambda: (42, '/tmp/Hades/Game.macOS'), preferences=store)
-    historical = {name: value for name, value in DEFAULT_FEATURES.items()
-                  if name not in {'fullHealth', 'infiniteAmmo', 'forceRerolls', 'incomingDamageMultiplier'}}
+    to_legacy = {
+        'infiniteHealth': 'fullHealth',
+        'infiniteMoney': 'moneyNoDecrease',
+        'infiniteRerolls': 'rerollsNoDecrease',
+        'forceEnableRerolls': 'forceRerolls',
+    }
+    historical = {
+        to_legacy.get(name, name): value for name, value in DEFAULT_FEATURES.items()
+        if name not in {'infiniteHealth', 'infiniteAmmo', 'forceEnableRerolls', 'incomingDamageMultiplier'}
+    }
     legacy = dict(historical)
     legacy.pop('boonRarityEnabled')
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': legacy}))
-    assert store.load() == {**DEFAULT_PREFERENCES, **legacy}, 'original preferences did not migrate'
+    assert store.load() == DEFAULT_PREFERENCES, 'original preferences did not migrate'
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': historical}))
-    assert store.load() == {**DEFAULT_PREFERENCES, **historical}, 'post-rarity preferences did not migrate'
+    assert store.load() == DEFAULT_PREFERENCES, 'post-rarity preferences did not migrate'
     previous_before_rarity_target = {
-        name: value for name, value in DEFAULT_PREFERENCES.items()
+        to_legacy.get(name, name): value for name, value in DEFAULT_PREFERENCES.items()
         if name not in {'boonRarityTarget', 'healthLock', 'moneyLock', 'rerollsLock'}
     }
     previous_before_rarity_target['boonRarityEnabled'] = True
     previous_before_rarity_target['gameSpeed'] = 2.0
+    previous_before_rarity_target['fullHealth'] = True
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': previous_before_rarity_target}))
-    assert store.load() == {**DEFAULT_PREFERENCES, **previous_before_rarity_target}, (
-        'older schema-1 preferences did not acquire the neutral rarity/lock targets'
-    )
-    previous_current = {
-        name: value for name, value in DEFAULT_PREFERENCES.items()
-        if name not in {'healthLock', 'moneyLock', 'rerollsLock'}
+    assert store.load() == {
+        **DEFAULT_PREFERENCES, 'boonRarityEnabled': True, 'gameSpeed': 2.0, 'infiniteHealth': True,
+    }, 'older schema-1 preferences did not acquire the neutral rarity/lock targets and canonical IDs'
+    schema_two = {
+        to_legacy.get(name, name): value for name, value in DEFAULT_PREFERENCES.items()
     }
-    previous_current['boonRarityEnabled'] = True
-    previous_current['boonRarityTarget'] = 'Rare'
-    store.path.write_text(json.dumps({'schemaVersion': 1, 'features': previous_current}))
-    assert store.load() == {**DEFAULT_PREFERENCES, **previous_current}, (
-        'immediately previous schema-1 preferences did not acquire neutral fixed locks'
-    )
-    # Schema 1 named every one of those shipped feature sets. The next write
-    # identifies the current set as schema 2, which accepts exactly that set.
-    store.save(store.load())
+    schema_two['boonRarityEnabled'] = True
+    schema_two['boonRarityTarget'] = 'Rare'
+    schema_two['fullHealth'] = True
+    schema_two['moneyNoDecrease'] = True
+    schema_two['rerollsNoDecrease'] = True
+    schema_two['forceRerolls'] = True
+    store.path.write_text(json.dumps({'schemaVersion': 2, 'features': schema_two}))
+    assert store.load() == {
+        **DEFAULT_PREFERENCES,
+        'boonRarityEnabled': True,
+        'boonRarityTarget': 'Rare',
+        'infiniteHealth': True,
+        'infiniteMoney': True,
+        'infiniteRerolls': True,
+        'forceEnableRerolls': True,
+    }, 'schema-2 legacy cheat IDs did not migrate onto canonical IDs'
+    # Schema 1/2 named those historical feature sets. The next write
+    # identifies the current canonical set as schema 3.
+    expected_canonical = store.load()
+    store.save(expected_canonical)
     assert json.loads(store.path.read_text()) == {
-        'schemaVersion': 2, 'features': {**DEFAULT_PREFERENCES, **previous_current}}
-    for shipped in (legacy, historical, previous_before_rarity_target, previous_current):
-        store.path.write_text(json.dumps({'schemaVersion': 2, 'features': shipped}))
+        'schemaVersion': 3, 'features': expected_canonical}
+    for shipped in (legacy, historical, previous_before_rarity_target, schema_two):
+        store.path.write_text(json.dumps({'schemaVersion': 3, 'features': shipped}))
         try:
             store.load()
         except AdapterError as error:
             assert (error.code, error.presentation) == ('preferences_failed', 'hades.error.preferencesReadFailed')
         else:
-            raise AssertionError('schema 2 accepted a schema-1 feature set')
+            raise AssertionError('schema 3 accepted a pre-canonical feature set')
 
     # Settings written by a newer Trainer are refused and never replaced: not by
     # edits, a Profile load, or the Disable All the Host sends on app exit.
-    newer = json.dumps({'schemaVersion': 3, 'features': {'futureFeature': True}})
+    newer = json.dumps({'schemaVersion': 4, 'features': {'futureFeature': True}})
     store.path.write_text(newer)
     newer_runtime = Runtime()
     newer_adapter = HadesAdapter(context, runtime=newer_runtime, preferences=store,
@@ -195,6 +214,12 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
 
     adapter.profiles.root.mkdir(parents=True, exist_ok=True)
     profile_name = 'Previous Current'
+    previous_current = {
+        to_legacy.get(name, name): value for name, value in DEFAULT_PREFERENCES.items()
+        if name not in {'healthLock', 'moneyLock', 'rerollsLock'}
+    }
+    previous_current['boonRarityEnabled'] = True
+    previous_current['boonRarityTarget'] = 'Rare'
     adapter.profiles.path(profile_name).write_text(json.dumps({
         'schemaVersion': 1, 'gameID': 'hades', 'name': profile_name,
         'updatedAt': '2026-11-04T00:00:00+00:00', 'features': previous_current,
@@ -320,9 +345,9 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert store.load()['rerollsLock'] == 3
     adapter.dispatch('set_value', {'field': 'rerolls', 'value': 7, 'target': owner}, 'edit-locked-rerolls')
     assert store.load()['rerollsLock'] == 7 and runtime.state['rerollsLock'] == 7
-    adapter.dispatch('set_feature', {'feature': 'rerollsNoDecrease', 'value': True}, 'infinite-rerolls')
+    adapter.dispatch('set_feature', {'feature': 'infiniteRerolls', 'value': True}, 'infinite-rerolls')
     assert store.load()['rerollsLock'] is None and runtime.state['rerollsLocked'] is False
-    adapter.dispatch('set_feature', {'feature': 'rerollsNoDecrease', 'value': False}, 'normal-rerolls')
+    adapter.dispatch('set_feature', {'feature': 'infiniteRerolls', 'value': False}, 'normal-rerolls')
 
     class RejectingLockPreferences:
         def save(self, features):
@@ -391,8 +416,8 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
         'lock_resource', {'resource': 'Money', 'locked': False, 'target': owner}, 'unlock-after-rollback'
     )
 
-    adapter.dispatch('set_feature', {'feature': 'moneyNoDecrease', 'value': True}, 'enable')
-    assert store.load()['moneyNoDecrease'] is True
+    adapter.dispatch('set_feature', {'feature': 'infiniteMoney', 'value': True}, 'enable')
+    assert store.load()['infiniteMoney'] is True
     state = adapter.dispatch('set_feature', {'feature': 'gameSpeed', 'value': 2.5}, 'speed-up')
     assert runtime.speed == 2.5 and store.load()['gameSpeed'] == 2.5
     assert state['features']['gameSpeed']['actual'] == 2.5
@@ -427,7 +452,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert runtime.speed == 1.0
     adapter.dispatch('disable_all', {}, 'offline-disable')
     assert store.load() == DEFAULT_PREFERENCES
-    assert json.loads(store.path.read_text())['schemaVersion'] == 2
+    assert json.loads(store.path.read_text())['schemaVersion'] == 3
 
     class UnwritablePreferences:
         def save(self, features):

@@ -293,7 +293,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         )
     }
     func lockMoney(_ locked: Bool) {
-        guard !(locked && isEnabled(.moneyNoDecrease)) else { return }
+        guard !(locked && isEnabled(.infiniteMoney)) else { return }
         sendToHero(
             .lockResource(resource: "Money", locked: locked),
             target: target,
@@ -301,7 +301,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         )
     }
     func lockRerolls(_ locked: Bool) {
-        guard !(locked && isEnabled(.rerollsNoDecrease)) else { return }
+        guard !(locked && isEnabled(.infiniteRerolls)) else { return }
         sendToHero(
             .lockRerolls(locked: locked),
             target: target,

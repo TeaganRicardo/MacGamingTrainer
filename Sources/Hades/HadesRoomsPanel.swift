@@ -41,8 +41,12 @@ struct HadesGatheringPanel: View {
                 )
                 TrainerSecondaryActionButton(title: text("hades.gain"), enabled: model.canMutate, action: gain)
             }
-            TrainerLabeledControlRow(title: text("hades.generateFishing"), icon: HadesWorkbenchIcon.fishing, tint: model.canMutate && model.world?.canFish == true ? theme.accent : theme.inactive, emphasized: false) {
+            TrainerCheatOneShotRow(
+                definition: HadesCheatCatalog.definition(id: "generateFishing")!,
+                tint: model.canMutate && model.world?.canFish == true ? theme.accent : theme.inactive
+            ) {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.generateFishing))
+            } actionButton: {
                 TrainerSecondaryActionButton(
                     title: text("hades.generate"),
                     enabled: model.canMutate && model.world?.canFish == true,
@@ -281,19 +285,17 @@ struct HadesRoomsPanel: View {
     }
 
     private var chaosGateRow: some View {
-        TrainerLabeledControlRow(
-            title: text("hades.generateChaosGate"),
-            icon: HadesWorkbenchIcon.portal,
-            tint: model.canMutate && model.world?.canChaos == true ? theme.accent : theme.inactive,
-            emphasized: false
+        TrainerCheatOneShotRow(
+            definition: HadesCheatCatalog.definition(id: "generateChaosGate")!,
+            tint: model.canMutate && model.world?.canChaos == true ? theme.accent : theme.inactive
         ) {
             TrainerShortcutBadgeSlot(text: model.shortcutText(.generateChaosGate))
+        } actionButton: {
             TrainerSecondaryActionButton(
                 title: text("hades.generate"),
                 enabled: model.canMutate && model.world?.canChaos == true
             ) { model.generateChaosGate() }
         }
-        .help(text("hades.chaosGateHelp"))
     }
 
     var body: some View {
