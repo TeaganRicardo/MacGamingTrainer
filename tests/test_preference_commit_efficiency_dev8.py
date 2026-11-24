@@ -49,7 +49,7 @@ assert json.loads((context.data_dir/'desired-state.json').read_text())['boonRari
 save_count = 0
 adapter.dispatch(
     'apply_world_exit',
-    {'doorToken':'exit:test:1','kind':'reward','target':'WeaponUpgrade'},
+    {'doorToken':'exit:test:1','room':'combat','reward':'WeaponUpgrade'},
     'world-exit-once',
 )
 assert save_count == 0, save_count

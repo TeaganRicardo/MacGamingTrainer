@@ -119,10 +119,13 @@ struct Main {
                 "ordinal": 1,
                 "roomName": "RoomOpening",
                 "reward": "RoomMoneyDrop",
-                "targets": [["kind": "reward", "id": "RoomMoneyDrop"]],
+                "targets": [
+                    ["kind": "reward", "id": "RoomMoneyDrop"],
+                    ["kind": "roomCategory", "id": "current", "acceptsReward": true],
+                ],
                 "activeLease": [
-                    "kind": "reward",
-                    "target": "RoomMoneyDrop",
+                    "room": "current",
+                    "reward": "RoomMoneyDrop",
                     "leaseToken": "exit-lease-1",
                 ],
             ]],
@@ -143,7 +146,7 @@ struct Main {
         check(
             model.spellChargeCost == 20
                 && model.worldActionExits.count == 1
-                && model.worldActionExits[0].activeLease?.target == "RoomMoneyDrop"
+                && model.worldActionExits[0].activeLease?.reward == "RoomMoneyDrop"
                 && model.activeWorldOccurrenceTarget == "npc:Nemesis"
                 && model.occurrenceTargets.map(\.id) == ["npc:Nemesis", "shop:Charon"],
             "sparse Profile payload erased run or world-action state"

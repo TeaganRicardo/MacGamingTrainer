@@ -42,12 +42,14 @@ for line in sys.stdin:
         time.sleep(0.16)
     world_mode_path = log.with_suffix(".world_mode")
     world_mode = world_mode_path.read_text(encoding="utf-8").strip() if world_mode_path.exists() else "default"
-    if request["command"] == "apply_world_exit":
+    outcome_unknown = request["command"] == "apply_world_exit" and world_mode == "unknown_outcome"
+    if request["command"] == "apply_world_exit" and not outcome_unknown:
         world_lease = {
-            "kind": request["params"]["kind"],
-            "target": request["params"]["target"],
+            "room": request["params"]["room"],
             "leaseToken": "fixture-lease:" + request["id"],
         }
+        if "reward" in request["params"]:
+            world_lease["reward"] = request["params"]["reward"]
     elif request["command"] == "cancel_world_exit":
         world_lease = None
     exit_row = {
@@ -55,15 +57,27 @@ for line in sys.stdin:
         "objectId": 1,
         "ordinal": 1,
         "roomName": "F_Combat01",
+        "roomKind": "combat",
         "reward": "RoomMoneyDrop",
-        "targets": [{"kind": "reward", "id": "MaxManaDropBig"}],
+        "targets": [
+            {"kind": "reward", "id": "MaxManaDropBig"},
+            {"kind": "roomCategory", "id": "combat", "acceptsReward": True},
+            {"kind": "roomCategory", "id": "story"},
+        ],
     }
     if world_lease is not None:
         exit_row["activeLease"] = world_lease
     if world_mode == "multi_exits":
+        # #832: the game's rules warn and stay selectable; only a probe
+        # error refuses.
         exit_row["targets"] = [
             {"kind": "reward", "id": "MaxManaDropBig"},
-            {"kind": "reward", "id": "RoomMoneyDrop"},
+            {"kind": "reward", "id": "RoomMoneyDrop", "warning": "reward_not_available"},
+            {"kind": "reward", "id": "MaxHealthDrop", "enabled": False,
+             "reason": "reward_eligibility_probe_error"},
+            {"kind": "roomCategory", "id": "combat", "acceptsReward": True,
+             "warning": "native_forced_room_present"},
+            {"kind": "roomCategory", "id": "story", "warning": "max_creations_this_run"},
         ]
         exits_payload = [
             exit_row,
@@ -72,9 +86,11 @@ for line in sys.stdin:
                 "objectId": 2,
                 "ordinal": 2,
                 "roomName": "F_Story01",
+                "roomKind": "story",
                 "reward": "MetaCardPointsCommonDrop",
                 "targets": [
                     {"kind": "reward", "id": "WeaponUpgrade"},
+                    {"kind": "roomCategory", "id": "combat", "acceptsReward": True},
                     {"kind": "roomCategory", "id": "story"},
                 ],
             },
@@ -94,9 +110,11 @@ for line in sys.stdin:
                 "objectId": 2,
                 "ordinal": 2,
                 "roomName": "F_Story01",
+                "roomKind": "story",
                 "reward": "MetaCardPointsCommonDrop",
                 "targets": [
                     {"kind": "reward", "id": "WeaponUpgrade"},
+                    {"kind": "roomCategory", "id": "combat", "acceptsReward": True},
                     {"kind": "roomCategory", "id": "story"},
                 ],
             },
@@ -138,7 +156,17 @@ for line in sys.stdin:
         "moduleProtocolVersion": __MGT_MODULE_PROTOCOL__, "gameID": args.game, "ok": success,
         "result" if success else "state": observed,
     }
-    if not success:
+    if outcome_unknown:
+        response = {
+            "type": "result", "id": request["id"], "protocolVersion": 6,
+            "moduleProtocolVersion": __MGT_MODULE_PROTOCOL__, "gameID": args.game, "ok": False,
+            "state": observed,
+            "error": {
+                "code": "outcome_unknown", "presentation": "hades2.error.worldActionUnavailable",
+                "diagnostic": "synthetic lost world-exit reply", "outcomeUnknown": True,
+            },
+        }
+    elif not success:
         response["error"] = {
             "code": "invalid_request", "presentation": "hades2.error.invalidRequest",
             "diagnostic": "synthetic rejected request",
@@ -346,7 +374,7 @@ struct Main {
         // Row 1 now owns one exact generated exit. Rapid shortcut repetition
         // must not create a second lease while the first Apply is in flight.
         check(model.selectedWorldExit?.doorToken == "fixture-exit:1"
-              && model.selectedWorldExitTarget == "reward:" + reward.id,
+              && model.selectedWorldExitTarget == "combat>" + reward.id,
               "fixture did not project the exact-exit World Action selection")
         check(model.canSelectWorldExitTarget,
               "idle selected exit did not enable local target selection")
@@ -364,9 +392,16 @@ struct Main {
         }
         check(worldExitRequests.count == 1,
               "rapid hotkey duplicated an exact-exit World Action: \(worldExitRequests.count)")
-        check(model.selectedWorldExitLease?.kind == "reward"
-              && model.selectedWorldExitLease?.target == reward.id,
+        check(model.selectedWorldExitLease?.room == "combat"
+              && model.selectedWorldExitLease?.reward == reward.id
+              && model.selectedWorldExitTarget == "combat>" + reward.id,
               "successful Apply was not latched from the authoritative backend lease")
+        let applyParams = worldExitRequests.first?["params"] as? [String: Any]
+        check(applyParams?["doorToken"] as? String == "fixture-exit:1"
+              && applyParams?["room"] as? String == "combat"
+              && applyParams?["reward"] as? String == reward.id
+              && applyParams?["kind"] == nil && applyParams?["target"] == nil,
+              "Apply did not carry the room type and reward together: \(String(describing: applyParams))")
         check(model.selectedWorldExitTargetLocked && model.selectedWorldExitActionAvailable,
               "latched exact-exit lease did not lock the target while keeping Apply cancellable")
         check(!model.canSelectWorldExitTarget,
@@ -396,10 +431,19 @@ struct Main {
         waitForIdle(model, logURL: logURL, phase: "multi_exits refresh")
         check(model.worldActionExits.count == 3 && model.canSelectWorldExit,
               "multi_exits snapshot did not populate exits")
-        model.selectedWorldExitTarget = "reward:RoomMoneyDrop"
+        // #832: warned choices stay selectable; a refused reward does not.
+        for (choice, expected) in [
+            ("combat>RoomMoneyDrop", true), ("combat", true), ("story", true),
+            ("combat>MaxHealthDrop", false), ("story>MaxManaDropBig", false), ("current", false),
+        ] {
+            model.selectedWorldExitTarget = choice
+            check(model.selectedWorldExitActionAvailable == expected,
+                  "choice \(choice) availability expected \(expected)")
+        }
+        model.selectedWorldExitTarget = "combat>RoomMoneyDrop"
         model.selectedWorldExitToken = "fixture-exit:2"
         model.repairWorldActionSelection()
-        check(model.selectedWorldExitTarget == "reward:WeaponUpgrade"
+        check(model.selectedWorldExitTarget == "combat>WeaponUpgrade"
               && model.canSelectWorldExitTarget
               && model.selectedWorldExitActionAvailable,
               "switching doors leaked a stale cross-door target or broke eligibility")
@@ -418,9 +462,9 @@ struct Main {
               && model.canSelectWorldExitTarget
               && !model.selectedWorldExitActionAvailable,
               "unrelated blocking request gated target picker or left Apply enabled")
-        model.selectedWorldExitTarget = "roomCategory:story"
+        model.selectedWorldExitTarget = "story"
         waitForIdle(model, logURL: logURL, phase: "slow special-reward spawn")
-        check(model.selectedWorldExitTarget == "roomCategory:story"
+        check(model.selectedWorldExitTarget == "story"
               && model.selectedWorldExitActionAvailable,
               "completion of unrelated blocking request clobbered mid-flight target choice")
 
@@ -439,7 +483,7 @@ struct Main {
         model.refreshFromHost()
         waitForIdle(model, logURL: logURL, phase: "stale_exit refresh")
         check(model.selectedWorldExitToken == "fixture-exit:2"
-              && model.selectedWorldExitTarget == "reward:WeaponUpgrade"
+              && model.selectedWorldExitTarget == "combat>WeaponUpgrade"
               && model.canSelectWorldExitTarget
               && model.selectedWorldExitActionAvailable,
               "disappeared exit token did not repair to surviving exit and valid target")
@@ -489,6 +533,31 @@ struct Main {
         model.connected = false
         check(!model.canSelectWorldExit && !model.canSelectWorldExitTarget && !model.selectedWorldExitActionAvailable,
               "disconnected runtime left world exit gates enabled")
+
+        // AGENTS.md hard rule 2: a lost Apply reply is an unknown outcome. It is
+        // sent once, never replayed, and further changes wait for a restart.
+        model.refreshFromHost()
+        waitForIdle(model, logURL: logURL, phase: "reconnect before unknown outcome")
+        check(model.selectedWorldExitActionAvailable, "fixture exit was not ready before the unknown outcome")
+        try "unknown_outcome".write(to: worldModeURL, atomically: true, encoding: .utf8)
+        let appliesBeforeUnknown = loggedCommands(at: logURL).filter {
+            ($0["command"] as? String) == "apply_world_exit"
+        }.count
+        model.performShortcut(.applyWorldExit)
+        let unknownDeadline = Date().addingTimeInterval(5)
+        while (model.busy || !model.backendStatus.requiresTargetRestart) && Date() < unknownDeadline {
+            pump(0.02)
+        }
+        model.performShortcut(.applyWorldExit)
+        pump(0.3)
+        let appliesAfterUnknown = loggedCommands(at: logURL).filter {
+            ($0["command"] as? String) == "apply_world_exit"
+        }.count
+        check(appliesAfterUnknown == appliesBeforeUnknown + 1,
+              "an unknown world-exit outcome was replayed: \(appliesAfterUnknown - appliesBeforeUnknown) sends")
+        check(model.backendStatus.requiresTargetRestart && !model.selectedWorldExitActionAvailable
+              && model.selectedWorldExitLease == nil,
+              "an unknown world-exit outcome did not block further changes until restart")
 
         session.stop()
         pump(0.10)

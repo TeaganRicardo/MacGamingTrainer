@@ -41,31 +41,63 @@ struct Hades2PresentationReference: Equatable {
     let arguments: [String]
 }
 
+/// One Modify Exit catalog entry (#832): a reward or a room type. The game's
+/// own selection rules arrive as `warning` and never disable an entry; only
+/// what the resident cannot build is `enabled == false` with a `reason`.
 struct Hades2WorldActionTarget: Identifiable, Equatable {
     let kind: String
     let id: String
     let enabled: Bool
     let reason: String?
+    let warning: String?
+    let acceptsReward: Bool
 
-    init(kind: String, id: String, enabled: Bool = true, reason: String? = nil) {
+    init(kind: String, id: String, enabled: Bool = true, reason: String? = nil,
+         warning: String? = nil, acceptsReward: Bool = false) {
         self.kind = kind
         self.id = id
         self.enabled = enabled
         self.reason = reason
+        self.warning = warning
+        self.acceptsReward = acceptsReward
     }
 
-    var identity: String { kind + ":" + id }
-    var idValue: String { identity }
+    var idValue: String { kind + ":" + id }
+    var isRoom: Bool { kind == "roomCategory" }
 }
 
-extension Hades2WorldActionTarget {
-    var stableID: String { identity }
+/// What one Apply sends: a room type plus an optional reward. Its `id` is the
+/// Target menu's selection value.
+struct Hades2WorldExitChoice: Equatable {
+    let room: String
+    let reward: String?
+
+    init(room: String, reward: String? = nil) {
+        self.room = room
+        self.reward = reward
+    }
+
+    init?(id: String) {
+        let parts = id.split(separator: ">", maxSplits: 1, omittingEmptySubsequences: false)
+        guard let room = parts.first, !room.isEmpty else { return nil }
+        if parts.count == 2 {
+            guard !parts[1].isEmpty else { return nil }
+            self.init(room: String(room), reward: String(parts[1]))
+        } else {
+            self.init(room: String(room))
+        }
+    }
+
+    var id: String { reward.map { room + ">" + $0 } ?? room }
 }
 
+/// The game's lease on one exit, as the resident reports it.
 struct Hades2WorldActionLease: Equatable {
-    let kind: String
-    let target: String
+    let room: String
+    let reward: String?
     let leaseToken: String
+
+    var choice: Hades2WorldExitChoice { Hades2WorldExitChoice(room: room, reward: reward) }
 }
 
 struct Hades2WorldExit: Identifiable, Equatable {
@@ -73,11 +105,68 @@ struct Hades2WorldExit: Identifiable, Equatable {
     let objectID: Int
     let ordinal: Int
     let roomName: String
+    /// The door's current room type ("combat", "story", ...), or empty when
+    /// the region does not build that type (an intro, a boss).
+    let roomKind: String
     let reward: String
+    /// The current room's own reward rule (e.g. `room_no_reward`): a warning
+    /// on an in-place reward edit.
+    let rewardWarning: String?
     let targets: [Hades2WorldActionTarget]
     let activeLease: Hades2WorldActionLease?
 
+    init(doorToken: String, objectID: Int, ordinal: Int, roomName: String, roomKind: String = "",
+         reward: String, rewardWarning: String? = nil, targets: [Hades2WorldActionTarget],
+         activeLease: Hades2WorldActionLease?) {
+        self.doorToken = doorToken
+        self.objectID = objectID
+        self.ordinal = ordinal
+        self.roomName = roomName
+        self.roomKind = roomKind
+        self.reward = reward
+        self.rewardWarning = rewardWarning
+        self.targets = targets
+        self.activeLease = activeLease
+    }
+
     var id: String { doorToken }
+    var roomTargets: [Hades2WorldActionTarget] { targets.filter(\.isRoom) }
+    var rewardTargets: [Hades2WorldActionTarget] { targets.filter { $0.kind == "reward" } }
+
+    /// A reward under this room type edits the door's current room in place.
+    func isCurrentRoom(_ room: String) -> Bool {
+        room == "current" || room == roomName || (!roomKind.isEmpty && room == roomKind)
+    }
+
+    /// "Any reward" under a room type is a reservation that lets the game pick
+    /// the reward; under "current" it would change nothing.
+    func offersAnyReward(_ room: Hades2WorldActionTarget) -> Bool {
+        room.acceptsReward && room.id != "current"
+    }
+
+    func isEnabled(_ choice: Hades2WorldExitChoice) -> Bool {
+        guard let room = roomTargets.first(where: { $0.id == choice.room }), room.enabled else { return false }
+        guard let reward = choice.reward else { return !room.acceptsReward || offersAnyReward(room) }
+        return room.acceptsReward && rewardTargets.contains { $0.id == reward && $0.enabled }
+    }
+
+    /// First enabled reward for the door's own room type that it does not
+    /// already hold, else the first enabled choice in menu order.
+    var defaultChoice: Hades2WorldExitChoice? {
+        let rooms = roomTargets.filter(\.enabled)
+        if let current = rooms.first(where: { $0.acceptsReward && isCurrentRoom($0.id) }),
+           let reward = rewardTargets.first(where: { $0.enabled && $0.id != self.reward }) {
+            return Hades2WorldExitChoice(room: current.id, reward: reward.id)
+        }
+        for room in rooms {
+            if !room.acceptsReward { return Hades2WorldExitChoice(room: room.id) }
+            if let reward = rewardTargets.first(where: \.enabled) {
+                return Hades2WorldExitChoice(room: room.id, reward: reward.id)
+            }
+            if offersAnyReward(room) { return Hades2WorldExitChoice(room: room.id) }
+        }
+        return nil
+    }
 }
 
 struct Hades2WorldOccurrenceLease: Equatable {
@@ -417,15 +506,17 @@ struct Hades2StatePatch {
                 return Hades2WorldActionTarget(
                     kind: kind, id: id,
                     enabled: target["enabled"] as? Bool ?? true,
-                    reason: target["reason"] as? String
+                    reason: target["reason"] as? String,
+                    warning: target["warning"] as? String,
+                    acceptsReward: target["acceptsReward"] as? Bool ?? false
                 )
             }
             let lease: Hades2WorldActionLease?
             if let value = exit["activeLease"] as? [String: Any],
-               let kind = value["kind"] as? String, !kind.isEmpty,
-               let target = value["target"] as? String, !target.isEmpty,
+               let room = value["room"] as? String, !room.isEmpty,
                let token = value["leaseToken"] as? String, !token.isEmpty {
-                lease = Hades2WorldActionLease(kind: kind, target: target, leaseToken: token)
+                let reward = (value["reward"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+                lease = Hades2WorldActionLease(room: room, reward: reward, leaseToken: token)
             } else {
                 lease = nil
             }
@@ -434,7 +525,9 @@ struct Hades2StatePatch {
                 objectID: objectID,
                 ordinal: ordinal,
                 roomName: exit["roomName"] as? String ?? "",
+                roomKind: exit["roomKind"] as? String ?? "",
                 reward: exit["reward"] as? String ?? "",
+                rewardWarning: exit["rewardWarning"] as? String,
                 targets: targets,
                 activeLease: lease
             )

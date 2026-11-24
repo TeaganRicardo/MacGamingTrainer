@@ -306,8 +306,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSelectWorldExitTarget: Bool {
         guard canSelectWorldExit, !selectedWorldExitTargetLocked,
               let exit = selectedWorldExit else { return false }
-        return !exit.targets.isEmpty
+        return exit.defaultChoice != nil
     }
+    /// The Target menu's current room type + reward choice.
+    var selectedWorldExitChoice: Hades2WorldExitChoice? { Hades2WorldExitChoice(id: selectedWorldExitTarget) }
     var canSelectWorldExit: Bool {
         worldActionsSupported && !worldActionExits.isEmpty
     }
@@ -320,7 +322,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var selectedWorldExitActionAvailable: Bool {
         guard canApplyWorldExit, let exit = selectedWorldExit else { return false }
         if exit.activeLease != nil { return true }
-        return exit.targets.contains { $0.stableID == selectedWorldExitTarget && $0.enabled }
+        return selectedWorldExitChoice.map(exit.isEnabled) ?? false
     }
     var occurrenceActionAvailable: Bool {
         guard canApplyWorldAction else { return false }
@@ -1619,11 +1621,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             return
         }
         if let lease = exit.activeLease {
-            selectedWorldExitTarget = lease.kind + ":" + lease.target
+            selectedWorldExitTarget = lease.choice.id
             return
         }
-        if !exit.targets.contains(where: { $0.stableID == selectedWorldExitTarget && $0.enabled }) {
-            selectedWorldExitTarget = exit.targets.first(where: { $0.enabled })?.stableID ?? ""
+        if !(selectedWorldExitChoice.map(exit.isEnabled) ?? false) {
+            selectedWorldExitTarget = exit.defaultChoice?.id ?? ""
         }
     }
 
@@ -1646,11 +1648,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             )
             return true
         }
-        guard let target = exit.targets.first(where: { $0.stableID == selectedWorldExitTarget && $0.enabled }) else {
-            return false
-        }
+        guard let choice = selectedWorldExitChoice, exit.isEnabled(choice) else { return false }
+        // One-shot: a lost reply is an unknown outcome and is never resent.
         send(
-            .applyWorldExit(doorToken: exit.doorToken, kind: target.kind, target: target.id),
+            .applyWorldExit(doorToken: exit.doorToken, room: choice.room, reward: choice.reward),
             title: "hades2.worldActions.modifyExit",
             completion: completion
         )
