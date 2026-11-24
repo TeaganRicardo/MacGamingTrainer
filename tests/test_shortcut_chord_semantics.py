@@ -223,6 +223,22 @@ migratedCustomProfile.applyProfile(legacyCustomProfile)
 precondition(migratedCustomProfile.chord(.invincibility) == seedCustom)
 precondition(unique(migratedCustomProfile))
 
+// Historical v3 Profiles stripped by Python (`_RETIRED_SHORTCUT_ACTIONS` removes
+// `"damageEnabled"`) must still match as a complete legacy layout so existing
+// overrides are replaced cleanly by the v3 Profile.
+let legacyV3Digits: [String: Int] = [
+    "invincibility": 1, "infiniteHealth": 2, "infiniteMana": 3, "instantCastCooldown": 4,
+    "hexAlwaysReady": 5, "infiniteAmmo": 6, "autoMiniGames": 8,
+    "moneyMultiplierEnabled": 9, "disableAll": 0,
+]
+let legacyV3StrippedProfile: [String: Any] = Dictionary(uniqueKeysWithValues: legacyV3Digits.map { action, digit in
+    (action, HotkeyChord.controlOptionDigit(digit)!.payload as Any)
+})
+var migratedV3Profile = Hades2ShortcutStore(defaults: makeDefaults())
+precondition(migratedV3Profile.set(.infiniteHealth, chord: seedCustom) == nil)
+migratedV3Profile.applyProfile(legacyV3StrippedProfile)
+precondition(matchesDerivedDefaults(migratedV3Profile))
+
 var currentDefaultProfile = Hades2ShortcutStore(defaults: makeDefaults()).payload()
 var resetByCurrentProfile = Hades2ShortcutStore(defaults: makeDefaults())
 precondition(resetByCurrentProfile.set(.invincibility, chord: seedCustom) == nil)

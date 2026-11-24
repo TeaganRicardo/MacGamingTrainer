@@ -110,7 +110,7 @@ struct Hades2ShortcutStore {
             legacyDefaultTables: [Self.legacyV4DefaultLayout(), Self.legacyV3DefaultChords()],
             completeLegacyLayouts: [
                 Self.legacyV4ActionOrder.filter { ShortcutAction(rawValue: $0) != nil },
-                Array(Self.legacyV3DefaultDigits.keys),
+                Self.legacyV3DefaultDigits.keys.filter { ShortcutAction(rawValue: $0) != nil },
             ]
         )
     }

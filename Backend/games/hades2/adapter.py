@@ -59,7 +59,7 @@ def clear_active(state,preserve_desired=False):
     if isinstance(stats,dict):
         for item in stats.values():
             if isinstance(item,dict):item['locked']=False;item['target']=None
-    state['activeFeatures']={key:False for key in TOGGLES};state['activeFeatures']['gameSpeed']=False
+    state['activeFeatures']={key:False for key in TOGGLES};state['activeFeatures']['damageMultiplier']=False;state['activeFeatures']['gameSpeed']=False
     state['dormantFeatures']={}
     state['capabilities']=disconnected_capabilities()
     for resource in state.get('resources',[]):resource['locked']=False
@@ -71,7 +71,7 @@ def mark_disconnected(state):
     state.update(connected=False, scene='unknown')
     state['gatheringTargets']={}
     state['gardenScopeToken']=None
-    state['activeFeatures']={key:False for key in TOGGLES}; state['activeFeatures']['gameSpeed']=False
+    state['activeFeatures']={key:False for key in TOGGLES}; state['activeFeatures']['damageMultiplier']=False; state['activeFeatures']['gameSpeed']=False
     state['dormantFeatures']={}
     state['featureErrors']={}
     state['featureErrorPresentations']={}
@@ -146,7 +146,7 @@ class Hades2Adapter(GameAdapter):
                     **desired_defaults,
                     'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':default_boon_rarity(), 'worldActions':{'exits':[]}, 'gatheringProbabilities':{}, 'gatheringTargets':{}, 'gardenScopeToken':None,
                     'desiredFeatures':{key:desired_defaults[key] for key in TOGGLES},
-                    'activeFeatures':{key:False for key in TOGGLES},
+                    'activeFeatures':{**{key:False for key in TOGGLES}, 'damageMultiplier':False, 'gameSpeed':False},
                     'dormantFeatures':{},
                     'featureErrorPresentations':{},
                     'capabilities':disconnected_capabilities()}

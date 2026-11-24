@@ -526,6 +526,37 @@ end
 check(reapplied, "movement target was not reapplied to replacement Hero")
 check(timerCalls > 0, "scene guard did not run")
 
+-- Disabling damageMultiplier (1x) must release the native hook cleanly.
+local offDamage = setFeature("damageMultiplier", 1)
+eq(offDamage.damageMultiplier, 1, "damageMultiplier failed to reset to 1x")
+check(not offDamage.activeFeatures.damageMultiplier, "damageMultiplier stayed active at 1x")
+eq(CalculateDamageMultipliers(CurrentRun.Hero), 1, "damageMultiplier hook remained wrapped after reset")
+
+-- Missing CalculateDamageMultipliers keeps damageMultiplier dormant until loaded.
+local originalDamageFn = CalculateDamageMultipliers
+CalculateDamageMultipliers = nil
+local dormantDamage = setFeature("damageMultiplier", 3)
+eq(dormantDamage.damageMultiplier, 3, "missing damage fn discarded desired multiplier")
+check(not dormantDamage.featureSupport.damageMultiplier, "missing damage fn reported supported")
+check(not dormantDamage.activeFeatures.damageMultiplier, "missing damage fn reported active")
+check(dormantDamage.dormantFeatures.damageMultiplier, "missing damage fn was not marked dormant")
+CalculateDamageMultipliers = originalDamageFn
+UpdateTimers(0)
+local armedDamage = status()
+check(armedDamage.featureSupport.damageMultiplier, "restored damage fn remained unsupported")
+check(armedDamage.activeFeatures.damageMultiplier, "restored damage fn did not arm on UpdateTimers")
+eq(CalculateDamageMultipliers(CurrentRun.Hero), 3, "armed damageMultiplier hook did not multiply damage")
+
+-- Failed reconciliation on damageMultiplier rolls back both the multiplier and hook.
+M.dispatch("disable_all", { includeCatalogs = false })
+local originalUpdateTimers = UpdateTimers
+UpdateTimers = nil
+local rollbackOk = pcall(function() setFeature("damageMultiplier", 4) end)
+check(not rollbackOk, "damageMultiplier succeeded when guard install failed")
+eq(M.damageMultiplier, 1, "damageMultiplier failed to roll back after guard error")
+UpdateTimers = originalUpdateTimers
+eq(CalculateDamageMultipliers(CurrentRun.Hero), 1, "failed damageMultiplier install left hook wrapped")
+
 print("hades2_scene_owner_availability_ok")
 '''
 

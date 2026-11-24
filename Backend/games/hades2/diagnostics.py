@@ -231,9 +231,9 @@ def build_diagnostics(adapter):
     )
 
     fs = state.get('featureSupport', {}) if isinstance(state.get('featureSupport'), dict) else {}
-    # schema.TOGGLES owns Hades durable toggle identity. gameSpeed is the one
-    # explicit Core-owned capability projected into the same runtime-support
-    # report, so it is appended here rather than copied into another Hades list.
+    # schema.TOGGLES owns durable boolean cheat toggles; damageMultiplier and
+    # Core-owned gameSpeed have separate multiplier contracts but are projected
+    # into the same runtime-support report.
     diagnostic_features = list(schema.TOGGLES)
     for key in ('damageMultiplier', 'gameSpeed'):
         if key not in diagnostic_features:
