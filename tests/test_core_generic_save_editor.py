@@ -28,7 +28,7 @@ from core.save_editor import (  # noqa: E402
     SaveFieldSpec,
     discover_mapping_fields,
 )
-from core.save_restore import SaveRestoreError, SaveRestoreTransaction, SaveRollbackError  # noqa: E402
+from core.save_restore import SaveRestoreTransaction  # noqa: E402
 from core.structured_save_edit import StructuredSaveEligibility  # noqa: E402
 from games.hades.adapter import HadesAdapter  # noqa: E402
 from games.hades.preferences import HadesPreferenceStore  # noqa: E402
@@ -37,7 +37,6 @@ from games.hades.save_workspace import HadesSaveWorkspace  # noqa: E402
 from games.hades2.adapter import Hades2Adapter  # noqa: E402
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable as Hades2LuaTable  # noqa: E402
 from games.hades2.save_workspace import Hades2SaveWorkspace  # noqa: E402
-from hades2_resident_session_fakes import hades2_adapter_context  # noqa: E402
 from hades_save import environment as hades_environment  # noqa: E402
 
 
@@ -218,6 +217,12 @@ def main() -> None:
     assert by_path[("root", "x")].owner_id == "owner:root"
     assert by_path[("$root",)].owner_id != by_path[("root", "x")].owner_id
 
+    ancestor_skip_check = discover_mapping_fields(
+        {"knownParent": {}, "nonEmptyParent": {"known": 1, "sibling": 2}},
+        frozenset({("knownParent", "leaf"), ("nonEmptyParent", "known")}),
+    )
+    assert [field.path for field in ancestor_skip_check] == [("nonEmptyParent", "sibling")]
+
     with tempfile.TemporaryDirectory(prefix="mgt-generic-save-editor-") as td:
         root = Path(td)
 
@@ -353,6 +358,7 @@ def main() -> None:
                 ("bad-bool", "player.hardcore", "set", "yes"),
                 ("bad-int", "inventory.gold", "set", 1500),
                 ("bad-huge-int", "inventory.gold", "set", 10**400),
+                ("bad-huge-number", "inventory.speed", "set", 10**400),
                 ("bad-float-int", "inventory.gold", "set", 10.5),
                 ("bad-enum", "player.difficulty", "set", "nightmare"),
                 ("bad-readonly", "formatVersion", "set", 2),
@@ -364,8 +370,25 @@ def main() -> None:
                         "params": {"workspaceId": ws_id, "baselineGeneration": gen, "entryId": eid, "operation": op, "value": val},
                     }
                 )
-                assert rej["ok"] is False, (bad_id, rej)
+                assert rej["ok"] is False and rej["error"]["code"] == "invalid_request", (bad_id, rej)
             assert router.handle({"id": "rev0", "command": "save_editor_review", "params": {"workspaceId": ws_id}})["result"]["count"] == 0
+
+            # Nested bool vs int in JSON arrays/mappings is treated as a real change, not a no-op.
+            nested_bool_stage = router.handle(
+                {
+                    "id": "st-nested-bool",
+                    "command": "save_editor_stage",
+                    "params": {
+                        "workspaceId": ws_id,
+                        "baselineGeneration": gen,
+                        "entryId": "discovered:opaqueNested/keep",
+                        "operation": "set",
+                        "value": [True, 2, {"tag": "preserved"}],
+                    },
+                }
+            )
+            assert nested_bool_stage["ok"] is True and nested_bool_stage["result"]["count"] == 1
+            router.handle({"id": "canc-nested-bool", "command": "save_editor_cancel", "params": {"workspaceId": ws_id, "baselineGeneration": gen}})
 
             # Valid stage + noop unstage + explicit unstage + cancel.
             st1 = router.handle(
