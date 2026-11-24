@@ -284,7 +284,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     connected_profile['boonRarityTarget'] = 'Epic'
     connected_name = 'Connected Epic'
     adapter.profiles.path(connected_name).write_text(json.dumps({
-        'schemaVersion': 1, 'gameID': 'hades', 'name': connected_name,
+        'schemaVersion': 3, 'gameID': 'hades', 'name': connected_name,
         'updatedAt': '2026-11-04T00:00:01+00:00', 'features': connected_profile,
     }))
     before_profile_events = len(runtime.events)

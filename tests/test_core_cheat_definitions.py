@@ -334,6 +334,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-cheat-defs-") as td:
     v2_features["fullHealth"] = True
     v2_features["moneyNoDecrease"] = True
     v2_features["forceRerolls"] = True
+    # Historical schema-1 files carrying full v2 keys migrate, whereas unshipped v3 canonical keys under schema 1 are rejected.
+    pref_store.path.write_text(json.dumps({"schemaVersion": 1, "features": v2_features}), encoding="utf-8")
+    assert pref_store.load()["infiniteHealth"] is True
+    pref_store.path.write_text(json.dumps({"schemaVersion": 1, "features": DEFAULT_PREFERENCES}), encoding="utf-8")
+    try:
+        pref_store.load()
+    except AdapterError as error:
+        assert error.code == "preferences_failed"
+    else:
+        raise AssertionError("schema 1 accepted unshipped v3 canonical keys")
+
     pref_store.path.write_text(json.dumps({"schemaVersion": 2, "features": v2_features}), encoding="utf-8")
     migrated_prefs = pref_store.load()
     assert migrated_prefs["infiniteHealth"] is True

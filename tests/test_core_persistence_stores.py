@@ -14,7 +14,7 @@ from core.adapter import AdapterError, GameAdapterContext
 from core.persistence import ProfileStore, VersionedDocumentStore, normalize_shortcut_map
 from games.hades.adapter import HadesAdapter
 from games.hades.preferences import HadesPreferenceStore
-from games.hades.schema import DEFAULT_FEATURES, DEFAULT_PREFERENCES
+from games.hades.schema import DEFAULT_FEATURES, DEFAULT_PREFERENCES, PREFERENCE_SCHEMA_VERSION
 
 
 class _FakeHadesRuntime:
@@ -251,7 +251,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-core-stores-") as temporary:
     legacy_path.write_text(
         json.dumps(
             {
-                "schemaVersion": 2,
+                "schemaVersion": PREFERENCE_SCHEMA_VERSION,
                 "gameID": "hades",
                 "name": "Legacy No Shortcuts",
                 "updatedAt": "2026-11-22T00:00:00+00:00",
@@ -269,7 +269,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-core-stores-") as temporary:
     bad_hades.write_text(
         json.dumps(
             {
-                "schemaVersion": 2,
+                "schemaVersion": PREFERENCE_SCHEMA_VERSION,
                 "gameID": "hades",
                 "name": "Corrupt Hades",
                 "updatedAt": "2026-11-22T00:00:00+00:00",

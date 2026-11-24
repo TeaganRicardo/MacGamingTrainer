@@ -166,7 +166,7 @@ def _migrate_v1_preference_document(values):
         previous_before_rarity_target,
         v2_before_locks,
     )
-    if set(values) not in shipped and set(values) != set(DEFAULT_PREFERENCES):
+    if set(values) not in shipped and set(values) != _SCHEMA_V2_KEYS:
         raise invalid_value()
     return _finalize_migrated_preference_document(values)
 

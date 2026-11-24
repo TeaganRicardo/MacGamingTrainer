@@ -296,6 +296,7 @@ struct HadesRoomsPanel: View {
                 enabled: model.canMutate && model.world?.canChaos == true
             ) { model.generateChaosGate() }
         }
+        .help(text("hades.chaosGateHelp"))
     }
 
     var body: some View {
