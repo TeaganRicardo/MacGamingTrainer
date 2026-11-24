@@ -276,10 +276,10 @@ struct HeaderFixture: View {
    let referenceCorner=referenceImage.colorAt(x:1,y:1)!.usingColorSpace(.deviceRGB)!
    for language in [TrainerPresentationLanguage.en, .zhCN] {
     localization.language=language
-    for (content, expectedHeight) in [
-     (AnyView(Hades2ChaosGatePanel(model:model)), CGFloat(64)),
-     (AnyView(Hades2GatheringPanel(model:model)), CGFloat(324)),
-     (AnyView(Hades2BoonRarityPanel(model:model)), CGFloat(129))
+    for (content, expectedHeight, isRarity) in [
+     (AnyView(Hades2ChaosGatePanel(model:model)), CGFloat(64), false),
+     (AnyView(Hades2GatheringPanel(model:model)), CGFloat(324), false),
+     (AnyView(Hades2BoonRarityPanel(model:model)), CGFloat(64), true)
     ] {
      let root=content.environmentObject(localization)
       .frame(width:900).fixedSize(horizontal:false,vertical:true).background(Color(nsColor: .magenta))
@@ -299,7 +299,7 @@ struct HeaderFixture: View {
          + abs(corner.greenComponent-referenceCorner.greenComponent)
          + abs(corner.blueComponent-referenceCorner.blueComponent) < 0.03,
            "control panel corners differ from the Host: \(corner), expected \(referenceCorner)")
-     if expectedHeight == 129 {
+     if isRarity {
       check(model.boonRarityTarget == "Heroic", "minimum rarity did not default to Heroic")
       check(fields(rowHost).allSatisfy { !$0.isEditable }, "retired probability editor is still mounted")
       let title=localization.string("hades2.rarity.title")
@@ -311,7 +311,10 @@ struct HeaderFixture: View {
       check(force.press(), "force legendary could not be activated")
       wait { model.boonForceLegendary && !model.busy }
       check(model.boonRarityTarget == "Heroic", "force setting changed the minimum rarity")
-      check(abs(toggle.frame.midY-force.frame.midY) > 32, "force controls did not remain below the minimum row")
+      let minimumName=localization.string("hades2.rarity.minimum")
+      guard let minimum=namedNativeControl(rowHost,role:"AXPopUpButton",name:minimumName) else { fatalError("minimum rarity missing") }
+      check(abs(toggle.frame.midY-force.frame.midY) < 32 && force.frame.maxX <= minimum.frame.minX,
+            "force controls are not in the rarity row left of the minimum picker")
       let duoName=localization.string("hades2.rarity.duo")
       guard let duo=namedNativeControl(rowHost,role:"AXCheckBox",name:duoName) else { fatalError("force duo missing") }
       check(duo.press(), "force duo could not be activated")

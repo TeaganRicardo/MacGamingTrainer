@@ -10,56 +10,59 @@ struct Hades2BoonRarityPanel: View {
         localization.string(key)
     }
 
+    @ViewBuilder private var forceOptions: some View {
+        let enabled = model.canEditDesired && model.boonRarityEnabled
+        HStack(spacing: 8) {
+            TrainerCheckboxControl(
+                title: text("hades2.rarity.legendary"), isOn: model.boonForceLegendary, enabled: enabled,
+                onChange: { model.setBoonRarity(target: model.boonRarityTarget,
+                    forceLegendary: $0, forceDuo: model.boonForceDuo) }
+            )
+            .fixedSize()
+            TrainerShortcutBadge(text: model.shortcutText(.forceLegendary))
+        }
+        HStack(spacing: 8) {
+            TrainerCheckboxControl(
+                title: text("hades2.rarity.duo"), isOn: model.boonForceDuo, enabled: enabled,
+                onChange: { model.setBoonRarity(target: model.boonRarityTarget,
+                    forceLegendary: model.boonForceLegendary, forceDuo: $0) }
+            )
+            .fixedSize()
+            TrainerShortcutBadge(text: model.shortcutText(.forceDuo))
+        }
+    }
+
     var body: some View {
         let state = model.featurePresentation(.boonRarityEnabled, enabled: model.boonRarityEnabled)
             .trainerControlState(using: theme, localization: localization)
-        return VStack(spacing: 1) {
-            TrainerLabeledControlRow(
-                title: text("hades2.rarity.title"), icon: TrainerSemanticIcon.Concept.quality,
-                tint: state.indicatorColor, emphasized: state.isOn, opacity: state.opacity
-            ) {
-                Picker(text("hades2.rarity.minimum"), selection: Binding(
-                    get: { model.boonRarityTarget },
-                    set: { model.setBoonRarity(target: $0,
-                        forceLegendary: model.boonForceLegendary, forceDuo: model.boonForceDuo) }
-                )) {
-                    ForEach(["Common", "Rare", "Epic", "Heroic"], id: \.self) { rarity in
-                        Text(text("hades2.rarity." + rarity)).tag(rarity)
-                    }
-                }
-                .labelsHidden()
-                .trainerPicker(.compactValue, state: model.canEditDesired ? .interactive : .unavailable)
-                TrainerShortcutBadgeSlot(text: model.shortcutText(.boonRarityEnabled))
-                TrainerToggleControl(
-                    title: text("hades2.rarity.title"), isOn: model.boonRarityEnabled,
-                    enabled: state.isInteractive, helpText: state.helpText,
-                    tint: state.indicatorColor,
-                    onChange: { model.feature(.boonRarityEnabled, value: $0) }
-                )
+        return TrainerLabeledControlRow(
+            title: text("hades2.rarity.title"), icon: TrainerSemanticIcon.Concept.quality,
+            tint: state.indicatorColor, emphasized: state.isOn, opacity: state.opacity
+        ) {
+            // Side by side when the row has room; stacked in the same row at
+            // narrow widths, so neither label wraps.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 18) { forceOptions }
+                VStack(alignment: .leading, spacing: 4) { forceOptions }
             }
-            TrainerRow {
-                HStack(spacing: 18) {
-                    HStack(spacing: 8) {
-                        TrainerCheckboxControl(
-                            title: text("hades2.rarity.legendary"), isOn: model.boonForceLegendary,
-                            enabled: model.canEditDesired && model.boonRarityEnabled,
-                            onChange: { model.setBoonRarity(target: model.boonRarityTarget,
-                                forceLegendary: $0, forceDuo: model.boonForceDuo) }
-                        )
-                        TrainerShortcutBadge(text: model.shortcutText(.forceLegendary))
-                    }
-                    HStack(spacing: 8) {
-                        TrainerCheckboxControl(
-                            title: text("hades2.rarity.duo"), isOn: model.boonForceDuo,
-                            enabled: model.canEditDesired && model.boonRarityEnabled,
-                            onChange: { model.setBoonRarity(target: model.boonRarityTarget,
-                                forceLegendary: model.boonForceLegendary, forceDuo: $0) }
-                        )
-                        TrainerShortcutBadge(text: model.shortcutText(.forceDuo))
-                    }
-                    Spacer()
+            Picker(text("hades2.rarity.minimum"), selection: Binding(
+                get: { model.boonRarityTarget },
+                set: { model.setBoonRarity(target: $0,
+                    forceLegendary: model.boonForceLegendary, forceDuo: model.boonForceDuo) }
+            )) {
+                ForEach(["Common", "Rare", "Epic", "Heroic"], id: \.self) { rarity in
+                    Text(text("hades2.rarity." + rarity)).tag(rarity)
                 }
             }
+            .labelsHidden()
+            .trainerPicker(.compactValue, state: model.canEditDesired ? .interactive : .unavailable)
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.boonRarityEnabled))
+            TrainerToggleControl(
+                title: text("hades2.rarity.title"), isOn: model.boonRarityEnabled,
+                enabled: state.isInteractive, helpText: state.helpText,
+                tint: state.indicatorColor,
+                onChange: { model.feature(.boonRarityEnabled, value: $0) }
+            )
         }
         .trainerGroupedRows()
     }

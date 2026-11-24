@@ -591,7 +591,7 @@
     "hades2.spawn.characterRewards": "Character Rewards",
     "hades2.spawn.exactBoons": "Exact Boons",
     "hades2.spawn.exactSource": "Source",
-    "hades2.spawn.exactTarget": "Boon / Effect",
+    "hades2.spawn.exactTarget": "{term:officialTerms.boon}",
     "hades2.spawn.generate": "Generate",
     "hades2.spawn.noItems": "No items available",
     "hades2.spawn.olympianBoons": "Boon of Olympus",
