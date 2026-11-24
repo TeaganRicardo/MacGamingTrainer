@@ -1,4 +1,5 @@
 """Hades II persistence errors, schema compatibility and corrupt-file quarantine."""
+import logging
 from pathlib import Path
 
 from core.errors import PresentableError
@@ -51,41 +52,63 @@ def migrate_legacy_root_data_dir(data_dir):
     """Migrate pre-WP4.2 flat root Hades II files and directories into `MacGamingTrainer/hades2/`."""
     target_dir = Path(data_dir)
     if target_dir.name != 'hades2' or target_dir.is_symlink():
-        return
+        return []
     legacy_root = target_dir.parent
     if not legacy_root.is_dir() or legacy_root.is_symlink():
-        return
+        return []
+    failures = []
+
+    def _move(src: Path, dst: Path) -> None:
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(src, dst)
+        except OSError as error:
+            failures.append(f'{src.name}: {error}')
+
     for filename in _LEGACY_ROOT_FILES:
         legacy_file = legacy_root / filename
         target_file = target_dir / filename
-        if (legacy_file.is_file() or legacy_file.is_symlink()) and not (
-            target_file.exists() or target_file.is_symlink()
-        ):
-            target_dir.mkdir(parents=True, exist_ok=True)
-            os.replace(legacy_file, target_file)
-        for corrupt in sorted(legacy_root.glob(f'{filename}.corrupt-*')):
-            dest_corrupt = target_dir / corrupt.name
-            if not (dest_corrupt.exists() or dest_corrupt.is_symlink()):
-                target_dir.mkdir(parents=True, exist_ok=True)
-                os.replace(corrupt, dest_corrupt)
+        try:
+            if (legacy_file.is_file() or legacy_file.is_symlink()) and not (
+                target_file.exists() or target_file.is_symlink()
+            ):
+                _move(legacy_file, target_file)
+            for corrupt in sorted(legacy_root.glob(f'{filename}.corrupt-*')):
+                dest_corrupt = target_dir / corrupt.name
+                if not (dest_corrupt.exists() or dest_corrupt.is_symlink()):
+                    _move(corrupt, dest_corrupt)
+        except OSError as error:
+            failures.append(f'{filename}: {error}')
+
     for dirname in _LEGACY_ROOT_DIRS:
         legacy_sub = legacy_root / dirname
         target_sub = target_dir / dirname
-        if not legacy_sub.is_dir() or legacy_sub.is_symlink():
-            continue
-        if not (target_sub.exists() or target_sub.is_symlink()):
-            target_dir.mkdir(parents=True, exist_ok=True)
-            os.replace(legacy_sub, target_sub)
-        elif target_sub.is_dir() and not target_sub.is_symlink():
-            for entry in sorted(legacy_sub.iterdir()):
-                dest = target_sub / entry.name
-                if not (dest.exists() or dest.is_symlink()):
-                    os.replace(entry, dest)
-            try:
-                if not any(legacy_sub.iterdir()):
-                    legacy_sub.rmdir()
-            except OSError:
-                pass
+        try:
+            if not legacy_sub.is_dir() or legacy_sub.is_symlink():
+                continue
+            if not (target_sub.exists() or target_sub.is_symlink()):
+                _move(legacy_sub, target_sub)
+            elif target_sub.is_dir() and not target_sub.is_symlink():
+                for entry in sorted(legacy_sub.iterdir()):
+                    dest = target_sub / entry.name
+                    if not (dest.exists() or dest.is_symlink()):
+                        _move(entry, dest)
+                try:
+                    if not any(legacy_sub.iterdir()):
+                        legacy_sub.rmdir()
+                except OSError:
+                    pass
+        except OSError as error:
+            failures.append(f'{dirname}: {error}')
+
+    if failures:
+        logging.warning(
+            'Could not migrate legacy Hades II data into %s; left files in place: %s',
+            target_dir,
+            '; '.join(failures),
+        )
+    return failures
 
 
 def atomic_write_text(path, text, *, encoding='utf-8'):

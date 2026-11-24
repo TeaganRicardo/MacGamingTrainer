@@ -1,6 +1,7 @@
 """Behavior contract for Core structured save eligibility, candidate apply, and workspace registry."""
 
 import json
+import struct
 import sys
 import tempfile
 import types
@@ -8,17 +9,26 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
+sys.path.insert(0, str(ROOT / "tests/fixtures"))
 
 from core.adapter import GameAdapterContext  # noqa: E402
 from core.module_manifest import SaveManagementSpec, SaveRootSpec  # noqa: E402
-from core.save_resolution import SaveResolutionError, load_save_provider  # noqa: E402
+from core.save_resolution import SaveProviderContext, SaveResolutionError, load_save_provider  # noqa: E402
 from core.save_service import CoreSaveService  # noqa: E402
 import core.structured_save_edit as sse  # noqa: E402
-from core.structured_save_edit import StructuredSaveEditSession  # noqa: E402
+from core.structured_save_edit import (  # noqa: E402
+    StructuredSaveEditSession,
+    StructuredSaveEditWorkspaceLimitError,
+)
 from games.hades.adapter import HadesAdapter  # noqa: E402
 from games.hades.preferences import HadesPreferenceStore  # noqa: E402
+from games.hades.save_workspace import HadesSaveWorkspace  # noqa: E402
 from games.hades2.adapter import Hades2Adapter  # noqa: E402
+from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable  # noqa: E402
+from games.hades2.save_provider import Hades2SaveProvider  # noqa: E402
+from games.hades2.save_workspace import Hades2SaveWorkspace  # noqa: E402
 from hades2_resident_session_fakes import hades2_adapter_context  # noqa: E402
+from hades_save import environment as hades_environment  # noqa: E402
 
 
 class _JsonCodec:
@@ -279,6 +289,178 @@ def main():
         assert id1 not in registry
         registry.clear()
         assert len(registry) == 0
+
+        # #821: Protected workspaces (staged edits or unresolved recovery) are skipped
+        # during eviction; opening fails closed with StructuredSaveEditWorkspaceLimitError
+        # if all slots are protected.
+        open_calls = []
+
+        def _counting_open(svc, *, snapshot_id=None, source=None, target=None):
+            ws = _DummyWorkspace(
+                StructuredSaveEditSession.open_selected(
+                    svc,
+                    CODEC,
+                    eligibility,
+                    source=source,
+                    snapshot_id=snapshot_id,
+                    target=target,
+                    default_target=True,
+                )
+            )
+            open_calls.append(ws)
+            return ws
+
+        protected_registry = sse.SaveEditorWorkspaceRegistry(
+            lambda: service,
+            inventory=lambda svc, snapshot_id=None: {
+                "sources": eligibility.editor_files(svc.source_files(snapshot_id)),
+                "targets": eligibility.editor_files(svc.resolved_files()),
+                "defaultSource": None,
+            },
+            open_workspace=_counting_open,
+            max_open=2,
+        )
+        p1 = protected_registry.open({"source": {"rootId": "main", "relativePath": "Profile1.sav"}})
+        p2 = protected_registry.open({"source": {"rootId": "main", "relativePath": "Profile2.sav"}})
+        pid1, pid2 = p1["workspaceId"], p2["workspaceId"]
+        # Mark oldest slot (pid1) protected; opening pid3 must skip pid1 and evict pid2 instead.
+        protected_registry[pid1].pending = {"gold": 99}
+        p3 = protected_registry.open({"source": {"rootId": "main", "relativePath": "Profile1.sav"}})
+        pid3 = p3["workspaceId"]
+        assert pid1 in protected_registry and pid3 in protected_registry
+        assert pid2 not in protected_registry and open_calls[1].closed
+        assert not protected_registry[pid1].closed
+
+        # Protect the remaining unprotected slot (pid3) as well via recovery_unresolved;
+        # next open must refuse without closing existing slots or calling _open_workspace.
+        protected_registry[pid3].recovery_unresolved = True
+        calls_before_limit = len(open_calls)
+        try:
+            protected_registry.open({"source": {"rootId": "main", "relativePath": "Profile2.sav"}})
+        except StructuredSaveEditWorkspaceLimitError as error:
+            assert error.code == "workspace_limit"
+            assert error.presentation == "host.save.error.workspaceLimit"
+        else:
+            raise AssertionError("open succeeded when all workspace slots were protected")
+        assert len(open_calls) == calls_before_limit
+        assert set(protected_registry._workspaces) == {pid1, pid3}
+        assert not protected_registry[pid1].closed and not protected_registry[pid3].closed
+
+        # Verify protection covers _pending, workspace.recovery_unresolved, session.recovery_unresolved,
+        # and _session.recovery_unresolved alike.
+        for attr_setter in (
+            lambda ws: setattr(ws, "_pending", {"a": 1}),
+            lambda ws: setattr(ws, "recovery_unresolved", True),
+            lambda ws: setattr(ws, "session", types.SimpleNamespace(recovery_unresolved=True)),
+            lambda ws: setattr(ws, "_session", types.SimpleNamespace(recovery_unresolved=True)),
+        ):
+            single_reg = sse.SaveEditorWorkspaceRegistry(
+                lambda: service,
+                inventory=lambda _svc, _snap=None: {"sources": [], "targets": [], "defaultSource": None},
+                open_workspace=_counting_open,
+                max_open=1,
+            )
+            ws_single = single_reg.open({"source": {"rootId": "main", "relativePath": "Profile1.sav"}})
+            attr_setter(single_reg[ws_single["workspaceId"]])
+            try:
+                single_reg.open({"source": {"rootId": "main", "relativePath": "Profile2.sav"}})
+            except StructuredSaveEditWorkspaceLimitError as error:
+                assert error.code == "workspace_limit"
+            else:
+                raise AssertionError("expected workspace_limit for protected workspace")
+            single_reg.clear()
+        protected_registry.clear()
+
+        # Real HadesSaveWorkspace and Hades2SaveWorkspace instances with staged edits are protected.
+        _hades_saves, hades_service = hades_environment(root / "hades-real-ws")
+        hades_reg = sse.SaveEditorWorkspaceRegistry(
+            lambda: hades_service,
+            inventory=HadesSaveWorkspace.inventory,
+            open_workspace=lambda svc, **kw: HadesSaveWorkspace.open(svc, **kw),
+            max_open=1,
+        )
+        hades_summary = hades_reg.open({"source": {"rootId": "main", "relativePath": "Profile1.sav"}})
+        hades_ws = hades_reg[hades_summary["workspaceId"]]
+        hades_ws.stage(
+            "resource:MetaPoints",
+            "set",
+            {"luaType": "number", "value": 25},
+            "en",
+            baseline_generation=hades_ws.baseline_generation,
+        )
+        try:
+            hades_reg.open({"source": {"rootId": "main", "relativePath": "Profile2.sav"}})
+        except StructuredSaveEditWorkspaceLimitError as error:
+            assert error.code == "workspace_limit"
+            assert error.presentation == "host.save.error.workspaceLimit"
+        else:
+            raise AssertionError("dirty HadesSaveWorkspace was evicted")
+        assert list(hades_reg._workspaces) == [hades_summary["workspaceId"]]
+        hades_reg.clear()
+
+        h2_saves = root / "h2-real-ws/saves"
+        h2_saves.mkdir(parents=True)
+        h2_profile = b"Profile1"
+        (h2_saves / "activeProfile").write_bytes(b"SGB1" + struct.pack("<I", len(h2_profile)) + h2_profile)
+        h2_root_table = LuaTable(
+            0,
+            2,
+            [
+                ("GameState", LuaTable(0, 3, [("Resources", LuaTable(0, 1, [("MetaCurrency", 10.0)])), ("GameplayTime", 100.0), ("TotalTime", 200.0)])),
+                ("CurrentRun", LuaTable(0, 0, [])),
+            ],
+        )
+        h2_header = Hades2SaveHeader(
+            game_version=0x12,
+            save_flags=0,
+            timestamp=100,
+            location="Crossroads",
+            completed_runs=1,
+            accumulated_meta_points=0,
+            active_shrine_points=0,
+            meta_upgrade_level=0,
+            cosmetics_points=0,
+            easy_mode=0,
+            hard_mode=0,
+            notable_lua_data=("GameState", "CurrentRun"),
+            map_name="Hub_Main",
+            next_map_name="F_Opening01",
+        )
+        h2_bytes = Hades2SaveDocument(h2_header, [h2_root_table]).to_bytes()
+        (h2_saves / "Profile1.sav").write_bytes(h2_bytes)
+        (h2_saves / "Profile2.sav").write_bytes(h2_bytes)
+        h2_spec = SaveManagementSpec(
+            roots=(SaveRootSpec("main", str(h2_saves), ("Profile*.sav", "activeProfile")),),
+            provider="games.hades2.save_provider:Hades2SaveProvider",
+            hot_backup=True,
+            restore_policy="hotPreferred",
+            staged_restore=True,
+        )
+        h2_service = CoreSaveService(
+            "hades2",
+            h2_spec,
+            root / "h2-real-ws/data",
+            lambda: False,
+            provider_loader=lambda _target: Hades2SaveProvider(SaveProviderContext(ROOT / "Backend/games/hades2")),
+        )
+        h2_reg = sse.SaveEditorWorkspaceRegistry(
+            lambda: h2_service,
+            inventory=Hades2SaveWorkspace.inventory,
+            open_workspace=lambda svc, **kw: Hades2SaveWorkspace.open(svc, **kw),
+            max_open=1,
+        )
+        h2_summary = h2_reg.open({"source": {"rootId": "main", "relativePath": "Profile1.sav"}})
+        h2_ws = h2_reg[h2_summary["workspaceId"]]
+        h2_ws.stage("playerStat:GameplayTime", "set", 123.0, language="en")
+        try:
+            h2_reg.open({"source": {"rootId": "main", "relativePath": "Profile2.sav"}})
+        except StructuredSaveEditWorkspaceLimitError as error:
+            assert error.code == "workspace_limit"
+            assert error.presentation == "host.save.error.workspaceLimit"
+        else:
+            raise AssertionError("dirty Hades2SaveWorkspace was evicted")
+        assert list(h2_reg._workspaces) == [h2_summary["workspaceId"]]
+        h2_reg.clear()
 
         # Real HadesAdapter binds the Core workspace registry and clears it on rebind and close.
         hades_context = GameAdapterContext(

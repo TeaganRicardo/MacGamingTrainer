@@ -58,15 +58,15 @@ struct Hades2ShortcutStore {
                 defaults: defaults,
                 actionPrefix: "shortcut.action.",
                 finalizePersistence: {
-                    Self.removeLegacyAndRetiredKeys(defaults)
                     defaults.set(Self.currentLayoutVersion, forKey: Self.layoutVersionKey)
+                    Self.removeLegacyAndRetiredKeys(defaults)
                 }
             ),
             cleanupLegacy: {
-                Self.removeLegacyAndRetiredKeys(defaults)
                 if defaults.integer(forKey: Self.layoutVersionKey) < Self.currentLayoutVersion {
                     defaults.set(Self.currentLayoutVersion, forKey: Self.layoutVersionKey)
                 }
+                Self.removeLegacyAndRetiredKeys(defaults)
             },
             migrateOverrides: { Self.migrateHistoricalOverrides(defaults) }
         )

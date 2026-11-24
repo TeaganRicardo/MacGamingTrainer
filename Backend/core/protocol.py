@@ -297,7 +297,12 @@ class JsonlRequestRouter:
                 if error.code == 'rollback_failed' and isinstance(error.recovery_path, str) and error.recovery_path:
                     reply['error']['recoveryPath'] = error.recovery_path
             else:
-                code = 'invalid_request' if isinstance(error, ValueError) else 'operation_failed'
+                raw_code = getattr(error, 'code', None)
+                code = (
+                    raw_code
+                    if isinstance(raw_code, str) and raw_code
+                    else ('invalid_request' if isinstance(error, ValueError) else 'operation_failed')
+                )
                 if isinstance(command, str) and command.startswith(_CORE_SAVE_PREFIX):
                     reply = self.error_reply(request_id, code, 'host.save.error.failed', state, diagnostic=str(error))
                 else:

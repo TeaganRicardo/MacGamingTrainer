@@ -363,9 +363,14 @@ class HadesAdapter(GameAdapter):
         try:
             if command == 'open':
                 return self.save_workspaces.open(params, language=params.get('language', 'en'))
-            if command in ('inventory', 'close', 'target'):
-                return self.save_workspaces.handle(command, params, require_baseline=True)
+            if command in ('inventory', 'close'):
+                return self.save_workspaces.handle(command, params)
             workspace = self.save_workspaces.require(params.get('workspaceId'))
+            if command == 'target':
+                return workspace.set_target(
+                    params['target'],
+                    baseline_generation=params.get('baselineGeneration'),
+                )
             if command == 'query':
                 return workspace.query(**{key: value for key, value in params.items() if key != 'workspaceId'})
             language = params.get('language', 'en')

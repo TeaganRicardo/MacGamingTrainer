@@ -33,6 +33,23 @@ precondition(Set(generatedDefaults.map { "\($0.keyCode):\($0.modifiers)" }).coun
 // preferences directory; a real suite there cannot be cleaned up afterwards.
 func makeDefaults() -> UserDefaults { InMemoryDefaults() }
 
+final class RecordingDefaults: UserDefaults {
+    private let inner = InMemoryDefaults()
+    var events: [String] = []
+
+    override func object(forKey defaultName: String) -> Any? { inner.object(forKey: defaultName) }
+    override func string(forKey defaultName: String) -> String? { inner.string(forKey: defaultName) }
+    override func integer(forKey defaultName: String) -> Int { inner.integer(forKey: defaultName) }
+    override func set(_ value: Any?, forKey defaultName: String) {
+        events.append("set:\(defaultName)")
+        inner.set(value, forKey: defaultName)
+    }
+    override func removeObject(forKey defaultName: String) {
+        events.append("remove:\(defaultName)")
+        inner.removeObject(forKey: defaultName)
+    }
+}
+
 func unique(_ store: Hades2ShortcutStore) -> Bool {
     let values = ShortcutAction.allCases.map { "\(store.chord($0).keyCode):\(store.chord($0).modifiers)" }
     return Set(values).count == values.count
@@ -266,6 +283,35 @@ precondition(reloaded.chord(.spawnPickup) == Hades2ShortcutStore.defaultLayout()
 precondition(savedPreferences.object(forKey: shortcutKey(.disableAll)) == nil)
 precondition(savedPreferences.object(forKey: shortcutKey(.spawnPickup)) == nil)
 precondition(unique(reloaded))
+
+// #821: v6 -> v7 migration must write hades2.shortcut.layoutVersion before deleting legacy keys,
+// and an interrupted migration with both v7 and leftover v6 keys must keep custom v7 bindings.
+let orderedDefaults = RecordingDefaults()
+orderedDefaults.set(6, forKey: "shortcut.layoutVersion")
+orderedDefaults.set(custom.payload, forKey: unprefixedShortcutKey(.invincibility))
+orderedDefaults.set(seedCustom.payload, forKey: "shortcut.action.gardenQoL")
+orderedDefaults.events.removeAll()
+let orderedMigrated = Hades2ShortcutStore(defaults: orderedDefaults)
+precondition(orderedMigrated.chord(.invincibility) == custom)
+let v7SetIndex = orderedDefaults.events.firstIndex(of: "set:hades2.shortcut.layoutVersion")!
+let legacyVersionRemoveIndex = orderedDefaults.events.firstIndex(of: "remove:shortcut.layoutVersion")!
+precondition(v7SetIndex < legacyVersionRemoveIndex)
+for (index, event) in orderedDefaults.events.enumerated() where event.hasPrefix("remove:shortcut.action.") {
+    precondition(v7SetIndex < index, "v7 marker must be written before removing \(event)")
+}
+
+let interruptedDefaults = makeDefaults()
+interruptedDefaults.set(7, forKey: "hades2.shortcut.layoutVersion")
+interruptedDefaults.set(custom.payload, forKey: shortcutKey(.invincibility))
+interruptedDefaults.set(6, forKey: "shortcut.layoutVersion")
+interruptedDefaults.set(seedCustom.payload, forKey: unprefixedShortcutKey(.invincibility))
+interruptedDefaults.set(seedCustom.payload, forKey: "shortcut.action.gardenQoL")
+let interruptedRecovered = Hades2ShortcutStore(defaults: interruptedDefaults)
+precondition(interruptedRecovered.chord(.invincibility) == custom)
+precondition(interruptedDefaults.integer(forKey: "hades2.shortcut.layoutVersion") == 7)
+precondition(interruptedDefaults.object(forKey: "shortcut.layoutVersion") == nil)
+precondition(interruptedDefaults.object(forKey: unprefixedShortcutKey(.invincibility)) == nil)
+precondition(interruptedDefaults.object(forKey: "shortcut.action.gardenQoL") == nil)
 
 var imported = Hades2ShortcutStore(defaults: makeDefaults())
 let applied = imported.applyProfile([
