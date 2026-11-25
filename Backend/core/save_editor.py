@@ -381,15 +381,25 @@ class CoreSaveWorkspace(Generic[_Document]):
         language: Optional[str] = None,
     ) -> dict[str, Any]:
         self.require_baseline(baseline_generation)
+        previous_target = self.session.target
         self.session.set_target(target)
         summary_fn: Any = getattr(self, "summary")
-        if language is not None:
-            result = summary_fn(language)
-        else:
-            result = summary_fn()
-        if not isinstance(result, dict):
-            raise TypeError("Workspace summary() must return a mapping.")
-        return result
+        try:
+            if language is not None:
+                result = summary_fn(language)
+            else:
+                result = summary_fn()
+            if not isinstance(result, dict):
+                raise TypeError("Workspace summary() must return a mapping.")
+            return result
+        except Exception:
+            try:
+                self.session.restore_target(previous_target)
+            except Exception:
+                # A previous target that disappeared during confirmation must
+                # never leave the newly selected destination writable.
+                self.session.restore_target(None)
+            raise
 
     def _mutate_pending(
         self,
