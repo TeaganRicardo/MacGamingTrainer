@@ -94,11 +94,9 @@ class HadesAdapter(GameAdapter):
         if command == 'list_profiles':
             return {'profiles': self.profiles.list()}
         if command == 'save_profile':
-            self.profiles.save(params.get('name'), self.preferences.load(), params.get('shortcuts'))
-            return {'profiles': self.profiles.list()}
+            return {'profiles': self.profiles.save(params.get('name'), self.preferences.load(), params.get('shortcuts'))}
         if command == 'delete_profile':
-            self.profiles.delete(params.get('name'))
-            return {'profiles': self.profiles.list()}
+            return {'profiles': self.profiles.delete(params.get('name'))}
         if command == 'load_profile':
             profile = self.profiles.load_record(params.get('name'))
             features = profile['features']

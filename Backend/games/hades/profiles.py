@@ -90,7 +90,8 @@ class HadesProfileStore:
         return self._store.load(name)['features']
 
     def save(self, name, features, shortcuts=None):
-        self._store.save(name, features, shortcuts)
+        return self._store.save(name, features, shortcuts)
 
     def delete(self, name):
-        self._store.delete(name)
+        _name, profiles = self._store.delete(name)
+        return profiles
