@@ -6,6 +6,8 @@ import json
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -139,6 +141,20 @@ precondition(rarityReq.params["multiplier"] == nil)
         subprocess.run([str(binary)], check=True)
 
 
+def test_small_timeout_values_preserved() -> None:
+    import generate_module_commands as generator
+    spec = SimpleNamespace(metadata='fixture:commands', enum_name='FixtureCommand', default_timeout_seconds=1e-10)
+    rows = [{'name': 'quick', 'timeoutSeconds': 0.04, 'requiresTrustedTarget': True, 'supportsOfflineIntent': False},
+            {'name': 'precise', 'timeoutSeconds': 2e-10, 'requiresTrustedTarget': True, 'supportsOfflineIntent': False}]
+    with patch.object(generator, 'load_manifest', return_value=SimpleNamespace(command_contract=spec)), \
+            patch.object(generator, 'load_command_rows', return_value=rows):
+        text = generator.render_commands('fixture')
+    import re
+    for label, expected in (('case .quick', 0.04), ('case .precise', 2e-10), ('default', 1e-10)):
+        value = re.search(re.escape(label) + r': return ([0-9.e+-]+)', text)
+        assert value is not None and float(value.group(1)) == expected, text
+
+
 def test_every_command_outer_timeout_exceeds_worst_case_inner_budget() -> None:
     from games.hades.command_contract import command_budget_audit as hades_audit
     from games.hades2.command_contract import command_budget_audit as hades2_audit
@@ -179,6 +195,7 @@ def test_hades2_retired_boon_rarity_multiplier_rejected_on_wire() -> None:
 
 if __name__ == "__main__":
     test_manifests_declare_command_contract_and_generate_parity()
+    test_small_timeout_values_preserved()
     test_generated_flags_match_both_swift_apis()
     test_every_command_outer_timeout_exceeds_worst_case_inner_budget()
     test_hades2_retired_boon_rarity_multiplier_rejected_on_wire()
