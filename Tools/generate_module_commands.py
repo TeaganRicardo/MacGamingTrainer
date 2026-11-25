@@ -85,12 +85,12 @@ def render_commands(game_id: str) -> str:
     )
     for row in rows:
         timeout = float(row["timeoutSeconds"])
-        if abs(timeout - default_timeout) <= 1e-9:
+        if timeout == default_timeout:
             continue
-        lines.append(f"        case .{swift_case(row['name'])}: return {timeout:.1f}")
+        lines.append(f"        case .{swift_case(row['name'])}: return {timeout!r}")
     lines.extend(
         [
-            f"        default: return {default_timeout:.1f}",
+            f"        default: return {default_timeout!r}",
             "        }",
             "    }",
             "",
