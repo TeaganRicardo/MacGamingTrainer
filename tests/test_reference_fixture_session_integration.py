@@ -198,8 +198,11 @@ let session = TrainerBackendSession(
     client: BackendClient(process: BackendProcess(executableURL: backendPythonURL))
 )
 let capturedLog = testLog("reference.log")
+var fixtureTarget = monitor.targetObservation
+let fixtureMonitor = TrainerTargetProcessMonitor(snapshot: { fixtureTarget })
 let context = TrainerGameContext<ReferenceFixtureGameModule>(
     session: session, backendScriptURL: URL(fileURLWithPath: args[1]), logSink: capturedLog,
+    targetMonitor: fixtureMonitor,
     makeModel: { ReferenceFixtureModel(services: $0, defaults: localizationDefaults) }
 )
 let model = context.model
@@ -415,6 +418,29 @@ guard waitUntil(2.0, { !model.busy && model.profiles.isEmpty }) else {
 
 var exportedBundleData: Data? = nil
 var exportedFilename: String? = nil
+func rejectStaleDiagnosticsExport(_ stage: String) {
+    let gate = URL(fileURLWithPath: temporaryHome).appendingPathComponent("hold-reference-diagnostics")
+    let ready = URL(fileURLWithPath: temporaryHome).appendingPathComponent("reference-diagnostics-ready")
+    try? FileManager.default.removeItem(at: ready)
+    do { try Data().write(to: gate) } catch { fail("could not hold diagnostics reply") }
+    context.feedback.clearNotice()
+    var savedStaleReport = false
+    model.exportDiagnostics { _, _, done in savedStaleReport = true; done(.saved) }
+    guard waitUntil(2.0, { FileManager.default.fileExists(atPath: ready.path) }) else {
+        fail("diagnostics export reply was not held (\(stage))")
+    }
+    fixtureTarget = TrainerTargetObservation(isRunning: true,
+        launchGeneration: fixtureTarget.launchGeneration + 1,
+        processIdentifier: (fixtureTarget.processIdentifier ?? 1000) + 1)
+    fixtureMonitor.refresh()
+    do { try FileManager.default.removeItem(at: gate) } catch { fail("could not release diagnostics reply") }
+    guard waitUntil(2.0, { !model.busy
+        && context.feedback.notice?.text.key == "host.error.diagnosticsExport" }) else {
+        fail("rejected diagnostics export did not report failure (\(stage))")
+    }
+    if savedStaleReport { fail("rejected diagnostics export reused an earlier report (\(stage))") }
+}
+rejectStaleDiagnosticsExport("before any report")
 model.runDiagnostics()
 guard waitUntil(2.0, { !model.busy && model.diagnostics.map(\.id) == ["backend_session", "profile_store"] }) else {
     fail("reference fixture diagnostics refresh failed")
@@ -435,6 +461,7 @@ guard waitUntil(2.0, { !model.busy && exportedBundleData != nil }),
 else {
     fail("reference fixture diagnostics export failed")
 }
+rejectStaleDiagnosticsExport("after an accepted report")
 
 model.setEnabled(false)
 guard waitUntil(2.0, { !model.enabled && !model.busy }) else {
@@ -472,6 +499,23 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
 
     shutil.copytree(ROOT / "Backend/core", project / "Backend/core")
     shutil.copytree(FIXTURE / "backend", project / "Backend/games/reference_fixture")
+    adapter_path = project / "Backend/games/reference_fixture/adapter.py"
+    adapter_path.write_text(adapter_path.read_text() + r'''
+
+_fixture_diagnostics_dispatch = ReferenceFixtureAdapter.dispatch
+def _held_diagnostics_dispatch(self, command, params, request_id=None):
+    result = _fixture_diagnostics_dispatch(self, command, params, request_id)
+    if command == 'diagnostics':
+        import pathlib, time
+        gate = pathlib.Path.home() / 'hold-reference-diagnostics'
+        if gate.exists():
+            gate.with_name('reference-diagnostics-ready').write_text('ready')
+            deadline = time.monotonic() + 3
+            while gate.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+    return result
+ReferenceFixtureAdapter.dispatch = _held_diagnostics_dispatch
+''')
     variant_path = project / "Backend/games/reference_fixture/module.json"
     variant = json.loads(variant_path.read_text())
     variant["targetApplication"] = {"processName": "ReferenceTarget",
