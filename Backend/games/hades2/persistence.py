@@ -81,13 +81,17 @@ def _migrate_desired_state(source, destination):
         raw = json.loads(text) if text is not None else None
     except json.JSONDecodeError:
         raw = None
-    if isinstance(raw, dict) and set(raw) == {'schemaVersion', 'relocatedTo'} and (
+    if isinstance(raw, dict) and {'schemaVersion', 'relocatedTo'} <= set(raw) <= {
+        'schemaVersion', 'relocatedTo', 'sourceWasPresent'
+    } and (
         type(raw['schemaVersion']) is int and raw['relocatedTo'] == relative_destination
+        and type(raw.get('sourceWasPresent', True)) is bool
     ):
         if not destination.is_file():
-            if not pending.is_file():
+            if pending.is_file():
+                os.replace(pending, destination)
+            elif raw.get('sourceWasPresent', True):
                 raise OSError('Relocated desired-state is missing; original transition marker was preserved.')
-            os.replace(pending, destination)
         return
 
     if destination.is_file():
@@ -102,10 +106,9 @@ def _migrate_desired_state(source, destination):
         # Publish the old-reader refusal only after the original data is durable.
         # A failed final rename resumes from this copy on the next startup.
         _atomic_write_text(pending, text)
-    else:
-        return
+    marker['sourceWasPresent'] = text is not None or destination.is_file()
     _atomic_write_text(source, json.dumps(marker, sort_keys=True) + '\n')
-    if not destination.is_file():
+    if pending.is_file() and not destination.is_file():
         os.replace(pending, destination)
 
 
@@ -115,7 +118,7 @@ def migrate_legacy_root_data_dir(data_dir):
     if target_dir.name != 'hades2' or target_dir.is_symlink():
         return []
     legacy_root = target_dir.parent
-    if not legacy_root.is_dir() or legacy_root.is_symlink():
+    if legacy_root.is_symlink() or (legacy_root.exists() and not legacy_root.is_dir()):
         return []
     failures = []
 

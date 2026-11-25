@@ -331,6 +331,28 @@ try:
     assert resumed_adapter.preferences['invincibility'] is True
     assert interrupted_target.read_bytes() == interrupted_bytes and not pending.exists()
 
+    # A fresh installation retires the old path before its first setting write,
+    # while an unsaved startup still has the usual uninitialized defaults state.
+    fresh_context = hades2_adapter_context(base / 'fresh-namespace')
+    fresh_source = fresh_context.data_dir.parent / 'desired-state.json'
+    fresh_target = fresh_context.data_dir / 'desired-state.json'
+    fresh_adapter = Hades2Adapter(context=fresh_context, transport=FutureSchemaTransport())
+    assert fresh_adapter.preference_initialized is False and not fresh_target.exists()
+    fresh_again = Hades2Adapter(context=fresh_context, transport=FutureSchemaTransport())
+    assert fresh_again.preference_initialized is False and not fresh_again.preference_write_blocked
+    fresh_again.set_desired('invincibility', True)
+    assert fresh_target.is_file()
+    downgraded_store = Hades2PreferenceStore(fresh_source)
+    defaults, initialized = downgraded_store.load()
+    assert initialized is False
+    try:
+        downgraded_store.save(defaults)
+    except UnsupportedSchemaVersionError:
+        pass
+    else:
+        raise AssertionError('first namespaced write left the legacy path writable')
+    assert Hades2PreferenceStore(fresh_target).load()[0]['invincibility'] is True
+
     # #821: OSError / PermissionError during legacy migration leaves files in place,
     # logs one warning, sets hades2.warning.dataMigrationFailed, and lets Hades2Adapter keep running.
     fail_context = hades2_adapter_context(base / 'migration-failure')
