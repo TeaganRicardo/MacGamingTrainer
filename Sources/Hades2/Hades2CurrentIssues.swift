@@ -29,9 +29,10 @@ extension Hades2TrainerModel {
                 append(index == 0 ? "warning" : "warning.\(index)", TrainerTextToken(key: line))
             }
         }
+        if let recoveryText { append("recovery", recoveryText) }
         if status == "incompatible" {
             append("compatibility", TrainerTextToken(key: "hades2.status.unverifiedBanner"))
-        } else if status == "restart_required" {
+        } else if status == "restart_required", recoveryText == nil {
             append("recovery", statusTitle)
         }
         return issues

@@ -24,6 +24,7 @@ from .persistence import PersistenceError, migrate_legacy_root_data_dir
 from .preferences import Hades2PreferenceStore
 from .profile_service import Hades2ProfileService
 from .reply_projection import ACTION_RESULT_FIELDS, Hades2ReplyProjection
+from .recovery import Hades2RecoveryJournal, process_identity
 from .resident_session import Hades2ResidentSession, ResidentConnectionError, ResidentGenerationInvalidated, ResidentSessionError
 from .runtime_error_presentation import feature_error_presentation
 from .save_workspace import Hades2SaveWorkspace
@@ -115,15 +116,17 @@ _PREPERSISTED_RUNTIME_COMMANDS = frozenset((
     'set_feature', 'set_boon_rarity', 'set_gathering_probabilities', 'set_chaos_gate_probability',
 ))
 class Hades2Adapter(GameAdapter):
-    def __init__(self, transport=None, context=None, resident_session=None, time_warp_controller=None, game_path=None):
+    def __init__(self, transport=None, context=None, resident_session=None, time_warp_controller=None, game_path=None,
+                 identity=process_identity):
         if context is None:
             context = GameAdapterContext.from_manifest(MODULE_MANIFEST)
         super().__init__(context)
+        self.recovery = Hades2RecoveryJournal(self.context.data_dir / 'runtime-recovery.json', identity=identity)
         if resident_session is None:
             if transport is None:
                 from .transport_client import Hades2LuaTransport
                 transport = Hades2LuaTransport()
-            self.runtime=Hades2ResidentSession(transport)
+            self.runtime=Hades2ResidentSession(transport, recovery=self.recovery)
         else:
             if transport is not None:
                 raise ValueError('resident_session and transport are mutually exclusive.')
@@ -150,6 +153,7 @@ class Hades2Adapter(GameAdapter):
                     'dormantFeatures':{},
                     'featureErrorPresentations':{},
                     'capabilities':disconnected_capabilities()}
+        self._sync_recovery()
         migration_failures = migrate_legacy_root_data_dir(self.context.data_dir)
         self._legacy_desired_state_migration_failed = any(
             failure.startswith('desired-state.json:') for failure in migration_failures
@@ -204,6 +208,26 @@ class Hades2Adapter(GameAdapter):
     @staticmethod
     def _default_preferences():
         return Hades2PreferenceStore.defaults()
+
+    def _sync_recovery(self):
+        try:
+            pending = self.recovery.describe()
+        except AdapterError as error:
+            pending = {'outcome': 'unavailable', 'presentation': error.presentation}
+        if pending is None:
+            # Full status snapshots retain sparse-field semantics in the UI.
+            # Explicit null retires a recovery notice from an earlier snapshot.
+            self.state['recovery'] = None
+        else:
+            self.state['recovery'] = pending
+            self.state['status'] = 'restart_required'
+
+    def _verified_runtime_ready(self, observed):
+        capabilities = observed.get('capabilities') if isinstance(observed, dict) else None
+        if (self.runtime.allows_process_time_warp()
+                or isinstance(capabilities, dict) and capabilities.get('setFeature') is True):
+            self.recovery.runtime_ready()
+            self._sync_recovery()
 
     def _normalize_preferences(self,raw):
         return Hades2PreferenceStore.normalize(raw)
@@ -344,16 +368,44 @@ class Hades2Adapter(GameAdapter):
             diagnostics['gameSpeedAppliedValue']=self._time_warp_speed
             self.state['runtimeDiagnostics']=diagnostics
 
-    def _apply_game_speed(self,value):
+    def _call_time_warp(self,method,operation):
+        # Queries also enter the driver's stop/resume session. Every native
+        # boundary needs the same durable ownership and outcome handling.
+        pending = None
+        returned = False
         try:
-            actual=self.time_warp.reset() if abs(float(value)-1.0)<1e-9 else self.time_warp.set_speed(float(value))
+            pending = self.recovery.begin(self.runtime.pid, method)
+            actual=operation()
+            returned = True
+            self.recovery.require_current(pending, self.runtime.pid)
+            self.recovery.confirm(pending, {'actionOutcome': 'completed', 'gameSpeed': float(actual)})
+            self.recovery.complete(pending)
         except AdapterError as error:
+            if pending is not None:
+                try:
+                    self.recovery.require_current(pending, self.runtime.pid)
+                except AdapterError as stale_or_storage_error:
+                    error = stale_or_storage_error
+            if (pending is not None and not returned
+                    and error.code not in ('outcome_unknown', 'restart_required', 'restore_failed', 'recovery_failed')
+                    and not getattr(self.runtime, 'transport_tainted', False)):
+                try:
+                    self.recovery.complete(pending)
+                except AdapterError as storage_error:
+                    error = storage_error
+            self._project_runtime_error(error, project_desired=False)
             self._time_warp_error={
                 'presentation':error.presentation,
                 'arguments':list(getattr(error,'arguments',()) or ()),
             }
-            self._project_time_warp();raise
-        self._time_warp_speed=float(actual);self._time_warp_pid=self.runtime.pid
+            self._project_time_warp()
+            raise error
+        return float(actual)
+
+    def _apply_game_speed(self,value):
+        operation=self.time_warp.reset if abs(float(value)-1.0)<1e-9 else lambda:self.time_warp.set_speed(float(value))
+        self._time_warp_speed=self._call_time_warp('time_warp.set_speed',operation)
+        self._time_warp_pid=self.runtime.pid
         self._time_warp_error=None;self._project_time_warp()
         return self._time_warp_speed
 
@@ -373,6 +425,7 @@ class Hades2Adapter(GameAdapter):
 
     def _attach_runtime(self,pid,recover_lost_attach=False):
         try:
+            self.recovery.bind(pid)
             if recover_lost_attach:
                 # Only a deliberate Connect can discard an unacknowledged,
                 # mutation-free initial sidecar attach. Automatic retries never do.
@@ -381,6 +434,7 @@ class Hades2Adapter(GameAdapter):
                 self.runtime.attach(pid)
         except Exception:
             if self.runtime.pid is None:self._project_detached_runtime()
+            self._sync_recovery()
             raise
 
     def _detach_runtime(self):
@@ -399,7 +453,7 @@ class Hades2Adapter(GameAdapter):
         pid=self.runtime.pid
         if self._time_warp_pid==pid and self._time_warp_speed is not None:return
         try:
-            actual=self.time_warp.current_speed()
+            actual=self._call_time_warp('time_warp.current_speed',self.time_warp.current_speed)
             if pid is None or self.runtime.pid!=pid:
                 raise ProcessTimeWarpError('disconnected','host.timeWarp.error.disconnected',
                                            diagnostic='Time Warp observation lost its verified target PID.')
@@ -684,6 +738,8 @@ class Hades2Adapter(GameAdapter):
 
     def _replay_preferences(self,observed_state,force_full=False):
         if not self.runtime.has_attachment:return dict(self.state)
+        if not isinstance(observed_state,dict):raise TypeError('reconciliation requires a runtime observation.')
+        self.recovery.guard(self.runtime.pid, 'replay_preferences')
         if self._preference_persistence_dirty:
             # Current in-memory desired is authoritative. Retry its failed
             # durable write before crossing another runtime mutation boundary.
@@ -697,7 +753,6 @@ class Hades2Adapter(GameAdapter):
                 self._apply_game_speed(speed_target)
             speed_confirmed=abs(self._time_warp_speed-speed_target)<=1e-6
 
-        if not isinstance(observed_state,dict):raise TypeError('reconciliation requires a runtime observation.')
         observed=observed_state
         # The Hades reconciler selects executable actions by each resident
         # owner. Presentation status/scene are observations, never permission.
@@ -705,7 +760,6 @@ class Hades2Adapter(GameAdapter):
         if not (isinstance(capabilities,dict) and capabilities.get('setFeature') is True):
             self._overlay_preferences()
             return dict(self.state)
-
         try:
             outcome=self.desired_reconciler.reconcile(
                 self.preferences,
@@ -862,6 +916,7 @@ class Hades2Adapter(GameAdapter):
         if not self.state['connected']:
             self.state['scene']='unknown'
             self.state['capabilities']=disconnected_capabilities()
+        self._sync_recovery()
         return dict(self.state)
     def connect(self,probe_runtime=True,recover_lost_attach=False):
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
@@ -994,8 +1049,9 @@ class Hades2Adapter(GameAdapter):
         elif error.code=='waiting':self.state['status']='waiting'
         elif error.code=='disconnected':
             self.state.update(status='disconnected');self._mark_disconnected()
-        elif error.code in ('restart_required','outcome_unknown','restore_failed'):
+        elif error.code in ('restart_required','outcome_unknown','restore_failed','recovery_failed'):
             self.state['status']='restart_required'
+        self._sync_recovery()
         if project_desired:self._overlay_preferences()
 
     def _execute_runtime(
@@ -1007,6 +1063,12 @@ class Hades2Adapter(GameAdapter):
         if host_observation_only and command!='status':
             raise Hades2ValueError('hades2.error.runtimeObservationOnly', 'runtime observation 仅允许 status。')
         project_desired=not host_observation_only
+        try:
+            if self.runtime.pid is not None:
+                self.recovery.guard(self.runtime.pid, command)
+        except AdapterError as error:
+            self._project_runtime_error(error, project_desired)
+            raise
         connection_error=getattr(self.runtime,'connection_error',None)
         if connection_error is not None:
             self._project_runtime_error(connection_error,project_desired)
@@ -1080,6 +1142,8 @@ class Hades2Adapter(GameAdapter):
                     self._save_preferences()
             if reply.connection_error is not None:
                 raise reply.connection_error
+            if command == 'status':
+                self._verified_runtime_ready(decoded)
             self._observe_game_speed()
             if not host_observation_only and command=='status' and self.preference_dirty:
                 # Reconcile from this resident observation, not from the
@@ -1088,6 +1152,7 @@ class Hades2Adapter(GameAdapter):
                 # its native lock_* command when the owner becomes available.
                 return self._replay_preferences(copy.deepcopy(decoded))
             if project_desired:self._overlay_preferences()
+            self._sync_recovery()
             if teardown_speed_error is not None:raise teardown_speed_error
             if teardown_persistence_error is not None:raise teardown_persistence_error
             reward_context = f" reward={runtime_params.get('reward')}" if command == 'spawn_reward' else ''
