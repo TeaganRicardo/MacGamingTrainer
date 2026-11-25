@@ -95,6 +95,48 @@ class DurableRecoveryTests(unittest.TestCase):
         self.assertEqual(adapter.state['status'], 'restart_required')
         self.assertEqual(adapter.state['recovery']['method'], 'spawn_reward')
 
+    def test_post_execution_journal_read_failure_survives_backend_restart(self):
+        recovery_path = self.context.data_dir / 'runtime-recovery.json'
+        returned = False
+        read_failures = 0
+
+        def complete_action():
+            nonlocal returned
+            returned = True
+            return observation(requestId='once', actionOutcome='completed', applied=True)
+
+        transport = FixtureTransport(complete_action)
+        adapter = self.adapter(transport, identity=lambda pid: 'birth-A')
+        original_read = Path.read_text
+
+        def fail_first_post_execution_read(path, *args, **kwargs):
+            nonlocal read_failures
+            if path == recovery_path and returned and read_failures == 0:
+                read_failures += 1
+                raise OSError('fixture transient journal read after game execution')
+            return original_read(path, *args, **kwargs)
+
+        with patch.object(Path, 'read_text', fail_first_post_execution_read):
+            with self.assertRaises(AdapterError) as failed:
+                adapter.execute('spawn_reward', {'reward': 'Money', 'requestId': 'once'})
+        self.assertEqual(read_failures, 1)
+        self.assertEqual(len(transport.calls), 1)
+        with self.subTest('durable record retained'):
+            self.assertTrue(recovery_path.exists(), 'post-execution read failure discarded the pending action')
+
+        restarted_transport = FixtureTransport()
+        restarted = self.adapter(restarted_transport, identity=lambda pid: 'birth-A')
+        with self.assertRaises(AdapterError) as blocked:
+            restarted.execute('set_rerolls', {'amount': 99, 'requestId': 'must-not-run'})
+        self.assertEqual(blocked.exception.code, 'outcome_unknown')
+        self.assertEqual(restarted_transport.calls, [], 'backend restart submitted a mutation after the read failure')
+        self.assertEqual(failed.exception.code, 'outcome_unknown')
+        self.assertTrue(transport.tainted)
+        self.assertEqual(restarted.state['recovery']['outcome'], 'unknown')
+        self.assertEqual(restarted.state['recovery']['method'], 'spawn_reward')
+        self.assertEqual(restarted.state['recovery']['requestId'], 'once')
+        self.assertIsNone(restarted.state['recovery']['receipt'])
+
     def test_confirmed_action_is_distinct_after_backend_restart(self):
         def lose_acknowledgement():
             raise OSError('connection failed after the action receipt was decoded')
