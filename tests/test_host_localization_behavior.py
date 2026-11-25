@@ -37,6 +37,10 @@ struct LocalizationBehaviorTest {
             "zh-CN Time Warp error must resolve through Host.strings with arguments"
         )
         precondition(missingValue.presentation("module-owned copy") == "module-owned copy", "module presentation must remain opaque")
+        precondition(missingValue.localized("{1} / {0}", arguments: ["literal {1}", "literal {0}"]) == "literal {0} / literal {1}",
+                     "Host interpolation must treat inserted arguments as opaque text")
+        precondition(missingValue.string("{0} [{2}]", arguments: ["literal {2}"]) == "literal {2} []",
+                     "missing template arguments must not erase literal argument text")
 
         // A module contributes its own namespace and resolver; Core stores only
         // the closure, so its tokens re-resolve on a language switch.

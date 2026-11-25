@@ -49,11 +49,8 @@ public final class TrainerLocalizationStore: ObservableObject {
     public func localized(_ key: String, language: TrainerPresentationLanguage, arguments: [String] = []) -> String {
         let tableURL = Bundle.standard.url(forResource: language.rawValue, withExtension: "lproj")
         let bundle = tableURL.flatMap(Bundle.init(url:)) ?? Bundle.standard
-        var value = bundle.localizedString(forKey: key, value: key, table: "Host")
-        for (index, argument) in arguments.enumerated().reversed() {
-            value = value.replacingOccurrences(of: "{\(index)}", with: argument)
-        }
-        return value
+        let value = bundle.localizedString(forKey: key, value: key, table: "Host")
+        return TrainerModuleStringTable.substitute(value, arguments: arguments)
     }
 
     /// Resolve only Host-owned presentation keys. Module/game copy stays
@@ -135,16 +132,7 @@ public final class TrainerLocalizationStore: ObservableObject {
     /// `dropUnfilled` removes placeholders that have no argument instead of
     /// leaving them visible, which is what an unresolved key needs.
     private func substitute(_ template: String, arguments: [String], dropUnfilled: Bool) -> String {
-        var result = template
-        for (index, argument) in arguments.enumerated().reversed() {
-            result = result.replacingOccurrences(of: "{\(index)}", with: argument)
-        }
-        if dropUnfilled {
-            for index in stride(from: 32, through: 0, by: -1) {
-                result = result.replacingOccurrences(of: "{\(index)}", with: "")
-            }
-        }
-        return result
+        TrainerModuleStringTable.substitute(template, arguments: arguments, dropUnfilled: dropUnfilled)
     }
 }
 
