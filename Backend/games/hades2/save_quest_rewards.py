@@ -82,6 +82,10 @@ def _reward(root, name, investigation, *, native=None):
         except ValueError as error:
             raise save_advanced.AdvancedMutationError(
                 "Save Editor quest reward mutation owners have no verified supported-build source hashes.") from error
+    required = {"QuestLogLogic.lua", "ResourceData.lua", "ResourceLogic.lua"}
+    if not required.issubset(expected):
+        raise save_advanced.AdvancedMutationError(
+            "Save Editor quest reward mutation owners have incomplete supported-build source hashes.")
     if any(native.get("scriptHashes", {}).get(key) != digest for key, digest in expected.items()):
         raise save_advanced.AdvancedMutationError("Save Editor quest reward mutation owners do not match their verified source capture.")
     fields = _fields(native.get("quests", {}), name)

@@ -112,6 +112,23 @@ with tempfile.TemporaryDirectory(prefix="mgt-source-hashes-game-") as temporary:
     evidence = save_quest_rewards._reward(None, "QuestCatchFish", investigation, native=verified)
     assert (evidence["resource"], evidence["amount"], evidence["ignoreLast"]) == ("MetaCurrency", 7, True)
 
+    # Each mutation owner is required, even if every declared hash matches.
+    for omitted in ("QuestLogLogic.lua", "ResourceData.lua", "ResourceLogic.lua"):
+        assert omitted in REWARD_HASHES
+        incomplete = {name: digest for name, digest in REWARD_HASHES.items() if name != omitted}
+        path = base / ("omitted-" + omitted + ".json")
+        path.write_text(json.dumps({"owners": {"storyReset": OWNERS["storyReset"],
+                                               "questRewardOwners": {"files": incomplete}}}), encoding="utf-8")
+        captured = dict(verified, scriptHashes={name: digest for name, digest in verified["scriptHashes"].items()
+                                                 if name != omitted})
+        with patch.object(config, "supported_reference_path", lambda name, *args, _path=path: _path):
+            try:
+                save_quest_rewards._reward(None, "QuestCatchFish", investigation, native=captured)
+            except save_advanced.AdvancedMutationError as error:
+                assert "incomplete supported-build source hashes" in str(error)
+            else:
+                raise AssertionError("quest reward granted without required owner " + omitted)
+
     # Missing, malformed, empty or incomplete reference data never widens trust:
     # the investigation refuses to start and a reward grant is refused.
     invalid = {
