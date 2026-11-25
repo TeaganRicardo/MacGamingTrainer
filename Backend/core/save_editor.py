@@ -535,7 +535,9 @@ class CatalogSaveWorkspace(CoreSaveWorkspace[_Document]):
         discover = self.spec.catalog.discover_unknown
         known_paths = frozenset(field.path for field in curated if field.path)
         extras: Sequence[SaveFieldSpec]
-        if discover is discover_mapping_fields:
+        if discover is None:
+            extras = ()
+        elif discover is discover_mapping_fields:
             if not isinstance(self.document, Mapping):
                 raise TypeError("discover_mapping_fields requires a Mapping document.")
             extras = discover_mapping_fields(
@@ -543,10 +545,8 @@ class CatalogSaveWorkspace(CoreSaveWorkspace[_Document]):
                 known_paths,
                 domain=self.spec.catalog.unknown_domain_id,
             )
-        elif discover is not None:
-            extras = discover(self.document, known_paths)
         else:
-            extras = ()
+            extras = discover(self.document, known_paths)
         by_id: OrderedDict[str, SaveFieldSpec] = OrderedDict()
         for field in (*curated, *extras):
             if field.id in by_id:
