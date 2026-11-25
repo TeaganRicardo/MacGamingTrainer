@@ -298,13 +298,11 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
         localization: TrainerLocalizationStore,
         theme: TrainerTheme = .standard
     ) -> TrainerManagementCatalog? {
-        guard let catalog = Module.makeManagementCatalog(
+        let catalog = Module.makeManagementCatalog(
             model: model,
             localization: localization,
             toolWindows: toolWindows.actions(localization: localization, theme: theme)
-        ) else {
-            return nil
-        }
+        ) ?? TrainerManagementCatalog()
         let saveManagementAction: TrainerManagementAction? = Module.descriptor.supportsSaveManagement
             ? TrainerManagementAction(
                 .saveManagement,

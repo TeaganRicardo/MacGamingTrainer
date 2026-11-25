@@ -169,9 +169,7 @@ package struct TrainerManagementCatalog {
             resolved.clearLogs = TrainerManagementAction(.clearLogs, localization: localization,
                                                        action: diagnosticsService.clearCompletedLogs)
         }
-        if resolved.saveManagement == nil {
-            resolved.saveManagement = hostSaveManagement
-        }
+        resolved.saveManagement = hostSaveManagement
         return resolved
     }
 
