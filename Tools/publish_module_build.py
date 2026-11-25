@@ -67,8 +67,10 @@ def publish_app(source, dist, name):
                 previous_game = _module_id(destination)
                 if previous_game != selected_game:
                     raise ValueError(
-                        f'Build output app {destination} belongs to {previous_game}; '
-                        f'cannot replace it with {selected_game}.'
+                        f'Build output app {dist / destination} belongs to {previous_game}; '
+                        f'cannot replace it with {selected_game}. '
+                        'Move the existing generated app aside, or build again with '
+                        'MGT_BUILD_OUTPUT_DIR set to a fresh output directory.'
                     )
                 shutil.rmtree(destination)
             os.rename(candidate, destination)
