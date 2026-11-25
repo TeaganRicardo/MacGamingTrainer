@@ -114,6 +114,22 @@ assert document['damageMultiplier'] == 4.0
 assert 'damageEnabled' not in document
 assert 'gardenQoL' not in document
 
+# An irrelevant historical multiplier can be an arbitrarily large JSON integer.
+# With damageEnabled=false, migration must ignore it and preserve unrelated state.
+huge_legacy_multiplier = 10 ** 4000
+huge_legacy_path = base / 'legacy-v12-huge-damage.json'
+huge_legacy_raw = json.dumps({
+    'schemaVersion': 12,
+    'damageEnabled': False,
+    'damageMultiplier': huge_legacy_multiplier,
+    'invincibility': True,
+}).encode('utf-8')
+huge_legacy_path.write_bytes(huge_legacy_raw)
+huge_loaded, huge_initialized = Hades2PreferenceStore(huge_legacy_path).load()
+assert huge_initialized is True
+assert huge_loaded['damageMultiplier'] == 1.0 and huge_loaded['invincibility'] is True
+assert huge_legacy_path.read_bytes() == huge_legacy_raw
+
 # Legacy v12 desired-state & Profile migrate non-destructively while refusing v14.
 legacy_desired_path = base / 'legacy-v12-desired.json'
 legacy_desired_raw = json.dumps({
