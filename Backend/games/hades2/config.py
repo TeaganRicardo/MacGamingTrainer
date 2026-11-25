@@ -2,6 +2,7 @@ import json
 import plistlib
 from pathlib import Path
 from typing import Any, Optional
+from xml.parsers.expat import ExpatError
 
 from core.module_manifest import GameModuleManifest
 
@@ -215,7 +216,7 @@ def _is_complete_game_bundle(candidate: Path) -> bool:
     try:
         with info_path.open('rb') as stream:
             info = plistlib.load(stream)
-    except (OSError, ValueError, plistlib.InvalidFileException):
+    except (OSError, ValueError, plistlib.InvalidFileException, ExpatError):
         return False
     return (
         isinstance(info, dict)

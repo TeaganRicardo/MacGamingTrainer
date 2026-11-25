@@ -216,6 +216,16 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-incomplete-") as tmp:
     assert resolved.resolve() == valid_app.resolve(), (resolved, valid_app)
     assert executable.is_file()
 
+    # A truncated/corrupt plist in an otherwise populated candidate is skipped
+    # just like a missing executable, leaving later Steam libraries visible.
+    (partial / "Contents/MacOS/Hades II").write_bytes(b"partial-binary")
+    (partial / "Contents/Info.plist").write_text(
+        '<?xml version="1.0"?><plist><dict><key>broken</dict></plist>', encoding="utf-8"
+    )
+    resolved, executable, _ = resolve_game_install(home=home)
+    assert resolved.resolve() == valid_app.resolve(), (resolved, valid_app)
+    assert executable.is_file()
+
 # 3. Hades II resolves non-default Steam libraries from libraryfolders.vdf and caches per (path, mtime).
 with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
     base = Path(tmp)
