@@ -368,12 +368,14 @@ class Hades2Adapter(GameAdapter):
             diagnostics['gameSpeedAppliedValue']=self._time_warp_speed
             self.state['runtimeDiagnostics']=diagnostics
 
-    def _apply_game_speed(self,value):
+    def _call_time_warp(self,method,operation):
+        # Queries also enter the driver's stop/resume session. Every native
+        # boundary needs the same durable ownership and outcome handling.
         pending = None
         returned = False
         try:
-            pending = self.recovery.begin(self.runtime.pid, 'time_warp.set_speed')
-            actual=self.time_warp.reset() if abs(float(value)-1.0)<1e-9 else self.time_warp.set_speed(float(value))
+            pending = self.recovery.begin(self.runtime.pid, method)
+            actual=operation()
             returned = True
             self.recovery.require_current(pending, self.runtime.pid)
             self.recovery.confirm(pending, {'actionOutcome': 'completed', 'gameSpeed': float(actual)})
@@ -398,7 +400,12 @@ class Hades2Adapter(GameAdapter):
             }
             self._project_time_warp()
             raise error
-        self._time_warp_speed=float(actual);self._time_warp_pid=self.runtime.pid
+        return float(actual)
+
+    def _apply_game_speed(self,value):
+        operation=self.time_warp.reset if abs(float(value)-1.0)<1e-9 else lambda:self.time_warp.set_speed(float(value))
+        self._time_warp_speed=self._call_time_warp('time_warp.set_speed',operation)
+        self._time_warp_pid=self.runtime.pid
         self._time_warp_error=None;self._project_time_warp()
         return self._time_warp_speed
 
@@ -446,7 +453,7 @@ class Hades2Adapter(GameAdapter):
         pid=self.runtime.pid
         if self._time_warp_pid==pid and self._time_warp_speed is not None:return
         try:
-            actual=self.time_warp.current_speed()
+            actual=self._call_time_warp('time_warp.current_speed',self.time_warp.current_speed)
             if pid is None or self.runtime.pid!=pid:
                 raise ProcessTimeWarpError('disconnected','host.timeWarp.error.disconnected',
                                            diagnostic='Time Warp observation lost its verified target PID.')

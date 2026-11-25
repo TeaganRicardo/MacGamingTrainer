@@ -258,6 +258,73 @@ class DurableRecoveryTests(unittest.TestCase):
             self.adapter(restarted).execute('status', {})
         self.assertEqual(restarted.calls, [])
 
+    def test_native_speed_query_unknown_survives_backend_restart(self):
+        for code in ('outcome_unknown', 'resume_failed'):
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as temporary:
+                context = hades2_adapter_context(temporary)
+                transport = FixtureTransport()
+                query_calls = []
+
+                def lose_query():
+                    query_calls.append('query')
+                    transport.tainted = True
+                    raise AdapterError(code, 'host.timeWarp.error.outcomeUnknown')
+
+                transport.speed.current_speed = lose_query
+                adapter = Hades2Adapter(context=context, transport=transport, identity=lambda pid: 'birth-A')
+                with self.assertRaises(AdapterError):
+                    adapter.observe_runtime()
+                restarted = FixtureTransport()
+                restored = Hades2Adapter(context=context, transport=restarted, identity=lambda pid: 'birth-A')
+                with self.assertRaises(AdapterError):
+                    restored.observe_runtime()
+                self.assertEqual(restarted.calls, [], 'backend restart repeated an unknown native speed query')
+                self.assertEqual(query_calls, ['query'])
+                self.assertEqual(restored.state['recovery']['method'], 'time_warp.current_speed')
+                self.assertEqual(restored.state['recovery']['outcome'], 'unknown')
+
+    def test_native_speed_query_crash_is_already_durable(self):
+        class BackendExit(BaseException):
+            pass
+
+        transport = FixtureTransport()
+
+        def crash_query():
+            raise BackendExit()
+
+        transport.speed.current_speed = crash_query
+        with self.assertRaises(BackendExit):
+            self.adapter(transport).observe_runtime()
+        restarted = FixtureTransport()
+        with self.assertRaises(AdapterError):
+            self.adapter(restarted).observe_runtime()
+        self.assertEqual(restarted.calls, [])
+
+    def test_native_speed_query_confirmation_survives_retirement_failure(self):
+        transport = FixtureTransport()
+        adapter = self.adapter(transport)
+        original_complete = adapter.recovery.complete
+        queried = False
+
+        def current_speed():
+            nonlocal queried
+            queried = True
+            return 1.0
+
+        def fail_query_retirement(pending):
+            if queried:
+                raise AdapterError('recovery_failed', 'hades2.error.recoveryFailed')
+            original_complete(pending)
+
+        transport.speed.current_speed = current_speed
+        with patch.object(adapter.recovery, 'complete', fail_query_retirement):
+            with self.assertRaises(AdapterError):
+                adapter.observe_runtime()
+        restored = self.adapter(FixtureTransport())
+        self.assertEqual(restored.state['recovery']['method'], 'time_warp.current_speed')
+        self.assertEqual(restored.state['recovery']['outcome'], 'confirmed')
+        self.assertEqual(restored.state['recovery']['receipt']['gameSpeed'], 1.0)
+
     def test_post_execution_cleanup_failure_keeps_uncertainty(self):
         for code in ('resume_failed', 'process_timeout', 'stop_failed'):
             with self.subTest(code=code), tempfile.TemporaryDirectory() as temporary:
