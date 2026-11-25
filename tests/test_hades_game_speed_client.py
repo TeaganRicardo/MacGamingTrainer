@@ -59,7 +59,7 @@ with tempfile.TemporaryDirectory(prefix='hades-speed-client-') as temp:
     assert 'gameSpeed' not in connect[1]['features'], 'process speed entered the resident Lua configuration'
     assert client.current_game_speed() == 1.0
     current = next(call for call in sidecar.calls if call[0] == 'time_warp.current_speed')
-    assert current[2]['outcome_unknown_on_loss'] is False
+    assert current[2]['outcome_unknown_on_loss'] is True, 'native stop/resume query must retain recovery on reply loss'
     assert client.set_game_speed(2.5) == 2.5
     set_call = next(call for call in sidecar.calls if call[0] == 'time_warp.set_speed')
     assert set_call[2]['outcome_unknown_on_loss'] is True
