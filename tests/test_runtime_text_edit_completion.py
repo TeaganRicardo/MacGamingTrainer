@@ -329,6 +329,39 @@ struct HeaderFixture: View {
      rowWindow.close()
     }
    }
+   check(model.setShortcut(action:.acquireChaosPair,
+     chord:HotkeyChord(keyCode:18,modifiers:HotkeyChord.controlModifier,keyLabel:"1")) == .applied,
+     "short Chaos shortcut was not assigned")
+   check(model.setShortcut(action:.acquireExactBoon,
+     chord:HotkeyChord(keyCode:111,modifiers:HotkeyChord.supportedModifierMask,keyLabel:"F12")) == .applied,
+     "wide exact-reward shortcut was not assigned")
+   for width in [TrainerTheme.standard.contentMinWidth, CGFloat(900), CGFloat(1100)] {
+    let pickerHost=NSHostingView(rootView:ScrollView {
+     Hades2TrainerView(model:model)
+    }.frame(width:width,height:600).environmentObject(localization))
+    let pickerWindow=NSWindow(contentRect:NSRect(x:0,y:0,width:width,height:600),
+      styleMask:[.titled],backing:.buffered,defer:false)
+    pickerWindow.isReleasedWhenClosed=false
+    pickerWindow.contentView=pickerHost
+    for language in [TrainerPresentationLanguage.en, .zhCN] {
+     localization.language=language
+     pickerHost.layoutSubtreeIfNeeded(); pump()
+     let keys=["hades2.spawn.chaosBlessing","hades2.spawn.chaosCurse",
+               "hades2.spawn.exactSource","hades2.spawn.exactTarget"]
+     let pickers=keys.map { key -> NativeAccessibilityControl in
+      guard let picker=namedNativeControl(pickerHost,role:"AXPopUpButton",name:localization.string(key)) else {
+       fatalError("exact-reward picker missing: \(key)")
+      }
+      return picker
+     }
+     let frames=pickers.map(\.frame)
+     check(frames.allSatisfy { $0.width > 0 && abs($0.width-frames[0].width) <= 1 },
+       "unequal shortcut badges shifted picker widths: language=\(language) width=\(width) frames=\(frames)")
+     check(abs(frames[0].minX-frames[2].minX) <= 1 && abs(frames[1].minX-frames[3].minX) <= 1,
+       "exact-reward picker columns do not align: language=\(language) width=\(width) frames=\(frames)")
+    }
+    pickerWindow.close()
+   }
    session.stop(); phase("controls:complete"); return
   }
   let toolWindows=TrainerToolWindowStore()

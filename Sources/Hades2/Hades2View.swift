@@ -1699,6 +1699,14 @@ struct Hades2TrainerView: View {
         .fixedSize(horizontal: true, vertical: false)
     }
 
+    private func exactBoonShortcut(_ action: ShortcutAction) -> some View {
+        ZStack(alignment: .leading) {
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair)).hidden()
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon)).hidden()
+            TrainerShortcutBadgeSlot(text: model.shortcutText(action))
+        }
+    }
+
     private var boonAcquisitionPanel: some View {
         TrainerAcquisitionPanel(
             title: text("hades2.spawn.exactBoons"),
@@ -1740,7 +1748,7 @@ struct Hades2TrainerView: View {
                     .labelsHidden()
                     .trainerPicker(.layoutAllocated, state: model.canAcquireChaosPair && !chaosCurseOptions.isEmpty ? .interactive : .unavailable)
 
-                    TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
+                    exactBoonShortcut(.acquireChaosPair)
                     TrainerSecondaryActionButton(
                         title: text("hades2.spawn.acquire"),
                         enabled: model.canAcquireChaosPair
@@ -1793,7 +1801,7 @@ struct Hades2TrainerView: View {
                     .labelsHidden()
                     .trainerPicker(.layoutAllocated, state: model.canAcquireExactReward && !selectedExactItems.isEmpty ? .interactive : .unavailable)
 
-                    TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
+                    exactBoonShortcut(.acquireExactBoon)
                     TrainerSecondaryActionButton(
                         title: text("hades2.spawn.acquire"),
                         enabled: model.canAcquireExactReward
