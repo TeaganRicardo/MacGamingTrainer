@@ -30,7 +30,8 @@ from core.save_editor import (  # noqa: E402
     SaveFieldSpec,
     discover_mapping_fields,
 )
-from core.save_restore import SaveRestoreTransaction  # noqa: E402
+from core.save_restore import SaveBusyError, SaveRestoreTransaction  # noqa: E402
+from core.save_service import CoreSaveService  # noqa: E402
 from core.structured_save_edit import StructuredSaveEligibility  # noqa: E402
 from games.hades.adapter import HadesAdapter  # noqa: E402
 from games.hades.preferences import HadesPreferenceStore  # noqa: E402
@@ -272,6 +273,43 @@ def main() -> None:
             save_management=sample_spec,
             home=root / "sample/home",
         )
+        # Generic editing is cold by default even if save backups/restores support hot mode.
+        policy_saves = root / "policy/saves"
+        _write_sample_saves(policy_saves)
+        policy_spec = replace(sample_spec, roots=(replace(sample_spec.roots[0], path=str(policy_saves)),))
+        running = {"value": False}
+        policy_service = CoreSaveService("policy_json", policy_spec, root / "policy/data", lambda: running["value"])
+        selected = {"rootId": "main", "relativePath": "Slot1.json"}
+        policy_editor = CatalogSaveWorkspace.open(policy_service, _sample_spec(), source=selected, target=selected)
+        policy_generation = policy_editor.baseline_generation
+        policy_editor.stage("inventory.gold", "set", 71, baseline_generation=policy_generation)
+        policy_before = (policy_saves / "Slot1.json").read_bytes()
+        running["value"] = True
+        try:
+            policy_editor.apply(baseline_generation=policy_generation)
+        except SaveBusyError:
+            pass
+        else:
+            raise AssertionError("Generic Save Editor wrote while running without an explicit policy")
+        assert (policy_saves / "Slot1.json").read_bytes() == policy_before
+        assert policy_service.list_state()["snapshots"] == []
+        assert policy_editor.baseline_generation == policy_generation
+        assert policy_editor.review()["count"] == 1 and not policy_editor.recovery_unresolved
+        running["value"] = False
+        assert policy_editor.apply(baseline_generation=policy_generation)["hot"] is False
+
+        # An owning module may opt in; the same verified transaction retains the exact prior bytes.
+        running["value"] = True
+        hot_editor = CatalogSaveWorkspace.open(
+            policy_service, replace(_sample_spec(), allow_running=True), source=selected, target=selected,
+        )
+        hot_before = (policy_saves / "Slot1.json").read_bytes()
+        hot_editor.stage("inventory.gold", "set", 72, baseline_generation=hot_editor.baseline_generation)
+        hot_receipt = hot_editor.apply(baseline_generation=hot_editor.baseline_generation)
+        assert hot_receipt["hot"] is True and hot_receipt["runtimeReloaded"] is False
+        prior = policy_service.store.load_verified_snapshot(hot_receipt["previousSnapshotId"])
+        assert (prior["root"] / "files/main/Slot1.json").read_bytes() == hot_before
+
         # Review must describe the codec-normalized bytes that Apply will install.
         rounded_saves = root / "rounded/saves"
         _write_sample_saves(rounded_saves)

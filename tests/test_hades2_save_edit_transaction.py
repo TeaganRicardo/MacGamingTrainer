@@ -154,6 +154,7 @@ def open_hades2_session(service):
         _ELIGIBILITY,
         relative_path="Profile1.sav",
         default_target=True,
+        allow_running=True,
     )
 
 
