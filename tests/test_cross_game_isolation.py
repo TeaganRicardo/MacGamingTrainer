@@ -327,7 +327,7 @@ def check_module_storage_keys(root: Path) -> list[str]:
         for path in _iter_swift_files(spec.frontend_dir, root, tracked):
             rel = path.relative_to(root).as_posix()
             code = _strip_swift_comments(path.read_text(encoding='utf-8'))
-            if '@AppStorage' in code:
+            if '@AppStorage' in _SWIFT_TOKENS.sub(' ', code):
                 errors.append(f'{rel}: module {spec.id!r} must not use @AppStorage directly')
             for match in _SHORTCUT_STORAGE_CALL_RE.finditer(code):
                 scoped = _SHORTCUT_STORAGE_RE.match(code, match.start())
@@ -409,6 +409,28 @@ with tempfile.TemporaryDirectory(prefix='mgt-swift-sources-') as tmp_gen:
 # 2. Python imports and storage keys stay inside their own game.
 assert not check_python_import_boundaries(ROOT), check_python_import_boundaries(ROOT)
 assert not check_module_storage_keys(ROOT), check_module_storage_keys(ROOT)
+
+with tempfile.TemporaryDirectory(prefix='mgt-storage-syntax-') as temporary:
+    fixture = Path(temporary)
+    (fixture / 'app.json').write_text(json.dumps({'modules': ['alpha']}))
+    manifest = fixture / 'Backend/games/alpha/module.json'
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({
+        'id': 'alpha',
+        'frontend': {'sourceDirectory': 'Sources/Alpha', 'moduleType': 'AlphaModule'},
+    }))
+    swift = fixture / 'Sources/Alpha/Probe.swift'
+    swift.parent.mkdir(parents=True)
+    for source in (
+        'let note = "Do not use @AppStorage directly"',
+        'let note = """\nDo not use @AppStorage directly\n"""',
+        '// @AppStorage is mentioned in a comment',
+    ):
+        swift.write_text(source)
+        assert check_module_storage_keys(fixture) == [], source
+    swift.write_text('@AppStorage("alpha.fixture") var fixture = false')
+    errors = check_module_storage_keys(fixture)
+    assert len(errors) == 1 and 'must not use @AppStorage directly' in errors[0], errors
 
 assert not (ROOT / 'Backend/games/reference_fixture').exists()
 assert not (ROOT / 'Sources/ReferenceFixture').exists()
