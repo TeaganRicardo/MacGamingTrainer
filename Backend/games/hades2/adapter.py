@@ -29,7 +29,6 @@ from .runtime_error_presentation import feature_error_presentation
 from .save_workspace import Hades2SaveWorkspace
 from .schema import (
     MULTIPLIERS,
-    STAT_RULES,
     TOGGLES,
     default_boon_rarity,
     desired_feature_defaults,
