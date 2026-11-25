@@ -623,6 +623,116 @@ def main() -> None:
             assert replay_reply["ok"] is False and replay_reply["error"]["code"] == "rollback_failed"
             assert len(replace_calls) == 2, "unresolved recovery workspace replayed Apply"
             assert sample_adapter.save_workspaces[bak_ws].recovery_unresolved is True
+            # A second workspace and a fresh Core Save service must inherit the
+            # physical target fence. An unrelated save target remains writable.
+            second_open = router.handle({
+                "id": "second-open-slot1",
+                "command": "save_editor_open",
+                "params": {"source": {"rootId": "main", "relativePath": "Slot1.json"}},
+            })["result"]
+            second_ws = second_open["workspaceId"]
+            second_gen = second_open["baselineGeneration"]
+            router.handle({
+                "id": "second-target-slot1",
+                "command": "save_editor_target",
+                "params": {"workspaceId": second_ws, "baselineGeneration": second_gen,
+                           "target": {"rootId": "main", "relativePath": "Slot1.json"}},
+            })
+            router.handle({
+                "id": "second-stage-slot1",
+                "command": "save_editor_stage",
+                "params": {"workspaceId": second_ws, "baselineGeneration": second_gen,
+                           "entryId": "inventory.gold", "operation": "set", "value": 77},
+            })
+            second_apply = router.handle({
+                "id": "second-apply-slot1",
+                "command": "save_editor_apply",
+                "params": {"workspaceId": second_ws, "baselineGeneration": second_gen},
+            })
+            assert second_apply["ok"] is False and second_apply["error"]["code"] == "rollback_failed"
+
+            fresh_adapter = SampleJsonGameAdapter(sample_ctx)
+            fresh_router = JsonlRequestRouter(
+                fresh_adapter, save_data_root=root / "sample/data", target_running_probe=lambda: False
+            )
+            try:
+                fresh_open = fresh_router.handle({
+                    "id": "fresh-open-slot1", "command": "save_editor_open",
+                    "params": {"source": {"rootId": "main", "relativePath": "Slot1.json"}},
+                })["result"]
+                fresh_ws, fresh_gen = fresh_open["workspaceId"], fresh_open["baselineGeneration"]
+                fresh_router.handle({
+                    "id": "fresh-target-slot1", "command": "save_editor_target",
+                    "params": {"workspaceId": fresh_ws, "baselineGeneration": fresh_gen,
+                               "target": {"rootId": "main", "relativePath": "Slot1.json"}},
+                })
+                fresh_router.handle({
+                    "id": "fresh-stage-slot1", "command": "save_editor_stage",
+                    "params": {"workspaceId": fresh_ws, "baselineGeneration": fresh_gen,
+                               "entryId": "inventory.gold", "operation": "set", "value": 88},
+                })
+                fresh_apply = fresh_router.handle({
+                    "id": "fresh-apply-slot1", "command": "save_editor_apply",
+                    "params": {"workspaceId": fresh_ws, "baselineGeneration": fresh_gen},
+                })
+                assert fresh_apply["ok"] is False and fresh_apply["error"]["code"] == "rollback_failed"
+
+                # Explicitly restore the captured baseline bytes. The fence is
+                # then durably marked resolved, and later writes remain allowed.
+                recovery_root = Path(fail_reply["error"]["recoveryPath"])
+                baseline_file = recovery_root / "files/main/Slot1.json"
+                (sample_saves / "Slot1.json").write_bytes(baseline_file.read_bytes())
+                resolved_adapter = SampleJsonGameAdapter(sample_ctx)
+                resolved_router = JsonlRequestRouter(
+                    resolved_adapter, save_data_root=root / "sample/data", target_running_probe=lambda: False
+                )
+                try:
+                    for index, value in enumerate((111, 112), start=1):
+                        resolved_open = resolved_router.handle({
+                            "id": f"resolved-open-{index}", "command": "save_editor_open",
+                            "params": {"source": {"rootId": "main", "relativePath": "Slot1.json"}},
+                        })["result"]
+                        resolved_ws, resolved_gen = resolved_open["workspaceId"], resolved_open["baselineGeneration"]
+                        resolved_router.handle({
+                            "id": f"resolved-target-{index}", "command": "save_editor_target",
+                            "params": {"workspaceId": resolved_ws, "baselineGeneration": resolved_gen,
+                                       "target": {"rootId": "main", "relativePath": "Slot1.json"}},
+                        })
+                        resolved_router.handle({
+                            "id": f"resolved-stage-{index}", "command": "save_editor_stage",
+                            "params": {"workspaceId": resolved_ws, "baselineGeneration": resolved_gen,
+                                       "entryId": "inventory.gold", "operation": "set", "value": value},
+                        })
+                        resolved_apply = resolved_router.handle({
+                            "id": f"resolved-apply-{index}", "command": "save_editor_apply",
+                            "params": {"workspaceId": resolved_ws, "baselineGeneration": resolved_gen},
+                        })
+                        assert resolved_apply["ok"] is True, resolved_apply
+                finally:
+                    resolved_router.close()
+
+                unrelated_open = fresh_router.handle({
+                    "id": "fresh-open-slot2", "command": "save_editor_open",
+                    "params": {"source": {"rootId": "main", "relativePath": "Slot2.json"}},
+                })["result"]
+                unrelated_ws, unrelated_gen = unrelated_open["workspaceId"], unrelated_open["baselineGeneration"]
+                fresh_router.handle({
+                    "id": "fresh-target-slot2", "command": "save_editor_target",
+                    "params": {"workspaceId": unrelated_ws, "baselineGeneration": unrelated_gen,
+                               "target": {"rootId": "main", "relativePath": "Slot2.json"}},
+                })
+                fresh_router.handle({
+                    "id": "fresh-stage-slot2", "command": "save_editor_stage",
+                    "params": {"workspaceId": unrelated_ws, "baselineGeneration": unrelated_gen,
+                               "entryId": "inventory.gold", "operation": "set", "value": 99},
+                })
+                unrelated_apply = fresh_router.handle({
+                    "id": "fresh-apply-slot2", "command": "save_editor_apply",
+                    "params": {"workspaceId": unrelated_ws, "baselineGeneration": unrelated_gen},
+                })
+                assert unrelated_apply["ok"] is True, unrelated_apply
+            finally:
+                fresh_router.close()
         finally:
             router.close()
 
