@@ -30,7 +30,12 @@ DESIRED_STATE_SCHEMA_VERSION = 13
 
 
 def _finite_number(value):
-    return type(value) in (int,float) and not isinstance(value,bool) and math.isfinite(value)
+    if type(value) not in (int, float) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 LEGACY_DAMAGE_MULTIPLIER = 2.0
