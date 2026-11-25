@@ -529,11 +529,7 @@ class ProfileStore:
             return
         if version > self.schema_version:
             raise self._newer_schema_error(version, self.schema_version)
-        if (
-            version == self.schema_version
-            and self.payload_version_key is not None
-            and self.payload_schema_version is not None
-        ):
+        if self.payload_version_key is not None and self.payload_schema_version is not None:
             payload_version = payload.get(self.payload_version_key)
             if type(payload_version) is int and payload_version > self.payload_schema_version:
                 raise self._newer_payload_schema_error(payload_version, self.payload_schema_version)
