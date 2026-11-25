@@ -129,6 +129,13 @@ class JsonlRequestRouter:
             raise ValueError('snapshotId 无效。')
         return snapshot_id
 
+    def _state_for_error(self):
+        try:
+            return self.adapter.state_for_error()
+        except Exception:
+            logging.exception('Error reply state could not be refreshed')
+            return None
+
     def _with_state(self, result):
         try:
             result.update(self.save_service.list_state())
@@ -242,7 +249,7 @@ class JsonlRequestRouter:
                         request_id,
                         'invalid_request',
                         'command must be a non-empty string of at most 128 characters',
-                        self.adapter.state_for_error(),
+                        self._state_for_error(),
                     )
                 )
             if not isinstance(params, dict):
@@ -251,7 +258,7 @@ class JsonlRequestRouter:
                         request_id,
                         'invalid_request',
                         'params must be a JSON object',
-                        self.adapter.state_for_error(),
+                        self._state_for_error(),
                     )
                 )
             if command == 'hello':
@@ -278,7 +285,7 @@ class JsonlRequestRouter:
             logging.info('request %s %s success game=%s', request_id, command, self.adapter.game_id)
         except Exception as error:
             logging.exception('request %s failed game=%s', request_id, self.adapter.game_id)
-            state = self.adapter.state_for_error()
+            state = self._state_for_error()
             if dispatch_returned:
                 reply = self.core_error_reply(request_id, 'outcome_unknown', str(error), state)
                 reply['error'].update(outcomeUnknown=True, terminal=True)
