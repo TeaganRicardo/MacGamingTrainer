@@ -191,6 +191,31 @@ with tempfile.TemporaryDirectory(prefix="mgt-wp33-locate-") as tmp:
             raise AssertionError("multiple identical matches did not raise AmbiguousTargetError")
 
 
+# An incomplete higher-priority Steam install must not hide a complete external install.
+with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-incomplete-") as tmp:
+    base = Path(tmp)
+    home = base / "home"
+    default_root = home / "Library/Application Support/Steam"
+    default_steamapps = default_root / "steamapps"
+    default_steamapps.mkdir(parents=True)
+    partial = default_steamapps / "common/Hades II/Hades II.app"
+    (partial / "Contents/MacOS").mkdir(parents=True)
+    (partial / "Contents/Info.plist").write_text("<plist><dict></dict></plist>", encoding="utf-8")
+    (default_steamapps / "appmanifest_1145350.acf").write_text(
+        '"AppState" { "installdir" "Hades II" }\n', encoding="utf-8"
+    )
+    external_root = base / "External/SteamLibrary"
+    valid_app, _, _ = _write_hades2_install(external_root / "steamapps")
+    (default_steamapps / "libraryfolders.vdf").write_text(
+        '"libraryfolders" {\n'
+        f'  "0" {{ "path" "{default_root}" "apps" {{ "1145350" "1" }} }}\n'
+        f'  "1" {{ "path" "{external_root}" "apps" {{ "1145350" "1" }} }}\n'
+        '}\n', encoding="utf-8"
+    )
+    resolved, executable, _ = resolve_game_install(home=home)
+    assert resolved.resolve() == valid_app.resolve(), (resolved, valid_app)
+    assert executable.is_file()
+
 # 3. Hades II resolves non-default Steam libraries from libraryfolders.vdf and caches per (path, mtime).
 with tempfile.TemporaryDirectory(prefix="mgt-wp33-steam-") as tmp:
     base = Path(tmp)
