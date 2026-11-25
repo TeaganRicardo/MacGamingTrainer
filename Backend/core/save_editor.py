@@ -299,6 +299,7 @@ class SaveEditorSpec(Generic[_Document]):
     version_pinned: bool = True
     default_target: bool = False
     clone_document: Optional[Callable[[_Document], _Document]] = None
+    allow_running: bool = False
 
 
 class CoreSaveWorkspace(Generic[_Document]):
@@ -499,6 +500,7 @@ class CatalogSaveWorkspace(CoreSaveWorkspace[_Document]):
             target=target,
             default_target=spec.default_target,
             version_pinned=spec.version_pinned,
+            allow_running=spec.allow_running,
         )
         return cls(session, spec)
 
