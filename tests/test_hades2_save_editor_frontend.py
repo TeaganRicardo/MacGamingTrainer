@@ -183,7 +183,8 @@ for raw in sys.stdin:
             scope = req['params'].get('scope', 'all')
             term = req['params']['search'].lower()
             items = []
-            if scope in ('all', 'resources') and (not term or 'ash' in term or term == 'invalid-offset'):
+            if scope in ('all', 'resources') and (
+                    not term or 'ash' in term or term in ('invalid-offset', 'missing-evidence-fixture')):
                 items = [{
                     'id': 'resource:MetaCurrency', 'domain': 'resources',
                     'rawId': 'MetaCurrency',
