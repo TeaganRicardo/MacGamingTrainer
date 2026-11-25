@@ -646,25 +646,37 @@ class CatalogSaveWorkspace(CoreSaveWorkspace[_Document]):
         lang = require_editor_language(language)
         candidate = self._clone_document()
         field_map = self._field_map()
-        actions: list[dict[str, Any]] = []
+        staged: list[tuple[str, SaveFieldSpec, dict[str, Any]]] = []
         for entry_id, intent in self._pending.items():
             field = field_map.get(entry_id)
             if field is None:
                 raise ValueError("Staged entry is no longer present in the document.")
             if not field.editable:
                 raise ValueError("Save Editor field is read-only.")
+            staged.append((entry_id, field, intent))
+
+        for index, (_entry_id, field, _intent) in enumerate(staged):
+            path = field.path
+            if not path:
+                continue
+            for _other_id, other, _other_intent in staged[index + 1 :]:
+                other_path = other.path
+                if not other_path:
+                    continue
+                shared = min(len(path), len(other_path))
+                if path[:shared] == other_path[:shared]:
+                    raise ValueError("Staged Save Editor fields overlap; review and apply them separately.")
+
+        actions: list[dict[str, Any]] = []
+        for entry_id, field, intent in staged:
             present, before = field.read_value(self.document)
             operation = intent["operation"]
             if operation == "unset":
                 if not field.allow_unset or not present:
                     raise ValueError("Staged operation no longer matches its entry.")
                 field.delete_value(candidate)
-                after = None
-                after_present = False
             elif operation == "set":
-                after = intent["after"]
-                field.write_value(candidate, after)
-                after_present = True
+                field.write_value(candidate, intent["after"])
             else:
                 raise ValueError("Unsupported Save Editor operation.")
             actions.append(
@@ -672,16 +684,29 @@ class CatalogSaveWorkspace(CoreSaveWorkspace[_Document]):
                     "id": entry_id,
                     "name": localized_text(field.names, lang, entry_id),
                     "before": _format_display_value(before, present=present),
-                    "after": _format_display_value(after, present=after_present),
+                    "after": None,
                     "operation": operation,
                     "valueType": field.value_type,
-                    "value": after if after_present else None,
+                    "value": None,
                     "effects": [],
                 }
             )
-        round_tripped = self.spec.codec.encode(candidate)
-        self.spec.codec.decode(round_tripped)
-        return candidate, {
+
+        encoded = self.spec.codec.encode(candidate)
+        normalized = self.spec.codec.decode(encoded)
+        if self.spec.codec.encode(normalized) != encoded:
+            raise ValueError("Save codec output is not stable after decode; review cannot verify the installed result.")
+        for action, (_entry_id, field, intent) in zip(actions, staged):
+            present, value = field.read_value(normalized)
+            if intent["operation"] == "unset":
+                if present:
+                    raise ValueError("Save codec did not preserve the staged removal.")
+            elif not present:
+                raise ValueError("Save codec did not preserve the staged field.")
+            action["after"] = _format_display_value(value, present=present)
+            action["value"] = deepcopy(value) if present else None
+
+        return normalized, {
             "baselineGeneration": self.baseline_generation,
             "actions": actions,
             "count": len(actions),
