@@ -77,4 +77,41 @@ with tempfile.TemporaryDirectory(prefix="mgt-reply-encoding-") as temporary:
         assert "non-JSON-safe" in failure["error"]["diagnostic"]
         assert adapter.calls == 2
 
+    # An optional state observation must not mask an already executed command's
+    # terminal outcome or prevent its immutable reply from being cached.
+    adapter = PayloadAdapter(2)
+    router = JsonlRequestRouter(adapter, save_data_root=Path(temporary) / "error-state")
+    request = json.dumps({"id": "state-failure", "command": "nonfinite", "params": {}})
+    with patch.object(adapter, "state_for_error", side_effect=RuntimeError("observation unavailable")):
+        logging.disable(logging.CRITICAL)
+        try:
+            first = process_line(router, request)
+            assert process_line(router, request) == first
+            for malformed in (
+                {"id": "bad-command", "command": ""},
+                {"id": "bad-params", "command": "payload", "params": []},
+            ):
+                rejected = json.loads(process_line(router, json.dumps(malformed)))
+                assert rejected["id"] == malformed["id"]
+                assert rejected["error"]["code"] == "invalid_request"
+        finally:
+            logging.disable(logging.NOTSET)
+    failure = json.loads(first)
+    assert failure["id"] == "state-failure" and failure["ok"] is False
+    assert failure["error"]["code"] == "outcome_unknown"
+    assert failure["error"]["outcomeUnknown"] and failure["error"]["terminal"]
+    assert "non-JSON-safe" in failure["error"]["diagnostic"]
+    assert "state" not in failure and adapter.calls == 1
+
+    with patch.object(adapter, "state_for_error", return_value={"connected": True}):
+        logging.disable(logging.CRITICAL)
+        try:
+            observed = json.loads(process_line(router, json.dumps({
+                "id": "state-available", "command": "nonfinite", "params": {},
+            })))
+        finally:
+            logging.disable(logging.NOTSET)
+    assert observed["state"] == {"connected": True}
+    assert observed["error"]["code"] == "outcome_unknown" and adapter.calls == 2
+
 print("jsonl_reply_encoding_ok")
