@@ -214,6 +214,19 @@ struct LocalizationBehaviorTest {
                      "unselected context presentation must also register before any view appears")
         precondition(coordinatorLocalization.string(TrainerTextToken(key: "host.save.fileCount", arguments: ["3"])) == "3 files",
                      "registered module prefixes must keep Host key argument resolution intact")
+        for _ in 0..<100 {
+            weak var releasedStore: TrainerLocalizationStore?
+            autoreleasepool {
+                let replacement = TrainerLocalizationStore(defaults: InMemoryDefaults())
+                replacement.language = .en
+                releasedStore = replacement
+                alphaContext.registerPresentation(replacement)
+                alphaContext.registerPresentation(replacement)
+                precondition(replacement.string("alpha.ready") == "Alpha Ready",
+                             "a replacement localization store inherited a dead store's registration")
+            }
+            precondition(releasedStore == nil, "context retained a short-lived localization store")
+        }
         // Registering a broader parent prefix after a sub-prefix must also fail.
         precondition(missingValue.registerModulePresentation(prefix: "subonly.child.") { _, _, _ in "CHILD" })
         precondition(!missingValue.registerModulePresentation(prefix: "subonly.") { _, _, _ in "PARENT" },
