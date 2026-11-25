@@ -1,6 +1,6 @@
+import hashlib
 import json
 from pathlib import Path
-import re
 import subprocess
 import sys
 import types
@@ -14,8 +14,7 @@ from lua_runtime_support import require_lua52
 
 lua = require_lua52('Hades worker captured target dispatch')
 module = ROOT / 'Backend/games/hades'
-resident = json.loads((module / 'module.json').read_text())['residentRuntime']
-revision = re.search(resident['moduleRevisionPattern'], (module / resident['source']).read_text()).group(1)
+revision = json.dumps(hashlib.sha256((module / 'runtime.lua').read_text().encode('utf-8')).hexdigest())
 fixture = r'''
 local mutations = 0
 local runtime = {version=1,revision=__REVISION__,bootstrapId='fixture', generationId='fixture'}

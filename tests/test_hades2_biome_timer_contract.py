@@ -86,8 +86,6 @@ assert diff._owner_available(
 )
 
 source = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text(encoding="utf-8")
-revision_match = re.search(r"version = 1, revision = (\d+),", source)
-assert revision_match and int(revision_match.group(1)) >= 139
 assert "setBiomeTime = " in source and "biomeTimeLocked = M.biomeTimerFrozen" in source
 assert 'if command == "set_counter" then' in source
 assert 'if command == "lock_biome_time" then' in source

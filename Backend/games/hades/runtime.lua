@@ -1,6 +1,7 @@
+local residentRevision = "__MGT_RESIDENT_SOURCE_SHA256__"
 local existing = rawget(_G, "MacGamingTrainerHades")
 if existing then
-  if existing.revision ~= 18 then error("hades.error.restartRequired") end
+  if existing.revision ~= residentRevision then error("hades.error.restartRequired") end
   return existing
 end
 
@@ -22,7 +23,7 @@ local rarityLootNames = {
   DemeterUpgrade = true, HermesUpgrade = true,
 }
 local runtime = {
-  version = 1, revision = 18,
+  version = 1, revision = residentRevision,
   features = {}, hooks = {}, instanceIds = setmetatable({}, { __mode = "k" }),
   nextInstanceId = 0, propertyDepth = 0, rerollLeases = setmetatable({}, { __mode = "k" }),
   movementOwners = setmetatable({}, { __mode = "k" }),

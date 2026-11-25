@@ -8,6 +8,7 @@ import uuid
 
 from core.adapter import AdapterError
 from core.sidecar import serve_jsonl_requests
+from core.resident_source import resident_source
 from .cheats import HADES_CHEAT_CATALOG, to_runtime_feature, to_runtime_features
 from .operation_budgets import PROCESS_CONTROL_TIMEOUT_SECONDS
 from .schema import (DEFAULT_FEATURES, DEFERRED_TRAIT_COMMANDS, LOCK_FIELDS, MUTATING_COMMANDS, ONE_SHOT_COMMANDS, WORLD_COMMANDS, boon_rarity_target,
@@ -67,7 +68,7 @@ class HadesLLDBWorker:
             from .transport import HadesLuaTransport
             transport = HadesLuaTransport()
         self.transport = transport
-        self.source = Path(__file__).with_name('runtime.lua').read_text()
+        self.source = resident_source(Path(__file__).with_name('runtime.lua').read_text())
         self.features = dict(_RUNTIME_FEATURE_DEFAULTS)
         # The resident's last acknowledged lock and rarity intent. A same-process
         # Lua reset recreates the runtime table, so the bootstrap replays the

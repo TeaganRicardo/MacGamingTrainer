@@ -65,7 +65,7 @@ package final class TrainerLogSink {
     }
 
     private struct SessionRecord: Codable, Equatable {
-        static let currentSchemaVersion = 1
+        static let currentSchemaVersion = 2
 
         let schemaVersion: Int
         let id: String
@@ -77,11 +77,48 @@ package final class TrainerLogSink {
         let appVersion: String
         let appBuild: String
         var gameVersion: String?
-        var runtimeRevision: Int?
+        var runtimeRevision: String?
         var state: SessionState
         var endReason: String?
         let streams: [String: String]
         let legacy: Bool
+
+        private enum CodingKeys: String, CodingKey {
+            case schemaVersion, id, startedAt, endedAt, targetProcessName, targetBundleIdentifier
+            case targetPID, appVersion, appBuild, gameVersion, runtimeRevision, state, endReason, streams, legacy
+        }
+
+        init(from decoder: Decoder) throws {
+            let fields = try decoder.container(keyedBy: CodingKeys.self)
+            let version = try fields.decode(Int.self, forKey: .schemaVersion)
+            guard version == 1 || version == Self.currentSchemaVersion else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .schemaVersion, in: fields, debugDescription: "Unsupported session manifest schema"
+                )
+            }
+            let revision: String?
+            if version == 1 {
+                revision = try fields.decodeIfPresent(Int.self, forKey: .runtimeRevision).map { String($0) }
+            } else {
+                revision = try fields.decodeIfPresent(String.self, forKey: .runtimeRevision)
+            }
+            self.init(
+                id: try fields.decode(String.self, forKey: .id),
+                startedAt: try fields.decode(String.self, forKey: .startedAt),
+                endedAt: try fields.decodeIfPresent(String.self, forKey: .endedAt),
+                targetProcessName: try fields.decode(String.self, forKey: .targetProcessName),
+                targetBundleIdentifier: try fields.decode(String.self, forKey: .targetBundleIdentifier),
+                targetPID: try fields.decodeIfPresent(Int32.self, forKey: .targetPID),
+                appVersion: try fields.decode(String.self, forKey: .appVersion),
+                appBuild: try fields.decode(String.self, forKey: .appBuild),
+                gameVersion: try fields.decodeIfPresent(String.self, forKey: .gameVersion),
+                runtimeRevision: revision,
+                state: try fields.decode(SessionState.self, forKey: .state),
+                endReason: try fields.decodeIfPresent(String.self, forKey: .endReason),
+                streams: try fields.decode([String: String].self, forKey: .streams),
+                legacy: try fields.decode(Bool.self, forKey: .legacy)
+            )
+        }
 
         init(
             id: String,
@@ -93,7 +130,7 @@ package final class TrainerLogSink {
             appVersion: String,
             appBuild: String,
             gameVersion: String?,
-            runtimeRevision: Int?,
+            runtimeRevision: String?,
             state: SessionState,
             endReason: String?,
             streams: [String: String],
@@ -308,7 +345,7 @@ package final class TrainerLogSink {
 
     /// Add runtime identity once the game-owned resident has reported it.
     /// This enriches the same OS target session; it never creates a new one.
-    package func updateCurrentSessionRuntimeIdentity(gameVersion: String?, runtimeRevision: Int?) {
+    package func updateCurrentSessionRuntimeIdentity(gameVersion: String?, runtimeRevision: String?) {
         guard managedSessions, gameVersion != nil || runtimeRevision != nil else { return }
         queue.sync { [weak self] in
             guard let self, var record = self.activeSession ?? self.loadCurrentSessionLocked(),
@@ -326,7 +363,7 @@ package final class TrainerLogSink {
             do {
                 try self.writeSessionRecord(record)
                 let game = record.gameVersion ?? "unknown"
-                let revision = record.runtimeRevision.map { String($0) } ?? "unknown"
+                let revision = record.runtimeRevision ?? "unknown"
                 try self.appendLocked(
                     "session runtime gameVersion=\(game) residentRevision=\(revision)",
                     source: Stream.runtime.rawValue

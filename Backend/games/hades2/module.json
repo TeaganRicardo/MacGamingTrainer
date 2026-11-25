@@ -26,11 +26,6 @@
     "debuggerEntitlement": true,
     "entitlements": "Backend/games/hades2/trainer-entitlements.plist"
   },
-  "residentRuntime": {
-    "source": "runtime/hades.lua",
-    "previousRevisionPattern": "previousModule\\.revision\\s*~=\\s*(\\d+)",
-    "moduleRevisionPattern": "version\\s*=\\s*1\\s*,\\s*revision\\s*=\\s*(\\d+)"
-  },
   "nativeLibraries": [
     {
       "source": "native/EffectBlockQuery.c",
