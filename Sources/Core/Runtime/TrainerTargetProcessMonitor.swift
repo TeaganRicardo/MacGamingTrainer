@@ -202,8 +202,19 @@ final class TrainerTargetProcessMonitor: ObservableObject {
 
     private func matchesExecutablePath(_ path: String) -> Bool {
         guard !executablePathSuffix.isEmpty else { return false }
-        return URL(fileURLWithPath: path).standardizedFileURL.path
-            .hasSuffix("/" + executablePathSuffix)
+        let executable = URL(fileURLWithPath: path).standardizedFileURL
+        guard executable.path.hasSuffix("/" + executablePathSuffix) else { return false }
+        let macOS = executable.deletingLastPathComponent()
+        let contents = macOS.deletingLastPathComponent()
+        let bundle = contents.deletingLastPathComponent()
+        guard !bundleIdentifier.isEmpty,
+              macOS.lastPathComponent == "MacOS", contents.lastPathComponent == "Contents",
+              bundle.pathExtension == "app",
+              let data = try? Data(contentsOf: contents.appendingPathComponent("Info.plist")),
+              let info = (try? PropertyListSerialization.propertyList(from: data, options: [], format: nil)) as? [String: Any],
+              let identifier = info["CFBundleIdentifier"] as? String,
+              !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return true }
+        return identifier.trimmingCharacters(in: .whitespacesAndNewlines) == bundleIdentifier
     }
 
     private func currentRunningApplication() -> NSRunningApplication? {
@@ -221,8 +232,11 @@ final class TrainerTargetProcessMonitor: ObservableObject {
             guard let path = app.executableURL?.standardizedFileURL.path,
                   matchesExecutablePath(path) else { return false }
         }
-        if !bundleIdentifier.isEmpty, app.bundleIdentifier == bundleIdentifier {
-            return true
+        if !bundleIdentifier.isEmpty {
+            if let actual = app.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines), !actual.isEmpty {
+                return actual == bundleIdentifier
+            }
+            guard !executablePathSuffix.isEmpty else { return false }
         }
         guard !processName.isEmpty else { return false }
         if app.executableURL?.lastPathComponent == processName { return true }
