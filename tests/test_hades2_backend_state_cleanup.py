@@ -65,6 +65,21 @@ struct Main {
               "resource patch published an unrelated collection")
         withExtendedLifetime(publications) {}
 
+        model.applyBackendPayload(["elements": [
+            ["id": "Fire", "name": "Fire", "count": 4, "locked": true],
+            ["id": "Water", "name": "Water", "count": 8, "locked": false],
+            ["id": "Fire", "name": "Duplicate Fire", "count": 99, "locked": false],
+        ]])
+        check(model.elements.map(\.id) == ["Fire", "Water"] &&
+                model.elements[0].count == 4 && model.elements[0].locked,
+              "duplicate element identities escaped observation decoding")
+        let elementCounts = Dictionary(uniqueKeysWithValues: model.elements.map { ($0.id, $0.count) })
+        check(elementCounts == ["Fire": 4, "Water": 8], "unique element observations lost their values")
+        model.applyBackendPayload(["health": 91.0])
+        check(model.elements.map(\.id) == ["Fire", "Water"], "scalar patch erased element observations")
+        model.applyBackendPayload(["elements": []])
+        check(model.elements.isEmpty, "empty element snapshot retained stale identities")
+
         // An old name-level capability cannot authorize the selected-instance
         // action. The current capability preserves the exact row identity.
         var selectedTrait: [String: Any] = [
