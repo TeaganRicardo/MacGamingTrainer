@@ -29,7 +29,7 @@ class FakeAdapter:
         self.context = context
 
     def list_profiles(self):
-        return []
+        raise AssertionError("diagnostic export must not enumerate private user Profiles")
 
 
 diagnostics_source = (ROOT / "Backend/games/hades2/diagnostics.py").read_text(encoding="utf-8")
@@ -58,6 +58,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades2-diagnostics-contract-") as t
 
     assert "diagnosticBundle" not in report
     assert "checks" in report and "state" in report
+    assert "profiles" not in report
     for check in report["checks"]:
         name = check["name"]
         assert name.startswith("hades2.diagnostics.check."), name

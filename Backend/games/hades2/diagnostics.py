@@ -276,7 +276,6 @@ def build_diagnostics(adapter):
         'passed': sum(1 for item in checks if item['ok']),
         'total': len(checks),
         'state': dict(state),
-        'profiles': adapter.list_profiles(),
         'protocolVersion': HOST_PROTOCOL_VERSION,
         'moduleProtocolVersion': adapter.module_protocol_version,
         'backendVersion': APP_BACKEND_VERSION,
