@@ -175,8 +175,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-disconnect-lifecycle-") as temporar
                     native.close()
 
 with tempfile.TemporaryDirectory(prefix="mgt-replacement-observation-") as temporary:
-    for transition in ("attached_replacement", "detached_replacement", "exit_then_replacement"):
+    for transition in ("attached_replacement", "detached_replacement", "exit_then_replacement", "reused_pid"):
         visible_pid = 4141
+        replacement_pid = 4141 if transition == "reused_pid" else 5151
+        replacement_pending = False
 
         def query_target(_manifest, **_kwargs):
             if visible_pid is None:
@@ -184,7 +186,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-replacement-observation-") as tempo
             return LocatedTarget(visible_pid, Path("/tmp/Hades II.app/Contents/MacOS/Hades II"), None)
 
         def initial_probe(session, request):
-            if session.pid == 5151:
+            if replacement_pending:
                 assert request["command"] == "status"
                 return AdapterError("waiting", "synthetic replacement is still loading")
 
@@ -269,18 +271,21 @@ with tempfile.TemporaryDirectory(prefix="mgt-replacement-observation-") as tempo
                 assert exited["pid"] is None and exited["status"] == "not_running"
                 assert_observations_retired(exited)
 
-            visible_pid = 5151
+            if transition == "reused_pid":
+                resident.live = False
+            visible_pid = replacement_pid
+            replacement_pending = True
             found = adapter.dispatch("scan", {}, "find-replacement")
-            assert found["pid"] == 5151 and found["connected"] is False
+            assert found["pid"] == replacement_pid and found["connected"] is False
             assert_observations_retired(found)
 
             unlocked = adapter.dispatch("load_profile", {"name": "Unlocked"}, "load-profile")
-            assert unlocked["pid"] == 5151 and unlocked["connected"] is False
+            assert unlocked["pid"] == replacement_pid and unlocked["connected"] is False
             assert unlocked["loadedProfile"] == "Unlocked"
             assert_observations_retired(unlocked, locked=False)
 
             waiting = adapter.dispatch("connect", {"probeRuntime": True}, "connect-replacement")
-            assert waiting["pid"] == 5151 and waiting["connected"] is True and waiting["status"] == "waiting"
+            assert waiting["pid"] == replacement_pid and waiting["connected"] is True and waiting["status"] == "waiting"
             assert_observations_retired(waiting, locked=False)
 
             resident.handler = None
@@ -293,12 +298,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-replacement-observation-") as tempo
                 "stats": {"grasp": {"value": 13, "target": None, "locked": False}},
             }
             fresh = adapter.observe_runtime()
-            assert fresh["pid"] == 5151 and fresh["status"] == "ready" and fresh["health"] == 63
+            assert fresh["pid"] == replacement_pid and fresh["status"] == "ready" and fresh["health"] == 63
             assert fresh["currentRunTraits"] == [{"instanceId": "replacement-trait"}]
             assert fresh["resources"][0]["count"] == 3 and adapter.preferences == unlocked_desired
             adapter.disconnect()
             detached = adapter.dispatch("load_profile", {"name": "Unlocked"}, "load-after-observation")
-            assert detached["pid"] == 5151 and detached["connected"] is False
+            assert detached["pid"] == replacement_pid and detached["connected"] is False
             assert detached["money"] == 12 and detached["rerolls"] == 2
             assert detached["resources"][0]["count"] == 3 and detached["elements"][0]["count"] == 8
             assert detached["stats"]["grasp"]["value"] == 13
