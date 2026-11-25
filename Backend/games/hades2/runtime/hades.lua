@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 142 then
+if previousModule and previousModule.revision ~= 143 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 142 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 142,
+    version = 1, revision = 143,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -10444,9 +10444,11 @@ if __MacGamingTrainerV1 == nil then
           warning = enabled and routeWarning(bucket, door, diagnostics.routes) or nil,
         }
         if enabled then enabledCount = enabledCount + 1 end
-        -- An in-place reward edit needs no buildable room, so a refused own
-        -- type still leaves "current" for it.
-        if enabled and (id == currentKind or id == door.Room.Name) then currentListed = true end
+        -- A refused or room-only category cannot offer an in-place reward
+        -- edit, so it still leaves "current" for that operation.
+        if enabled and acceptsReward and (id == currentKind or id == door.Room.Name) then
+          currentListed = true
+        end
       end
       for _, kind in ipairs(type(routes) == "table" and routeOrder or {}) do
         if routes[kind] ~= nil then
@@ -10462,8 +10464,8 @@ if __MacGamingTrainerV1 == nil then
         end
       end
       if not currentListed then
-        -- The door leads to a room type the region does not build (an intro,
-        -- a boss, a region transition). Its reward can still change in place.
+        -- The door's own category has no reward submenu. Its reward can
+        -- still change in place, without building a different room.
         targets[#targets + 1] = {
           kind = "roomCategory", id = "current", enabled = true, acceptsReward = true,
         }

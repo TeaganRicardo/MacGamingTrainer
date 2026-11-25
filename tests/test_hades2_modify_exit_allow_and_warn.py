@@ -170,6 +170,40 @@ local storyReply = M.dispatch("apply_world_exit", {
 assert(storyReply.worldActions.exits[1].activeLease.room == "story"
     and storyReply.worldActions.exits[1].activeLease.reward == nil)
 
+-- A room-only category never replaces the existing room's reward menu.
+for _, roomName in ipairs({ "F_Story01", "F_Shop01", "F_Reprieve01" }) do
+  setRoomSet("F")
+  MapState.OfferedExitDoors = {
+    [1] = { ObjectId = 1, ChooseRoomArgs = {}, ForceRoomName = roomName },
+  }
+  DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+  local currentDoor = MapState.OfferedExitDoors[1]
+  currentDoor.ForceRoomName = nil
+  local currentRoom = currentDoor.Room
+  row = exitRow()
+  local currentTarget = target(row, "roomCategory", "current")
+  assert(currentTarget ~= nil and currentTarget.enabled == true
+      and currentTarget.acceptsReward == true,
+    roomName .. " lost its in-place reward menu")
+  assert(target(row, "reward", "ZeusUpgrade").enabled == true,
+    roomName .. " refused its in-place reward")
+  local reply = M.dispatch("apply_world_exit", {
+    doorToken = row.doorToken, room = "current", reward = "ZeusUpgrade",
+    requestId = roomName .. "-zeus", includeCatalogs = true,
+  })
+  local currentLease = reply.worldActions.exits[1].activeLease
+  assert(currentLease.room == "current" and currentLease.reward == "ZeusUpgrade"
+      and currentDoor.Room == currentRoom and currentDoor.Room.Name == roomName
+      and currentDoor.Room.ForceLootName == "ZeusUpgrade",
+    roomName .. " did not retain its room during the reward edit")
+  M.dispatch("cancel_world_exit", {
+    doorToken = reply.worldActions.exits[1].doorToken, leaseToken = currentLease.leaseToken,
+    requestId = roomName .. "-cancel", includeCatalogs = true,
+  })
+  assert(currentDoor.Room == currentRoom and currentDoor.Room.ForceLootName == nil,
+    roomName .. " did not restore its original reward")
+end
+
 -- 5. A door whose room type the region does not build (an intro, a region
 -- transition) keeps an in-place reward edit under "current".
 RoomData.Q_Intro = { Name = "Q_Intro", RoomSetName = "Q" }
