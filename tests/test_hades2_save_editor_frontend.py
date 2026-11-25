@@ -183,7 +183,8 @@ for raw in sys.stdin:
             scope = req['params'].get('scope', 'all')
             term = req['params']['search'].lower()
             items = []
-            if scope in ('all', 'resources') and (not term or 'ash' in term or term == 'invalid-offset'):
+            if scope in ('all', 'resources') and (
+                    not term or 'ash' in term or term in ('invalid-offset', 'missing-evidence-fixture')):
                 items = [{
                     'id': 'resource:MetaCurrency', 'domain': 'resources',
                     'rawId': 'MetaCurrency',
@@ -491,6 +492,7 @@ for raw in sys.stdin:
             'items': [] if domain == 'entities' else items,
             'entities': list(groups.values()) if domain == 'entities' else [],
             'sourceStatus': 'available' if domain == 'investigate' else None,
+            'nativeEvidenceUnavailable': req['params']['search'] == 'missing-evidence-fixture',
         }
         if domain == 'entities':
             result['scope'] = req['params']['scope']
@@ -1819,6 +1821,21 @@ struct Main {
         pump(0.20)
         if model.queryFailure == nil {
             fail("A boolean query offset was accepted as a numeric offset")
+        }
+
+        model.selectDomain(.entities)
+        model.search = "missing-evidence-fixture"
+        model.submitSearch()
+        pumpUntil { !model.querying }
+        guard model.queryFailure?.key == "hades2.saveEditor.error.evidenceUnavailable",
+              !model.items.isEmpty, model.items[0].editable else {
+            fail("Unavailable native evidence hid parsed Save rows or lost its specific warning")
+        }
+        model.search = ""
+        model.submitSearch()
+        pumpUntil { !model.querying }
+        if model.queryFailure != nil {
+            fail("Restored source evidence left a stale query warning")
         }
 
         // A scene found by the all-content search must open authored details

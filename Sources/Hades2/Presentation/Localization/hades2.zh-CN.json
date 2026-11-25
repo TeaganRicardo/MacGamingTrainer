@@ -484,6 +484,7 @@
     "hades2.saveEditor.error.invalidMutation": "请求的存档修改无效。",
     "hades2.saveEditor.error.invalidQuery": "存档编辑器查询参数无效。",
     "hades2.saveEditor.error.invalidResponse": "存档编辑器返回的数据格式无效。",
+    "hades2.saveEditor.error.evidenceUnavailable": "原生源码参考数据缺失或无效，无法调查原生内容或执行相关操作。存档字段仍可浏览和编辑。",
     "hades2.saveEditor.error.linkedChangesConflict": "关联影响与这些暂存操作冲突：{0}。请在“修改清单”中修改或移除相关操作。",
     "hades2.saveEditor.error.lockedWeaponHasAspects": "武器仍有已解锁的形态时不能锁定：{0}。请修改武器或形态操作。",
     "hades2.saveEditor.error.notOpen": "请先打开存档编辑器。",

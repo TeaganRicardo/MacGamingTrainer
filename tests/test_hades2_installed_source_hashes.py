@@ -8,6 +8,7 @@ import re
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +17,8 @@ sys.path.insert(0, str(ROOT / "Tools"))
 
 from games.hades2 import config, save_advanced, save_native_ids, save_quest_rewards
 from games.hades2.save_investigation import NativeDialogueInvestigation, supported_source_hashes
+from games.hades2.save_document import LuaTable
+from games.hades2.save_workspace import Hades2SaveWorkspace
 from supported_build import supported_reference_directory
 
 NAME = "installed_source_hashes.json"
@@ -32,6 +35,10 @@ def expect_value_error(action, label):
     except ValueError:
         return
     raise AssertionError("unverifiable installed-source hashes were trusted: " + label)
+
+
+def table(values):
+    return LuaTable(0, len(values), list(values.items()))
 
 
 def game_fixture(base, *, story_reset=True):
@@ -139,6 +146,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-source-hashes-game-") as temporary:
         "bad digest": json.dumps({"owners": {"storyReset": {"files": {"StoryResetData.lua": "F" * 64}},
                                              "questRewardOwners": {"files": {"ResourceLogic.lua": "0" * 63}}}}),
         "absent owner": json.dumps({"owners": {"other": {"files": {"Other.lua": "0" * 64}}}}),
+        "wrong story owner": json.dumps({"owners": {"storyReset": {"files": {"Other.lua": "0" * 64}}}}),
         "path in file name": json.dumps({"owners": {"storyReset": {"files": {"../StoryResetData.lua": "0" * 64}},
                                                     "questRewardOwners": {"files": {"ResourceLogic.lua": "0" * 64}}}}),
     }
@@ -149,11 +157,41 @@ with tempfile.TemporaryDirectory(prefix="mgt-source-hashes-game-") as temporary:
         with patch.object(config, "supported_reference_path", lambda name, *args, _path=path: _path):
             expect_value_error(lambda: supported_source_hashes("questRewardOwners"), label)
             expect_value_error(lambda: NativeDialogueInvestigation(base / "game"), label + " (investigation)")
+            saved = table({"GameState": table({
+                "Resources": table({"MetaCurrency": 12}),
+                "QuestStatus": table({"QuestCatchFish": "Unlocked"}),
+                "MetaUpgradeState": table({"ChanneledCast": table({"Unlocked": True, "Level": 2, "Equipped": False})}),
+                "TextLinesRecord": table({}),
+            }), "CurrentRun": table({})})
+            work = Hades2SaveWorkspace(
+                SimpleNamespace(document=SimpleNamespace(lua_state=saved), relative_path="Profile1.sav"),
+                "Profile1", game_path=base / "game",
+            )
+            page = work.query(domain="entities", language="en", limit=200)
+            assert page["nativeEvidenceUnavailable"] is True
+            assert any(group["id"] == "entry:resource:MetaCurrency" for group in page["entities"])
+            arcana = work.query(domain="arcana", language="en")
+            assert arcana["nativeEvidenceUnavailable"] is True
+            assert any(row["id"] == "card:ChanneledCast:Level" and row["value"] == 2 for row in arcana["items"])
+            work.stage("card:ChanneledCast:Level", "set", 3)
+            assert work.review()["actionCount"] == 1
+            work.cancel()
+            for action in (lambda: work.query(domain="investigate", language="en"),
+                           lambda: work.stage("questClaim:QuestCatchFish", "set", True)):
+                try:
+                    action()
+                except ValueError as error:
+                    assert error.presentation == "hades2.saveEditor.error.evidenceUnavailable"
+                else:
+                    raise AssertionError("source-dependent operation accepted missing reference evidence")
             try:
                 save_quest_rewards._reward(None, "QuestCatchFish", investigation, native=verified)
             except save_advanced.AdvancedMutationError:
                 pass
             else:
                 raise AssertionError("quest reward granted without verified owner hashes: " + label)
+
+    # A later successful query clears the browse warning when the reference is restored.
+    assert work.query(domain="entities", language="en")["nativeEvidenceUnavailable"] is False
 
 print("hades2_installed_source_hashes_ok")
