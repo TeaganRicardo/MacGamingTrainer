@@ -23,6 +23,7 @@ struct TrainerConnectionPolicy {
     private var retainedTargetExitRefresh = false
     private var observedLaunchGeneration: UInt = 0
     private var awaitingDefinitiveLaunch = false
+    private var backendRecoveryConsumed = false
 
     /// Consume an atomic process-presence/launch-generation observation.
     /// Activation or refresh can establish presence for Save safety before
@@ -54,6 +55,7 @@ struct TrainerConnectionPolicy {
             // that stale observation is refreshed, even if a replacement target
             // has already launched.
             automaticConnectionSuppressed = false
+            backendRecoveryConsumed = false
             if allowAutomaticConnect {
                 backendRestartRequested = true
                 connectRequested = true
@@ -77,6 +79,7 @@ struct TrainerConnectionPolicy {
         targetExitRefreshRequested = true
         automaticConnectionSuppressed = false
         backgroundConnectionAllowed = true
+        backendRecoveryConsumed = false
         backendRestartRequested = true
         connectRequested = true
     }
@@ -95,6 +98,12 @@ struct TrainerConnectionPolicy {
         // A recovered/restarted backend gets one chance to restore the debugger
         // connection, unless the user explicitly detached this target lifetime.
         connectRequested = true
+    }
+
+    /// A spawned process has not proved it can serve requests. Only a verified
+    /// backend reply starts a fresh recovery episode for the same target.
+    mutating func backendBecameReady() {
+        backendRecoveryConsumed = false
     }
 
     mutating func backendBecameUnavailable() {
@@ -116,6 +125,12 @@ struct TrainerConnectionPolicy {
         // Future lifecycle events may reconnect if this attempt fails.
         automaticConnectionSuppressed = false
         backgroundConnectionAllowed = false
+        backendRecoveryConsumed = false
+    }
+
+    mutating func userWillRestartBackend() {
+        backendRecoveryConsumed = false
+        backendRestartRequested = false
     }
 
     mutating func connectionChanged(connected: Bool) {
@@ -191,11 +206,13 @@ struct TrainerConnectionPolicy {
             return false
         }
         guard backendRestartRequested,
+              !backendRecoveryConsumed,
               targetRunning,
               !awaitingDefinitiveLaunch,
               !busy,
               recoveryAllowed else { return false }
         backendRestartRequested = false
+        backendRecoveryConsumed = true
         return true
     }
 

@@ -39,6 +39,10 @@ from pathlib import Path
 parser = argparse.ArgumentParser()
 parser.add_argument("--game", required=True)
 args = parser.parse_args()
+if Path(__file__).with_suffix(".crash").exists():
+    with Path(__file__).with_suffix(".starts").open("a", encoding="utf-8") as output:
+        output.write("start\n")
+    sys.exit(7)
 for raw in sys.stdin:
     request = json.loads(raw)
     if request["command"] == "wait":
@@ -1084,6 +1088,34 @@ struct Runner {
             let afterLaunch = sendRuntimeRequest("allowed-after-launch")
             check(afterLaunch.completed && afterLaunch.failure == nil,
                   "runtime request failed after definitive launch released trust gate")
+        }
+
+        // 10. A worker that exits before a verified reply exhausts the session
+        // retries and one Host fallback, even with a foreground detached target.
+        do {
+            let crashMarker = workerURL.deletingPathExtension().appendingPathExtension("crash")
+            let startsURL = workerURL.deletingPathExtension().appendingPathExtension("starts")
+            try Data().write(to: crashMarker)
+            defer { try? FileManager.default.removeItem(at: crashMarker) }
+            app.fakeActive = true
+            defer { app.fakeActive = false }
+            let model = LifecycleStubModel()
+            model.connected = true
+            let context = makeContext(LifecycleStubModule.self, model: model)
+            defer { context.session.stop() }
+            postWorkspace(NSWorkspace.didLaunchApplicationNotification, pid: 41010)
+            context.performConnectionAction()
+            model.connected = false
+            model.notifyChanged()
+            waitUntil(5, message: "startup crash recovery exhausts") {
+                model.restartBackendCount >= 1 && !context.session.isStarted && !context.backendStatus.busy
+            }
+            pump(0.25)
+            let starts = try String(contentsOf: startsURL, encoding: .utf8).split(separator: "\n")
+            check(model.restartBackendCount == 1 && starts.count == 4,
+                  "unverified worker repeatedly rearmed Host fallback: \(model.restartBackendCount), \(starts.count)")
+            check(!context.backendStatus.backendAvailable && !context.backendStatus.busy,
+                  "exhausted startup crash did not settle")
         }
 
         print("core_host_lifecycle_macos_ok")
