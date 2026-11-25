@@ -24,7 +24,7 @@ struct TrainerConnectionStatusCard: View {
         onPrimary: @escaping () -> Void,
         onRestart: @escaping () -> Void,
         targetRunning: Bool = true,
-        onLaunch: (() -> Void)? = nil
+        onLaunch: (@MainActor () -> Void)? = nil
     ) {
         self.connected = connected
         self.backendAvailable = backendAvailable
