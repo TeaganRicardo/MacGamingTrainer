@@ -152,12 +152,18 @@ class Hades2Adapter(GameAdapter):
                     'featureErrorPresentations':{},
                     'capabilities':disconnected_capabilities()}
         migration_failures = migrate_legacy_root_data_dir(self.context.data_dir)
+        self._legacy_desired_state_migration_failed = any(
+            failure.startswith('desired-state.json:') for failure in migration_failures
+        )
         self._startup_warnings = ['hades2.warning.dataMigrationFailed'] if migration_failures else []
         if self._startup_warnings:
             self.state['warnings'] = list(self._startup_warnings)
         self.preference_store=Hades2PreferenceStore(self.context.data_dir/'desired-state.json')
         self.preferences,self.preference_initialized=self.preference_store.load()
-        self.preference_write_blocked=self.preference_store.write_blocked_error is not None
+        self.preference_write_blocked=(
+            self.preference_store.write_blocked_error is not None
+            or self._legacy_desired_state_migration_failed
+        )
         self.profile_service=Hades2ProfileService(self.context.data_dir/'profiles')
         self.command_contract=Hades2CommandContract(self)
         self.reply_projection=Hades2ReplyProjection()
@@ -213,7 +219,15 @@ class Hades2Adapter(GameAdapter):
         # Durable-write pending is owned separately and cannot be cleared here.
         self._preference_runtime_dirty=bool(value)
 
+    def _require_preference_writes_available(self):
+        if self._legacy_desired_state_migration_failed:
+            raise PersistenceError(
+                'The legacy Hades II desired-state file could not be migrated. '
+                'Edits are read-only until the original file can be moved safely and the backend is restarted.'
+            )
+
     def _persist_preferences_candidate(self,preferences):
+        self._require_preference_writes_available()
         # Candidate writes happen before adopting new in-memory desired state.
         # A successful full-document write also resolves any older persistence
         # pending state carried by the current desired snapshot.
@@ -221,6 +235,7 @@ class Hades2Adapter(GameAdapter):
         self._preference_persistence_dirty=False
 
     def _save_preferences(self):
+        self._require_preference_writes_available()
         try:
             self.preference_store.save(self.preferences)
         except PersistenceError:
