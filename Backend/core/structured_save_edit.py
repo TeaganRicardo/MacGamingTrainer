@@ -665,9 +665,12 @@ class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
         return self._workspaces[identifier]
 
     def require_baseline(self, identifier: object, generation: object) -> _Workspace:
-        workspace = self.require(identifier)
+        if not isinstance(identifier, str) or not identifier or identifier not in self._workspaces:
+            raise self._not_open_error(identifier)
+        workspace = self._workspaces[identifier]
         if generation != workspace.baseline_generation:
             raise self._stale_baseline_error()
+        self._workspaces.move_to_end(identifier)
         return workspace
 
     def rotate_baseline(self, identifier: str) -> str:

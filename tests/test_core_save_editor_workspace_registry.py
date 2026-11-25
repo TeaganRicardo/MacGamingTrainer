@@ -216,6 +216,12 @@ def main():
 
         # Touch w1 so w2 becomes LRU and gets evicted when w3 opens.
         registry.require(id1)
+        try:
+            registry.require_baseline(id2, "stale-baseline")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("stale workspace request was accepted")
         w3 = registry.handle("open", {"source": {"rootId": "main", "relativePath": "Profile1.sav"}})
         id3 = w3["workspaceId"]
         assert id1 in registry and id3 in registry and id2 not in registry
