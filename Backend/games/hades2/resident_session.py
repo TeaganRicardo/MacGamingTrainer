@@ -543,9 +543,9 @@ class Hades2ResidentSession:
                     source,
                     expression_timeout_seconds=expression_timeout_seconds,
                 )
+            crossed = True
             if self._recovery is not None:
                 self._recovery.require_current(recovery_request, self.pid)
-            crossed = True
             boundary_duration = getattr(self._transport, "last_duration", 0.0)
             if type(boundary_duration) not in (int, float) or boundary_duration <= 0:
                 boundary_duration = time.monotonic() - started
