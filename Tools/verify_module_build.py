@@ -124,11 +124,17 @@ def verify_module_build(game_id, dist_dir):
         ):
             raise ValueError(f'Packaged Process Time Warp helper is missing or unsafe: {time_warp_native}')
         expected_arches = process_time_warp_architectures(manifest.normalized())
-        try:
-            subprocess.run(['xcrun', 'lipo', '-verify_arch', *expected_arches, str(helper)],
-                           check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as error:
-            raise ValueError(f'Process Time Warp helper lacks target slices {expected_arches}: {helper}') from error
+        # cctools consumes the entire -verify_arch tail; LLVM consumes one arch.
+        # A leading input and one required slice per call work with both parsers.
+        for architecture in expected_arches:
+            try:
+                subprocess.run(['xcrun', 'lipo', str(helper), '-verify_arch', architecture],
+                               check=True, capture_output=True, text=True)
+            except subprocess.CalledProcessError as error:
+                detail = (error.stderr or error.stdout or str(error)).strip()
+                raise ValueError(
+                    f'Process Time Warp helper failed target-slice verification for {architecture}: {helper}\n{detail}'
+                ) from error
     elif any((time_warp_native / name).exists() or (time_warp_native / name).is_symlink()
              for name in ('libMGTTimeWarp.dylib', 'LICENSE.fishhook')):
         raise ValueError(f'Unrequested Process Time Warp artifacts were packaged: {time_warp_native}')

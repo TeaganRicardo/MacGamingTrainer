@@ -1,5 +1,6 @@
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -207,6 +208,56 @@ def test_product_contains_hades_resources_and_isolated_modules_exclude_them():
             else:
                 raise AssertionError('opted-out Time Warp artifacts were accepted')
             unwanted_helper.unlink()
+
+            # cctools consumes every argument after -verify_arch as an arch;
+            # LLVM's parser consumes one arch and treats the rest as inputs.
+            # Exercise both contracts, including a missing slice.
+            selected_manifest = project / 'Backend/games/hades/module.json'
+            selected_original = selected_manifest.read_text()
+            selected = json.loads(selected_original)
+            selected['buildRequirements']['processTimeWarp'] = True
+            selected_manifest.write_text(json.dumps(selected))
+            packaged_manifest = res_dir / 'Backend/games/hades/module.json'
+            shutil.copy2(selected_manifest, packaged_manifest)
+            license_relative = Path('Native/ProcessTimeWarp/vendor/fishhook/LICENSE')
+            (project / license_relative).parent.mkdir(parents=True)
+            shutil.copy2(ROOT / license_relative, project / license_relative)
+            license_path = unrelated_native.parent / 'LICENSE.fishhook'
+            shutil.copy2(project / license_relative, license_path)
+
+            for parser in ('cctools', 'llvm'):
+                observed_arches = []
+
+                def lipo(command, **_options):
+                    args = command[2:]
+                    option = args.index('-verify_arch')
+                    requested = args[option + 1:] if parser == 'cctools' else args[option + 1:option + 2]
+                    inputs = args[:option] + ([] if parser == 'cctools' else args[option + 2:])
+                    if len(inputs) != 1 or any(arch not in ('arm64', 'x86_64') for arch in requested):
+                        raise subprocess.CalledProcessError(1, command, stderr='fixture lipo: invalid input/architecture arguments')
+                    available = json.loads(Path(inputs[0]).read_text())
+                    observed_arches.extend(requested)
+                    if not set(requested).issubset(available):
+                        raise subprocess.CalledProcessError(1, command, stderr='fixture lipo: missing target slice')
+                    return subprocess.CompletedProcess(command, 0, '', '')
+
+                with patch.object(verify_module_build, 'process_time_warp_architectures', return_value=['x86_64', 'arm64']), \
+                     patch.object(verify_module_build.subprocess, 'run', side_effect=lipo):
+                    unwanted_helper.write_text(json.dumps(['x86_64', 'arm64']))
+                    assert verify_module_build.verify_module_build('hades', dist) == app_path.resolve()
+                    assert observed_arches == ['x86_64', 'arm64']
+                    unwanted_helper.write_text(json.dumps(['x86_64']))
+                    try:
+                        verify_module_build.verify_module_build('hades', dist)
+                    except ValueError as error:
+                        assert 'missing target slice' in str(error)
+                    else:
+                        raise AssertionError('helper missing a required target slice was accepted')
+
+            selected_manifest.write_text(selected_original)
+            shutil.copy2(selected_manifest, packaged_manifest)
+            unwanted_helper.unlink()
+            license_path.unlink()
 
             # A module-relative name may equal a real Host-owned root file.
             # Test both non-selected and selected module declarations.
