@@ -108,6 +108,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private var receiptPresentedDuringReply = false
     private var presentedDataMigrationWarning = false
     @Published private(set) var receivedActionResultText: TrainerTextToken?
+    @Published private(set) var recoveryText: TrainerTextToken?
+    private var recoveryTargetPID: Int?
     @Published private(set) var runtimeIssuePresentations: [Hades2RuntimeIssuePresentation] = []
     private var runtimeFeatureErrors: [String: String] = [:]
     private var runtimeFeaturePresentationTokens: [String: TrainerTextToken] = [:]
@@ -517,10 +519,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
-        if connected || pid != nil {
+        if connected || pid != nil || recoveryText != nil {
             resetTargetObservation()
             status = observation.isRunning ? "disconnected" : "not_running"
         }
+        recoveryText = nil
+        recoveryTargetPID = nil
         launchAttachGate.targetLifetimeChanged()
         pendingRunReadySignal = false
         runLogWatcher.targetLifetimeChanged(running: observation.isRunning)
@@ -766,6 +770,25 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         applyManagementPatch(patch)
     }
 
+    private func applyRecoveryPatch(_ value: Any?) {
+        guard let recovery = value as? [String: Any] else {
+            recoveryText = nil
+            recoveryTargetPID = nil
+            return
+        }
+        let recoveryPID = recovery["pid"] as? Int
+        let observedPID = services.targetObservation.processIdentifier.map(Int.init) ?? pid
+        if let observedPID, let recoveryPID, observedPID != recoveryPID { return }
+        let key: String
+        switch recovery["outcome"] as? String {
+        case "unknown": key = "hades2.error.restartRequired"
+        case "confirmed": key = "hades2.recovery.confirmed"
+        default: key = "hades2.error.recoveryFailed"
+        }
+        recoveryTargetPID = recoveryPID ?? observedPID
+        recoveryText = TrainerTextToken(key: key)
+    }
+
     func applyBackendPayload(_ payload: [String: Any]) {
         let patch = Hades2StatePatch(payload)
         let runtimeDiagnostics = payload["runtimeDiagnostics"] as? [String: Any]
@@ -780,6 +803,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.pid.isPresent, oldPID != patch.pid.value { invalidateTextEdits() }
         if let value = patch.connected { connected = value }
         if patch.pid.isPresent { pid = patch.pid.value }
+        // Recovery belongs to the game lifetime and survives backend stops.
+        // Sparse replies preserve it; an explicit null or new PID retires it.
+        if let pid, let recoveryTargetPID, pid != recoveryTargetPID {
+            recoveryText = nil
+            self.recoveryTargetPID = nil
+        }
+        if payload.keys.contains("recovery") { applyRecoveryPatch(payload["recovery"]) }
         // Preserve a same-process observation across sparse replies. An
         // explicit null (unlike an absent diagnostics field) invalidates it.
         if !connected || (patch.pid.isPresent && oldPID != pid) {

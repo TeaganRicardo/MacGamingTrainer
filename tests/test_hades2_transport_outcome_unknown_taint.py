@@ -386,6 +386,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
 
         # A persisted durable feature remains pending. Resident world-action
         # receipts are observation only and must never be promoted to persistence.
+        context = hades2_adapter_context(Path(temporary) / 'dirty')
         desired = Hades2PreferenceStore.defaults()
         desired.update(invincibility=True)
         context.data_dir.mkdir(parents=True, exist_ok=True); store = Hades2PreferenceStore(context.data_dir / 'desired-state.json')
@@ -410,7 +411,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
         # Observation-only status has the same trust rule without adopting the
         # runtime's desired state, and known failures do not taint the session.
         observation_transport = AsyncUnknownTransport()
-        observation_adapter = Hades2Adapter(context=context, transport=observation_transport)
+        observation_adapter = Hades2Adapter(
+            context=hades2_adapter_context(Path(temporary) / 'observe'), transport=observation_transport)
         try:
             observation_adapter.observe_runtime()
         except AdapterError as error:
@@ -421,7 +423,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
         for outcome in ('accepted', 'completed', 'failed'):
             known_transport = AsyncUnknownTransport()
             known_transport.payload['lastAction']['outcome'] = outcome
-            known_adapter = Hades2Adapter(context=context, transport=known_transport)
+            known_adapter = Hades2Adapter(
+                context=hades2_adapter_context(Path(temporary) / ('known-' + outcome)), transport=known_transport)
             result = known_adapter.observe_runtime()
             assert not known_transport.tainted and len(known_transport.calls) == 1
             assert result['lastAction']['outcome'] == outcome

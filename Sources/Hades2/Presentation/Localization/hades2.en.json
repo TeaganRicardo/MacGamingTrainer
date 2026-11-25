@@ -182,6 +182,8 @@
     "hades2.error.requestIdRequired": "This operation needs a request id before it can run safely.",
     "hades2.error.requestIdReused": "That request id was already used for a different action; please retry.",
     "hades2.error.residentCleanupFailed": "The previous resident runtime could not be cleaned up safely. Quit and restart the game before reconnecting.",
+    "hades2.recovery.confirmed": "The previous operation’s reply was received before the connection failed. The action will not be repeated automatically. Reconnect to verify the runtime before restoring saved settings.",
+    "hades2.error.recoveryFailed": "Runtime recovery could not be read or saved safely. Further game changes are blocked; keep the recovery file and restart the backend after resolving the storage problem.",
     "hades2.error.restartRequired": "The previous call result is unknown; the action may have executed. Do not repeat it. Inspect the game state and restart Hades II before reconnecting.",
     "hades2.error.restoreUUIDMismatch": "The original restore copy UUID does not match; the game was not modified.",
     "hades2.error.resumeFailed": "The game could not be resumed: {0}",

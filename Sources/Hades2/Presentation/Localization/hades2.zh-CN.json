@@ -182,6 +182,8 @@
     "hades2.error.requestIdRequired": "此操作需要请求 ID 才能安全执行。",
     "hades2.error.requestIdReused": "该请求 ID 已用于另一个操作，请重试。",
     "hades2.error.residentCleanupFailed": "旧版驻留运行时未能安全清理。请完全退出并重新启动游戏后再连接。",
+    "hades2.recovery.confirmed": "上次操作的结果已收到，随后连接中断。系统不会自动重复该操作。重新连接并确认运行时就绪后，才会恢复已保存的设置。",
+    "hades2.error.recoveryFailed": "无法安全读取或保存运行时恢复记录。已阻止后续游戏修改；请保留恢复文件，解决存储问题后重启后端。",
     "hades2.error.restartRequired": "上次调用结果不明，操作可能已执行。请勿重复此操作；请先检查游戏状态，重新启动 Hades II 后再连接。",
     "hades2.error.restoreUUIDMismatch": "原始恢复副本 UUID 不匹配；未修改游戏。",
     "hades2.error.resumeFailed": "无法恢复游戏运行：{0}",

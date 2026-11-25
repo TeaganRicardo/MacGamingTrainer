@@ -99,7 +99,15 @@ with tempfile.TemporaryDirectory(prefix="mgt-operation-liveness-") as temporary:
     ):
         transport = Hades2LuaTransport()
         transport.attach(4242)
-        adapter = Hades2Adapter(context=hades2_adapter_context(temporary), transport=transport, time_warp_controller=FakeTimeWarpController())
+        adapter = Hades2Adapter(context=hades2_adapter_context(temporary), transport=transport,
+                                time_warp_controller=FakeTimeWarpController(), identity=lambda pid: f'fixture-{pid}')
+
+        def reconnect(pid):
+            def scan_fixture():
+                adapter.state.update(pid=pid, connected=False)
+                return dict(adapter.state)
+            with patch.object(adapter, 'scan', side_effect=scan_fixture):
+                adapter.connect(probe_runtime=False)
         adapter.preference_initialized = True
         adapter.preference_dirty = False
         adapter.state.update(connected=True, pid=4242, capabilities={"setFeature": True})
@@ -125,7 +133,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-operation-liveness-") as temporary:
             raise AssertionError("target loss was accepted")
         assert native.entries == entries and transport.pid is None
         assert adapter.state["connected"] is False
-        transport.attach(4343)
+        assert not (adapter.context.data_dir / 'runtime-recovery.json').exists(), 'known pre-execution disconnect retained uncertainty'
+        reconnect(4343)
         assert adapter.execute("status", {})["pid"] == 4343
 
         # Known idle worker loss must not spawn a fresh un-attached worker and
@@ -142,7 +151,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-operation-liveness-") as temporary:
         assert not sidecar.calls and native.entries == entries
 
         sidecar.started = True
-        transport.attach(4343)
+        reconnect(4343)
         native.loss = "after_execution"
         sidecar.calls.clear()
         try:
@@ -194,7 +203,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-operation-liveness-") as temporary:
         ):
             transport = Hades2LuaTransport()
             transport.attach(4242)
-            adapter = Hades2Adapter(context=hades2_adapter_context(temporary), transport=transport, time_warp_controller=speed)
+            adapter = Hades2Adapter(context=hades2_adapter_context(Path(temporary) / request_id), transport=transport,
+                                    time_warp_controller=speed, identity=lambda pid: f'fixture-{pid}')
             adapter.preference_initialized = True
             adapter.preference_dirty = True
             adapter.preferences["invincibility"] = True

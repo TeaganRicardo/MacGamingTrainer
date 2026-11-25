@@ -60,6 +60,7 @@ class ResidentReply:
     generation_reset: bool = False
     outcome_unknown: bool = False
     connection_error: Optional["ResidentConnectionError"] = None
+    recovery_request: object = None
 
 
 class ResidentSessionError(AdapterError):
@@ -122,8 +123,9 @@ def lua_value(value):
 
 
 class Hades2ResidentSession:
-    def __init__(self, transport, bootstrap=None, game_path=None):
+    def __init__(self, transport, bootstrap=None, game_path=None, recovery=None):
         self._transport = transport
+        self._recovery = recovery
         if bootstrap is None:
             bootstrap = (Path(__file__).with_name("runtime") / "hades.lua").read_text()
         self._bootstrap = bootstrap
@@ -152,6 +154,12 @@ class Hades2ResidentSession:
     @property
     def connection_error(self):
         return self._connection_error
+
+    @property
+    def transport_tainted(self):
+        # Cleanup may fail after game execution and replace the primary error.
+        # The transport's sticky trust evidence remains authoritative then.
+        return bool(getattr(self._transport, 'tainted', False))
 
     @property
     def has_attachment(self):
@@ -218,6 +226,15 @@ class Hades2ResidentSession:
                 or (error.code == "lua_error" and "__MacGamingTrainerV1" in message and "nil value" in message))
 
     def _acknowledge_result(self, reply, *, handoff=False):
+        if self._recovery is not None:
+            self._recovery.require_current(reply.recovery_request, self.pid)
+            receipt = {'actionOutcome': 'not_executed'} if handoff else {
+                key: reply.payload[key] for key in ('requestId', 'actionOutcome', 'applied', 'lastAction')
+                if key in reply.payload
+            }
+            # Persist the decoded receipt before releasing the transport. A
+            # crash or failed ACK must never relabel a known action as unknown.
+            self._recovery.confirm(reply.recovery_request, receipt)
         acknowledge = getattr(self._transport, "acknowledge_result", None)
         try:
             if acknowledge is not None:
@@ -235,6 +252,9 @@ class Hades2ResidentSession:
             )
             self.invalidate_generation()
             return self._connection_error
+        if self._recovery is not None:
+            self._recovery.require_current(reply.recovery_request, self.pid)
+            self._recovery.complete(reply.recovery_request)
         return None
 
     @staticmethod
@@ -316,6 +336,7 @@ class Hades2ResidentSession:
                     expression_timeout_seconds=(
                         _REPLAY_EXPRESSION_TIMEOUT_SECONDS if batch is not None else None
                     ),
+                    request_id=runtime_params.get('requestId'),
                 )
             except TransportError as error:
                 if self._resident_cleanup_failed(error):
@@ -390,6 +411,8 @@ class Hades2ResidentSession:
                 and last_action.get("outcome") == "outcome_unknown")
         )
         if outcome_unknown:
+            if self._recovery is not None:
+                self._recovery.unknown(reply.recovery_request, last_action)
             self._transport.tainted = True
         if (
             isinstance(last_action, dict)
@@ -505,7 +528,8 @@ class Hades2ResidentSession:
             + " end)())"
         )
 
-    def _cross(self, command, source, *, replay, read_only, expression_timeout_seconds):
+    def _cross(self, command, source, *, replay, read_only, expression_timeout_seconds, request_id=None):
+        recovery_request = self._recovery.begin(self.pid, command, request_id) if self._recovery is not None else None
         started = time.monotonic()
         crossed = False
         json_duration = 0.0
@@ -519,6 +543,8 @@ class Hades2ResidentSession:
                     source,
                     expression_timeout_seconds=expression_timeout_seconds,
                 )
+            if self._recovery is not None:
+                self._recovery.require_current(recovery_request, self.pid)
             crossed = True
             boundary_duration = getattr(self._transport, "last_duration", 0.0)
             if type(boundary_duration) not in (int, float) or boundary_duration <= 0:
@@ -536,6 +562,18 @@ class Hades2ResidentSession:
             localize_duration = time.monotonic() - phase
             record("resident.localization", localize_duration, response_kind="marker" if _TRAIT_TRAY_HANDOFF_KEY in payload else "full")
         except Exception as error:
+            if self._recovery is not None:
+                known_failure = (not crossed and isinstance(error, AdapterError)
+                                 and not self.transport_tainted
+                                 and not self._resident_cleanup_failed(error)
+                                 and error.code not in ('outcome_unknown', 'restart_required', 'restore_failed'))
+                # A verified pre-execution disconnect can clear the transport's
+                # PID. Resolve only this owned request; a replacement journal or
+                # binding still fails the immutable ownership check.
+                target_pid = recovery_request.pid if known_failure and self.pid is None else self.pid
+                self._recovery.require_current(recovery_request, target_pid)
+                if known_failure:
+                    self._recovery.complete(recovery_request)
             boundary_duration = getattr(self._transport, "last_duration", 0.0)
             if type(boundary_duration) not in (int, float) or boundary_duration <= 0:
                 boundary_duration = time.monotonic() - started
@@ -587,4 +625,5 @@ class Hades2ResidentSession:
             bool(read_only),
             metrics.expression_duration,
         )
-        return ResidentReply(payload=payload, metrics=metrics, generation_reset=generation_reset)
+        return ResidentReply(payload=payload, metrics=metrics, generation_reset=generation_reset,
+                             recovery_request=recovery_request)

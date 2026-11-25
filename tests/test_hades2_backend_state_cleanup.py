@@ -125,6 +125,66 @@ struct Main {
         model.applyBackendPayload(["warnings": ["array wins"], "warning": "legacy value"])
         check(model.warning == "array wins", "warnings array did not take precedence")
 
+        // Durable recovery survives backend replacement and sparse replies.
+        // A decoded receipt followed by connection loss must remain distinct
+        // from an action whose outcome is unknown.
+        let unknownRecovery: [String: Any] = ["outcome": "unknown", "method": "spawn_reward", "pid": 42]
+        let confirmedRecovery: [String: Any] = ["outcome": "confirmed", "method": "spawn_reward", "pid": 42]
+        func recoveryIssueKey() -> String? {
+            model.hostCurrentIssues.first { $0.id == "recovery" }?.text.key
+        }
+        model.applyBackendPayload([
+            "connected": false, "pid": 42, "status": "restart_required", "recovery": unknownRecovery,
+        ])
+        check(recoveryIssueKey() == "hades2.error.restartRequired",
+              "unknown recovered action lost the no-repeat and game-restart explanation")
+        model.applyBackendPayload(["profiles": []])
+        check(recoveryIssueKey() == "hades2.error.restartRequired",
+              "sparse management payload cleared durable recovery")
+        model.applyBackendPayload(["recovery": confirmedRecovery])
+        check(recoveryIssueKey() == "hades2.recovery.confirmed",
+              "confirmed action followed by connection loss was presented as unknown")
+        model.applyStaleBackendPayload(["pid": 41, "recovery": unknownRecovery])
+        check(recoveryIssueKey() == "hades2.recovery.confirmed",
+              "stale process recovery replaced the current lifetime's receipt")
+        model.applyBackendPayload([
+            "recovery": ["outcome": "unknown", "method": "spawn_reward", "pid": 41],
+        ])
+        check(recoveryIssueKey() == "hades2.recovery.confirmed",
+              "recovery for a different PID replaced current lifetime evidence")
+        model.backendDidStop()
+        check(recoveryIssueKey() == "hades2.recovery.confirmed",
+              "backend stop erased recovery for the surviving game process")
+        model.applyBackendPayload(["connected": false, "pid": 42, "status": "restart_required"])
+        check(recoveryIssueKey() == "hades2.recovery.confirmed",
+              "sparse backend startup lost confirmed recovery")
+        model.applyBackendPayload(["status": "ready", "recovery": NSNull()])
+        check(recoveryIssueKey() == nil, "explicit recovery completion retained the old warning")
+        model.applyBackendPayload(["recovery": unknownRecovery])
+        model.applyBackendPayload(["pid": 43, "status": "disconnected"])
+        check(recoveryIssueKey() == nil, "new process retained the prior lifetime's recovery")
+        model.applyBackendPayload(["recovery": ["outcome": "unavailable"]])
+        check(recoveryIssueKey() == "hades2.error.recoveryFailed",
+              "unavailable durable recovery had no storage recovery explanation")
+        model.applyBackendPayload(["recovery": NSNull()])
+        check(recoveryIssueKey() == nil, "explicit null did not clear unavailable recovery")
+        model.applyBackendPayload([
+            "recovery": ["outcome": "unknown", "method": "spawn_reward", "pid": 43],
+        ])
+        model.hostTargetLifetimeChanged(observation: .init(
+            isRunning: true, launchGeneration: 1, processIdentifier: 43
+        ))
+        check(recoveryIssueKey() == nil, "same-PID game restart retained old recovery presentation")
+        model.applyBackendPayload([
+            "connected": false, "pid": NSNull(), "status": "restart_required",
+            "recovery": ["outcome": "unknown", "method": "spawn_reward", "pid": 43],
+        ])
+        model.hostTargetLifetimeChanged(observation: .init(
+            isRunning: true, launchGeneration: 2, processIdentifier: 44
+        ))
+        check(recoveryIssueKey() == nil,
+              "PID-less recovered state left a restart warning on the new game lifetime")
+
         // Resident full snapshots explicitly clear nullable run observations;
         // sparse Profile/Save patches still preserve them and the catalogs.
         let sampleWorldActions: [String: Any] = [
