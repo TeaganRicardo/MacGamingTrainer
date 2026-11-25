@@ -530,8 +530,12 @@ struct Main {
         let release = worker.deletingPathExtension().appendingPathExtension("release")
         try Data().write(to: release)
         waitFor("new lifetime was not projected") { observedModel.connected && observedModel.pid == 5151 && !observedModel.busy }
-        check(lateDone == true && queuedObservationDone == true && receiptKeys.contains("hades2.receipt.completed"),
+        check(lateDone == true && receiptKeys.contains("hades2.receipt.completed"),
               "target invalidation discarded the late request's verified action receipt")
+        check(queuedObservationDone == false,
+              "target invalidation did not cancel the previous target's queued request")
+        check(!commands(at: commandLog).contains { $0["command"] as? String == "queued-observation" },
+              "the previous target's queued request crossed the transport boundary")
         check(observedModel.health != 999, "a sparse reply adopted runtime state from the previous lifetime")
         notices.cancel()
 

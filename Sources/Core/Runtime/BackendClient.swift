@@ -69,6 +69,7 @@ final class BackendClient {
         let coalesceKey: String?
         let announceSuccess: Bool
         let timeout: TimeInterval
+        let canDispatch: (() -> Bool)?
         let started: (() -> Void)?
         let reply: ((BackendReply) -> Void)?
         let failed: ((BackendFailure) -> Void)?
@@ -155,6 +156,7 @@ final class BackendClient {
         coalesceKey: String? = nil,
         announceSuccess: Bool = true,
         timeout: TimeInterval = 6.0,
+        canDispatch: (() -> Bool)? = nil,
         started: (() -> Void)? = nil,
         reply: ((BackendReply) -> Void)? = nil,
         failed: ((BackendFailure) -> Void)? = nil,
@@ -184,6 +186,7 @@ final class BackendClient {
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: timeout.isFinite && timeout > 0 ? timeout : 6.0,
+            canDispatch: canDispatch,
             started: started,
             reply: reply,
             failed: failed,
@@ -235,6 +238,14 @@ final class BackendClient {
     }
 
     private func dispatch(_ request: Request) {
+        if request.canDispatch?() == false {
+            deliveringReply = true
+            request.failed?(cancelledFailure)
+            request.completion?(false)
+            deliveringReply = false
+            flushNext()
+            return
+        }
         guard process.isRunning && !terminalFailureReported else {
             terminalFailureReported = true
             let queued = takeQueuedRequests()
@@ -371,7 +382,8 @@ final class BackendClient {
         deliveringReply = true
         let applyStarted = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
         onReply?(reply)
-        let cancelled = terminal || failure?.outcomeUnknown == true ? takeQueuedRequests() : []
+        let cancelled = terminal ? takeQueuedRequests() :
+            (failure?.outcomeUnknown == true ? takeUnsafeQueuedRequests() : [])
         request.reply?(reply)
         request.completion?(success)
         complete(cancelled, success: false)
@@ -470,6 +482,21 @@ final class BackendClient {
         let queued = queue
         queue.removeAll()
         return queued
+    }
+
+    /// A lifetime-aware owner may retain independent work or work for a new
+    /// target. Unclassified queued work retains the conservative cancellation.
+    private func takeUnsafeQueuedRequests() -> [Request] {
+        let pending = takeQueuedRequests()
+        var cancelled: [Request] = []
+        for request in pending {
+            if request.canDispatch?() == true {
+                queue.append(request)
+            } else {
+                cancelled.append(request)
+            }
+        }
+        return cancelled
     }
 
     private func takeOutstandingRequests() -> [Request] {

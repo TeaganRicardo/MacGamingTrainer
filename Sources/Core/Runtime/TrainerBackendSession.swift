@@ -143,8 +143,10 @@ package final class TrainerBackendSession {
             completion?(false)
             return
         }
-        // A queued request was admitted against the old target even if it
-        // starts after a process change. Its receipt can still settle.
+        // Admission fixes both execution ownership and observation freshness.
+        // Already-sent receipts settle; queued runtime work is checked again
+        // before it can cross a target boundary.
+        let admittedTargetLifetimeID = targetLifetimeID
         let admittedTargetObservationID = targetObservationID
         client.send(
             command,
@@ -154,8 +156,14 @@ package final class TrainerBackendSession {
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: timeout,
+            canDispatch: { [weak self] in
+                guard requiresTrustedTarget else { return true }
+                guard let self else { return false }
+                return admittedTargetObservationID == self.targetObservationID
+                    && self.untrustedTargetLifetimeID != self.targetLifetimeID
+            },
             started: { [weak self] in
-                self?.activeRequestTargetLifetimeID = self?.targetLifetimeID
+                self?.activeRequestTargetLifetimeID = admittedTargetLifetimeID
                 self?.activeRequestTargetObservationID = admittedTargetObservationID
                 self?.activeRequestRequiresTrustedTarget = requiresTrustedTarget
                 started?()
@@ -241,11 +249,15 @@ package final class TrainerBackendSession {
     }
 
     private func preserveUnknownOutcome(_ failure: BackendFailure) {
-        guard failure.outcomeUnknown else { return }
+        guard failure.outcomeUnknown, activeRequestBelongsToCurrentTarget else { return }
         if uncertainFailure == nil { uncertainFailure = failure }
         if activeRequestRequiresTrustedTarget, activeRequestTargetLifetimeID == targetLifetimeID {
             untrustedTargetLifetimeID = targetLifetimeID
         }
+    }
+
+    private var activeRequestBelongsToCurrentTarget: Bool {
+        !activeRequestRequiresTrustedTarget || activeRequestTargetLifetimeID == targetLifetimeID
     }
 
     private func publishStartupFailure(_ error: Error, log: (String) -> Void) {
@@ -335,10 +347,12 @@ package final class TrainerBackendSession {
                         recoveryPath: nil,
                         presentationArguments: []
                     )
-                    self.updateStatus {
-                        $0.errorCode = failure.code
-                        $0.error = coreOwned ? "host.backend.error.operationFailed" : failure.presentation
-                        $0.errorArguments = coreOwned ? [] : failure.presentationArguments
+                    if self.activeRequestBelongsToCurrentTarget {
+                        self.updateStatus {
+                            $0.errorCode = failure.code
+                            $0.error = coreOwned ? "host.backend.error.operationFailed" : failure.presentation
+                            $0.errorArguments = coreOwned ? [] : failure.presentationArguments
+                        }
                     }
                     let diagnostic = failure.diagnostic ?? failure.presentation
                     configuration.backendLog("\(reply.operation.key)失败 [\(failure.code)]：\(diagnostic)")
