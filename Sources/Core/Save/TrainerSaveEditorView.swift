@@ -382,7 +382,8 @@ package struct TrainerSaveEditorView: View {
                     .font(.caption)
                     .textSelection(.enabled)
             }
-            Text(text(receipt.hot == true ? "host.saveEditor.hot" : "host.saveEditor.loadInGame"))
+            Text(text(receipt.runtimeReloaded == true ? "host.saveEditor.runtimeReloaded" :
+                      receipt.hot == true ? "host.saveEditor.hot" : "host.saveEditor.loadInGame"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

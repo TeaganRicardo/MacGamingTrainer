@@ -252,7 +252,8 @@
 "host.saveEditor.applied" = "Save changes applied and verified";
 "host.saveEditor.recoverableBackup" = "Recoverable backup";
 "host.saveEditor.loadInGame" = "Load the save in game to see the updated values.";
-"host.saveEditor.hot" = "Applied while the game process is running; reload or continue safely in game.";
+"host.saveEditor.hot" = "Only the on-disk save was verified. Reload it in game to use the changes; a later in-game save may overwrite them.";
+"host.saveEditor.runtimeReloaded" = "The save was verified on disk and reloaded by the game.";
 "host.saveEditor.recovery" = "Apply failed and could not roll back cleanly. Recovery evidence is preserved at:";
 "host.saveEditor.invalidValue" = "Enter a valid value within this field's allowed type and range.";
 "host.saveEditor.invalidResponse" = "Received an unexpected response from the Save Editor backend.";
