@@ -164,7 +164,15 @@ def _infer_value_type(value: Any) -> str:
 def _encoded_path_token(path: tuple[Any, ...]) -> str:
     if not path:
         return "$root"
-    return "/".join(quote(str(part), safe="-_") for part in path)
+    segments = []
+    for part in path:
+        if isinstance(part, str):
+            segments.append(quote(part, safe="-_"))
+        else:
+            key_type = type(part)
+            # String keys escape ':', so typed segments cannot alias them.
+            segments.append(f"{key_type.__module__}.{key_type.__qualname__}:{quote(repr(part), safe='-_')}")
+    return "/".join(segments)
 
 
 @dataclass(frozen=True)
@@ -242,7 +250,7 @@ class SaveFieldCatalog:
 
 
 def discover_mapping_fields(
-    document: Mapping[str, Any],
+    document: Mapping[Any, Any],
     known_paths: frozenset[tuple[Any, ...]],
     *,
     domain: str = "advanced",
@@ -252,7 +260,7 @@ def discover_mapping_fields(
     discovered: list[SaveFieldSpec] = []
     known_prefixes = {kp[:i] for kp in known_paths for i in range(1, len(kp))}
 
-    def walk(node: Mapping[str, Any], prefix: tuple[Any, ...], depth: int) -> None:
+    def walk(node: Mapping[Any, Any], prefix: tuple[Any, ...], depth: int) -> None:
         for key, value in node.items():
             path = (*prefix, key)
             if path in known_paths:
@@ -525,23 +533,25 @@ class CatalogSaveWorkspace(CoreSaveWorkspace[_Document]):
     def _effective_fields(self) -> tuple[SaveFieldSpec, ...]:
         curated = self.spec.catalog.fields
         discover = self.spec.catalog.discover_unknown
-        if discover is None:
-            return curated
         known_paths = frozenset(field.path for field in curated if field.path)
-        by_id: OrderedDict[str, SaveFieldSpec] = OrderedDict((field.id, field) for field in curated)
+        extras: Sequence[SaveFieldSpec]
         if discover is discover_mapping_fields:
             if not isinstance(self.document, Mapping):
                 raise TypeError("discover_mapping_fields requires a Mapping document.")
-            extras: Sequence[SaveFieldSpec] = discover_mapping_fields(
+            extras = discover_mapping_fields(
                 self.document,
                 known_paths,
                 domain=self.spec.catalog.unknown_domain_id,
             )
-        else:
+        elif discover is not None:
             extras = discover(self.document, known_paths)
-        for extra in extras:
-            if extra.id not in by_id:
-                by_id[extra.id] = extra
+        else:
+            extras = ()
+        by_id: OrderedDict[str, SaveFieldSpec] = OrderedDict()
+        for field in (*curated, *extras):
+            if field.id in by_id:
+                raise ValueError(f"Duplicate Save Editor field ID: {field.id}")
+            by_id[field.id] = field
         return tuple(by_id.values())
 
     def _field_map(self) -> OrderedDict[str, SaveFieldSpec]:
