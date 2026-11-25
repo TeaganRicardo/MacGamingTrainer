@@ -315,6 +315,53 @@ do {
     if session.currentStatus.requiresTargetRestart { fail("a kernel-path target replacement after absence did not restore trust") }
 }
 
+// Trusted work admitted before a target change never reaches the old worker
+// from the queue. Target-independent work still completes across that boundary.
+do {
+    var activeDone: Bool?
+    var queuedDone: Bool?
+    var queuedFailure: BackendFailure?
+    var queuedStarted = false
+    session.send("slow", operation: "old target", completion: { activeDone = $0 })
+    session.send("stale-queued-target", operation: "stale target",
+        started: { queuedStarted = true }, failed: { queuedFailure = $0 }, completion: { queuedDone = $0 })
+    session.targetLifetimeChanged()
+    if !waitUntil(waitBudget, { activeDone != nil && queuedDone != nil })
+        || activeDone != true || queuedDone != false || queuedStarted
+        || queuedFailure?.code != "backend_cancelled" || queuedFailure?.outcomeUnknown != false {
+        fail("old target work was not cancelled before dispatch")
+    }
+    activeDone = nil
+    queuedDone = nil
+    session.send("slow", operation: "old target", completion: { activeDone = $0 })
+    session.send("independent-across-target", operation: "settings", requiresTrustedTarget: false,
+        completion: { queuedDone = $0 })
+    session.targetLifetimeChanged()
+    if !waitUntil(waitBudget, { activeDone != nil && queuedDone != nil })
+        || activeDone != true || queuedDone != true {
+        fail("target change cancelled independent settings work")
+    }
+}
+
+// An already dispatched old-lifetime unknown result remains a receipt, while
+// it cannot constrain or keep reasserting an error on the replacement target.
+do {
+    var oldDone: Bool?
+    var oldReceipt: BackendReply?
+    var freshDone: Bool?
+    session.send("unknown-reply", operation: "old action", reply: { oldReceipt = $0 }, completion: { oldDone = $0 })
+    session.targetLifetimeChanged()
+    session.send("fresh-target-ping", operation: "new target", completion: { freshDone = $0 })
+    if !waitUntil(waitBudget, { oldDone != nil }) || oldDone != false
+        || oldReceipt?.failure?.outcomeUnknown != true || session.currentStatus.requiresTargetRestart {
+        fail("old target result was lost or constrained the replacement")
+    }
+    if !waitUntil(waitBudget, { freshDone != nil }) || freshDone != true
+        || session.currentStatus.requiresTargetRestart || session.currentStatus.errorCode != nil {
+        fail("old target uncertainty leaked into a successful new target request")
+    }
+}
+
 // Quit freezes recovery before finalization without cancelling an existing
 // write or dropping its completion. Subsequent restart requests are inert.
 do {
@@ -429,11 +476,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-session-') as td:
         raise AssertionError(f'same-target request reached recovered worker: {commands!r}')
     if 'invalid-before-write' in commands:
         raise AssertionError(f'encoding rejection reached worker: {commands!r}')
-    if any(command in commands for command in ('queued-after-unknown', 'queued-during-unknown-status')) or commands.count('unknown-reply') != 1:
+    if any(command in commands for command in ('queued-after-unknown', 'queued-during-unknown-status', 'stale-queued-target')) or commands.count('unknown-reply') != 2:
         raise AssertionError(f'unknown reply replayed or released queued target work: {commands!r}')
     if commands.count('set_desired') != 1:
         raise AssertionError(f'detached durable edit was blocked or its connected counterpart executed: {commands!r}')
-    for required in ('ping-after-crash', 'ping-after-timeout', 'ping-after-manual'):
+    for required in ('ping-after-crash', 'ping-after-timeout', 'ping-after-manual', 'independent-across-target', 'fresh-target-ping'):
         if commands.count(required) != 1:
             raise AssertionError(f'missing/duplicate post-recovery request {required}: {commands!r}')
     print(proc.stdout.strip())
