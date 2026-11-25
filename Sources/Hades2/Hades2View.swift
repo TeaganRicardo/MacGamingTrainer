@@ -1333,9 +1333,28 @@ struct Hades2TrainerView: View {
 
     private func worldExitChoiceLabel(_ choice: Hades2WorldExitChoice, in exit: Hades2WorldExit) -> String {
         let room = worldActionRoomLabel(choice.room)
-        if let reward = choice.reward { return "\(room) · \(worldActionRewardLabel(reward))" }
-        let acceptsReward = exit.roomTargets.first { $0.id == choice.room }?.acceptsReward ?? false
-        return acceptsReward ? "\(room) · \(text("hades2.worldActions.anyReward"))" : room
+        let label: String
+        if let reward = choice.reward {
+            label = "\(room) · \(worldActionRewardLabel(reward))"
+        } else {
+            let acceptsReward = exit.roomTargets.first { $0.id == choice.room }?.acceptsReward ?? false
+            label = acceptsReward ? "\(room) · \(text("hades2.worldActions.anyReward"))" : room
+        }
+        return worldExitChoiceItemLabel(label, choice: choice, in: exit)
+    }
+
+    private func worldExitChoiceItemLabel(_ label: String, choice: Hades2WorldExitChoice,
+                                          in exit: Hades2WorldExit, enabled: Bool = true,
+                                          reason: String? = nil) -> String {
+        guard enabled else { return worldActionItemLabel(label, enabled: false, reason: reason) }
+        let room = exit.roomTargets.first { $0.id == choice.room }
+        let reward = exit.rewardTargets.first { $0.id == choice.reward }
+        let warnings = [choice.reward != nil && exit.isCurrentRoom(choice.room)
+            ? exit.rewardWarning : room?.warning, reward?.warning]
+        var seen = Set<String>()
+        return warnings.compactMap { $0 }.filter { seen.insert($0).inserted }.reduce(label) {
+            worldActionItemLabel($0, warning: $1)
+        }
     }
 
     private func worldExitChoiceItem(_ choice: Hades2WorldExitChoice, title: String, enabled: Bool) -> some View {
@@ -1356,20 +1375,21 @@ struct Hades2TrainerView: View {
         let gods = exit.rewardTargets.filter { Self.worldActionGodIDs.contains($0.id) }
         let others = exit.rewardTargets.filter { !Self.worldActionGodIDs.contains($0.id) }
         if exit.offersAnyReward(room) {
+            let choice = Hades2WorldExitChoice(room: room.id)
             worldExitChoiceItem(
-                Hades2WorldExitChoice(room: room.id),
-                title: worldActionItemLabel(text("hades2.worldActions.anyReward"),
-                    warning: exit.isCurrentRoom(room.id) ? room.warning : nil),
+                choice,
+                title: worldExitChoiceItemLabel(text("hades2.worldActions.anyReward"), choice: choice, in: exit),
                 enabled: true
             )
         }
         if !gods.isEmpty {
             Section(text("hades2.worldActions.gods")) {
                 ForEach(gods) { reward in
+                    let choice = Hades2WorldExitChoice(room: room.id, reward: reward.id)
                     worldExitChoiceItem(
-                        Hades2WorldExitChoice(room: room.id, reward: reward.id),
-                        title: worldActionItemLabel(worldActionRewardLabel(reward.id), enabled: reward.enabled,
-                            reason: reward.reason, warning: reward.warning),
+                        choice,
+                        title: worldExitChoiceItemLabel(worldActionRewardLabel(reward.id), choice: choice, in: exit,
+                            enabled: reward.enabled, reason: reward.reason),
                         enabled: reward.enabled
                     )
                 }
@@ -1378,10 +1398,11 @@ struct Hades2TrainerView: View {
         if !others.isEmpty {
             Section(text("hades2.worldActions.rewards")) {
                 ForEach(others) { reward in
+                    let choice = Hades2WorldExitChoice(room: room.id, reward: reward.id)
                     worldExitChoiceItem(
-                        Hades2WorldExitChoice(room: room.id, reward: reward.id),
-                        title: worldActionItemLabel(worldActionRewardLabel(reward.id), enabled: reward.enabled,
-                            reason: reward.reason, warning: reward.warning),
+                        choice,
+                        title: worldExitChoiceItemLabel(worldActionRewardLabel(reward.id), choice: choice, in: exit,
+                            enabled: reward.enabled, reason: reward.reason),
                         enabled: reward.enabled
                     )
                 }
@@ -1407,18 +1428,16 @@ struct Hades2TrainerView: View {
                         Menu {
                             worldExitRewardItems(exit, room: room)
                         } label: {
-                            // The door's own type warns about its reward rule
-                            // (an in-place edit); any other type about routing.
                             Text(worldActionItemLabel(worldActionRoomLabel(room.id), enabled: room.enabled,
-                                reason: room.reason,
-                                warning: exit.isCurrentRoom(room.id) ? exit.rewardWarning : room.warning))
+                                reason: room.reason))
                         }
                         .disabled(!room.enabled)
                     } else {
+                        let choice = Hades2WorldExitChoice(room: room.id)
                         worldExitChoiceItem(
-                            Hades2WorldExitChoice(room: room.id),
-                            title: worldActionItemLabel(worldActionRoomLabel(room.id), enabled: room.enabled,
-                                reason: room.reason, warning: room.warning),
+                            choice,
+                            title: worldExitChoiceItemLabel(worldActionRoomLabel(room.id), choice: choice, in: exit,
+                                enabled: room.enabled, reason: room.reason),
                             enabled: room.enabled
                         )
                     }
