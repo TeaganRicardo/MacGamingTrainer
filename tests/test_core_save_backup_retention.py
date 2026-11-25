@@ -184,6 +184,33 @@ class BackupRetentionTests(unittest.TestCase):
         self.assertEqual(self.service.list_state()['retention']['warning'], 'cleanup_failed')
         self.assertEqual(self.service._recovery_paths(), [])
 
+    def test_legacy_recovery_stays_resolved_after_later_edits(self):
+        # Pre-marker rollback copies need durable resolution when upgrading.
+        recovery, _, _ = self.service._transaction()._capture_rollback(False)
+        baseline = recovery / 'files/main/Profile1.sav'
+        self.target.write_bytes(b'unresolved legacy replacement')
+        with self.assertRaises(SaveRollbackError):
+            self.edit(b'blocked')
+        self.target.write_bytes(baseline.read_bytes())
+        self.assertTrue(self.edit(b'first recovered edit')['replaced'])
+        self.service = CoreSaveService('fixture', self.spec, self.folder / 'data', lambda: False)
+        self.assertTrue(self.edit(b'second recovered edit')['replaced'])
+        self.assertEqual(self.target.read_bytes(), b'second recovered edit')
+        self.assertEqual(baseline.read_bytes(), b'original')
+
+    def test_completed_transaction_cleanup_failure_does_not_fence_next_edit(self):
+        with mock.patch('core.save_restore.remove_owned_save_tree', side_effect=OSError('cleanup unavailable')), \
+             self.assertLogs(level='ERROR'):
+            result = self.edit(b'verified replacement')
+        self.assertTrue(result['replaced'])
+        self.assertEqual(result['maintenanceWarning'], 'rollback_cleanup_failed')
+        recovery = self.service._recovery_paths()
+        self.assertTrue(recovery)
+        self.service = CoreSaveService('fixture', self.spec, self.folder / 'data', lambda: False)
+        self.assertTrue(self.edit(b'next verified replacement')['replaced'])
+        self.assertEqual(self.target.read_bytes(), b'next verified replacement')
+        self.assertEqual(self.service._recovery_paths(), recovery)
+
     def test_unverified_replacement_cannot_authorize_eviction(self):
         self.configure()
         self.edit(b'a')

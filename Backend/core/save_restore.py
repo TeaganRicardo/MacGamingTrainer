@@ -177,9 +177,8 @@ class SaveRestoreTransaction:
                     unresolved.append((None, recovery_root))
                 continue
 
-            # Older recovery copies predate the target manifest. They contain
-            # a complete baseline snapshot, so compare the live set to that
-            # snapshot and fence only paths whose bytes/presence still differ.
+            # Migrate older full-set recovery copies before a later edit can
+            # make a restored target differ from its captured baseline again.
             files_root = recovery_root / 'files'
             try:
                 if files_root.is_symlink() or not files_root.is_dir():
@@ -196,13 +195,15 @@ class SaveRestoreTransaction:
                             continue
                         relative = backup.relative_to(root_dir).as_posix()
                         key = (root_dir.name, relative)
-                        baseline[self._physical_target_path(key)] = _sha256(backup)
-                current = {row.source_path.resolve(strict=False) for row in self.resolver()}
-                for path, digest in baseline.items():
-                    if not self._target_matches_baseline(path, digest):
+                        baseline[key] = _sha256(backup)
+                current = {self._key(row): None for row in self.resolver()}
+                payload = self._target_marker(baseline, current)
+                for entry in payload['targets']:
+                    path = Path(entry['path'])
+                    entry['resolved'] = self._target_matches_baseline(path, entry['sha256'])
+                    if not entry['resolved']:
                         unresolved.append((path, recovery_root))
-                for path in current - set(baseline):
-                    unresolved.append((path, recovery_root))
+                atomic_write_text(marker, json.dumps(payload, ensure_ascii=False, allow_nan=False))
             except (OSError, ValueError, SaveRestoreError):
                 unresolved.append((None, recovery_root))
         return unresolved
@@ -216,7 +217,7 @@ class SaveRestoreTransaction:
                     recovery_root,
                 )
 
-    def _write_unresolved_target_marker(self, rollback_root, baseline_hashes, target_hashes):
+    def _target_marker(self, baseline_hashes, target_hashes, *, resolved=False):
         keys = set(baseline_hashes) | set(target_hashes)
         targets = []
         for key in sorted(keys):
@@ -226,12 +227,16 @@ class SaveRestoreTransaction:
                     'relativePath': key[1],
                     'path': str(self._physical_target_path(key)),
                     'sha256': baseline_hashes.get(key),
-                    'resolved': False,
+                    'resolved': resolved,
                 }
             )
+        return {'schemaVersion': 1, 'targets': targets}
+
+    def _write_unresolved_target_marker(self, rollback_root, baseline_hashes, target_hashes, *, resolved=False):
+        payload = self._target_marker(baseline_hashes, target_hashes, resolved=resolved)
         atomic_write_text(
             Path(rollback_root) / 'unresolved-targets.json',
-            json.dumps({'schemaVersion': 1, 'targets': targets}, ensure_ascii=False, allow_nan=False),
+            json.dumps(payload, ensure_ascii=False, allow_nan=False),
         )
 
     def _current_files(self, owned_keys=None):
@@ -492,6 +497,17 @@ class SaveRestoreTransaction:
                     logging.exception('Verified save transaction cleanup failed: %s', rollback_root)
                     if result is not None:
                         result['maintenanceWarning'] = 'rollback_cleanup_failed'
+                        # The installed result was verified. A retained cleanup
+                        # copy must not later masquerade as a failed rollback.
+                        # Failure to record that fact cannot undo this success.
+                        try:
+                            self._write_unresolved_target_marker(
+                                rollback_root, baseline_hashes, target_hashes, resolved=True
+                            )
+                        except OSError:
+                            logging.exception(
+                                'Completed save transaction marker could not be updated: %s', rollback_root
+                            )
 
     def _replacement_entries(self, replacements):
         if not isinstance(replacements, (list, tuple)) or not replacements:
