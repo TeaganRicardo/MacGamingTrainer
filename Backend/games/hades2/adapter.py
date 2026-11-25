@@ -805,11 +805,12 @@ class Hades2Adapter(GameAdapter):
         pid = located.pid if located is not None else None
         running_bundle = located.bundle_path if located is not None else None
         try:
-            identity = (
-                preparation.compatibility(strict=False, game_path=running_bundle)
+            install_bundle = (
+                running_bundle
                 if running_bundle is not None
-                else preparation.compatibility(strict=False)
+                else preparation.resolve_paths(query_running=False)[0]
             )
+            identity = preparation.compatibility(strict=False, game_path=install_bundle)
             previous_game_path = self._game_path
             game_dir = identity.get('game')
             if isinstance(game_dir, str) and game_dir:

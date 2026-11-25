@@ -583,6 +583,30 @@ class _MissingInstallSession:
         pass
 
 
+# A cold scan must reuse its first no-process observation instead of querying twice.
+with tempfile.TemporaryDirectory(prefix="mgt-wp33-cold-scan-") as tmp:
+    home = Path(tmp)
+    game, _executable, _manifest = _write_hades2_install(home / "Library/Application Support/Steam/steamapps")
+    cold_context = GameAdapterContext.from_manifest(HADES2_MANIFEST, home=home)
+    cold_adapter = Hades2Adapter(
+        context=cold_context,
+        resident_session=_MissingInstallSession(),
+        time_warp_controller=_MissingInstallController(),
+    )
+    preparation_process_queries = []
+    with patch.dict(os.environ, {"HOME": str(home)}), patch(
+        "games.hades2.adapter.locate_target", return_value=None
+    ) as process_probe, patch(
+        "games.hades2.preparation.locate_target",
+        side_effect=lambda *args, **kwargs: preparation_process_queries.append(1) or None,
+    ), patch("games.hades2.preparation._uuid", return_value=SUPPORTED_BUILD["uuid"]):
+        cold_state = cold_adapter.scan()
+    assert process_probe.call_count == 1
+    assert preparation_process_queries == [], "cold scan performed a second process query"
+    assert cold_state["status"] == "not_running"
+    cold_adapter.close()
+
+
 preparation.invalidate_compatibility_cache()
 with tempfile.TemporaryDirectory(prefix="mgt-821-not-installed-") as tmp:
     empty_home = Path(tmp)
