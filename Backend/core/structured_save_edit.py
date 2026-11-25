@@ -401,6 +401,10 @@ class StructuredSaveEditSession(Generic[_Document]):
         self._target = self._resolve_target(identity)
         return self.target
 
+    def restore_target(self, identity: Optional[Mapping[str, str]]) -> None:
+        """Restore a previously confirmed target after a failed target projection."""
+        self._target = None if identity is None else self._resolve_target(identity)
+
     def _encode(self, document: _Document) -> bytes:
         payload = self._codec.encode(document)
         if type(payload) is not bytes:

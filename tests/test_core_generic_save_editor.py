@@ -320,6 +320,22 @@ def main() -> None:
                 }
             )
             assert bad_target["ok"] is False
+            target_workspace = sample_adapter.save_workspaces[ws_id]
+            with patch.object(target_workspace, "summary", side_effect=RuntimeError("summary unavailable")):
+                failed_target = router.handle(
+                    {
+                        "id": "failed-target-summary",
+                        "command": "save_editor_target",
+                        "params": {
+                            "workspaceId": ws_id,
+                            "baselineGeneration": gen,
+                            "target": {"rootId": "main", "relativePath": "Slot2.json"},
+                        },
+                    }
+                )
+            assert failed_target["ok"] is False
+            assert target_workspace.session.target is None, "failed target confirmation left an Apply destination installed"
+
             targeted = router.handle(
                 {
                     "id": "good-target",
