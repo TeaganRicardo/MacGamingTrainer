@@ -86,7 +86,7 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     private var previousBackendAvailable: Bool
     private var previousConnected: Bool
     private var terminationRequested = false
-    private var registeredStoreIDs: Set<ObjectIdentifier> = []
+    private let registeredStores = NSHashTable<TrainerLocalizationStore>.weakObjects()
 
     package convenience init() {
         let ownership = TrainerApplicationStartup.requireOwnership(
@@ -327,11 +327,12 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
 
     func registerPresentation(_ localization: TrainerLocalizationStore) {
         guard !Module.presentationKeyPrefix.isEmpty else { return }
-        guard registeredStoreIDs.insert(ObjectIdentifier(localization)).inserted else { return }
+        guard !registeredStores.contains(localization) else { return }
         let registered = localization.registerModulePresentation(prefix: Module.presentationKeyPrefix) { key, arguments, language in
             Module.presentationText(key: key, arguments: arguments, language: language)
         }
         precondition(registered, "Invalid or overlapping module presentation prefix: \(Module.presentationKeyPrefix)")
+        registeredStores.add(localization)
     }
 
     private func modelChanged() {
