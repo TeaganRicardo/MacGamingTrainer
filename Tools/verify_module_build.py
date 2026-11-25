@@ -2,6 +2,7 @@
 import argparse
 import json
 import plistlib
+import subprocess
 import sys
 from pathlib import Path
 
@@ -12,9 +13,23 @@ sys.path.insert(0, str(TOOLS_DIR))
 sys.path.insert(0, str(BACKEND))
 
 from core.module_manifest import ManifestError
+from build_module_native import process_time_warp_architectures
 from module_inventory import discover_module_ids
 from package_app import verify_python_runtime_metadata
 from product_support import load_selection
+
+HOST_RESOURCE_ROOTS = {
+    'ACTIVE_GAME_ID', 'GAME_MODULES.json', 'Assets.car', 'AppIcon.icns',
+    'Backend', 'Python', 'Modules', 'en.lproj', 'zh-CN.lproj',
+}
+
+
+def _flat_module_resource(resources, destination):
+    # Module-relative names may match a legitimate Host resource. Only other
+    # root paths represent the legacy flat module-resource layout.
+    if Path(destination).parts[0] in HOST_RESOURCE_ROOTS:
+        return None
+    return resources / destination
 
 
 def expected_app_path(game_id, dist_dir):
@@ -108,8 +123,21 @@ def verify_module_build(game_id, dist_dir):
             or license_path.read_bytes() != expected_license.read_bytes()
         ):
             raise ValueError(f'Packaged Process Time Warp helper is missing or unsafe: {time_warp_native}')
-    elif time_warp_native.exists() or time_warp_native.is_symlink():
-        raise ValueError(f'Unrequested Process Time Warp helper was packaged: {time_warp_native}')
+        expected_arches = process_time_warp_architectures(manifest.normalized())
+        # cctools consumes the entire -verify_arch tail; LLVM consumes one arch.
+        # A leading input and one required slice per call work with both parsers.
+        for architecture in expected_arches:
+            try:
+                subprocess.run(['xcrun', 'lipo', str(helper), '-verify_arch', architecture],
+                               check=True, capture_output=True, text=True)
+            except subprocess.CalledProcessError as error:
+                detail = (error.stderr or error.stdout or str(error)).strip()
+                raise ValueError(
+                    f'Process Time Warp helper failed target-slice verification for {architecture}: {helper}\n{detail}'
+                ) from error
+    elif any((time_warp_native / name).exists() or (time_warp_native / name).is_symlink()
+             for name in ('libMGTTimeWarp.dylib', 'LICENSE.fishhook')):
+        raise ValueError(f'Unrequested Process Time Warp artifacts were packaged: {time_warp_native}')
     for module in manifest.modules:
         for library in module.native_libraries:
             native = games_dir / module.id / 'native' / library.filename
@@ -120,8 +148,8 @@ def verify_module_build(game_id, dist_dir):
             expected_source = ROOT / resource.source
             if not packaged.is_file() or packaged.is_symlink() or packaged.read_bytes() != expected_source.read_bytes():
                 raise ValueError(f'Declared module app resource is missing or differs from source: {packaged}')
-            flat_leak = resources / resource.destination
-            if flat_leak.exists() or flat_leak.is_symlink():
+            flat_leak = _flat_module_resource(resources, resource.destination)
+            if flat_leak is not None and (flat_leak.exists() or flat_leak.is_symlink()):
                 raise ValueError(f'Declared module app resource leaked at flat bundle root: {flat_leak}')
         if module.app_resources:
             module_dir = resources / 'Modules' / module.id
@@ -158,12 +186,11 @@ def verify_module_build(game_id, dist_dir):
             if not destination:
                 continue
             namespaced_leak = resources / 'Modules' / other_id / destination
-            flat_leak = resources / destination
+            flat_leak = _flat_module_resource(resources, destination)
             if (
                 namespaced_leak.exists()
                 or namespaced_leak.is_symlink()
-                or flat_leak.exists()
-                or flat_leak.is_symlink()
+                or (flat_leak is not None and (flat_leak.exists() or flat_leak.is_symlink()))
             ):
                 raise ValueError(f'Non-selected module resource leaked into package: {other_id}/{destination}')
     return app
