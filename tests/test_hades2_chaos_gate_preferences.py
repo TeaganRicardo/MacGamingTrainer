@@ -18,7 +18,7 @@ from games.hades2.profile_service import Hades2ProfileService, PROFILE_SCHEMA_VE
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController, hades2_adapter_context
 
 assert Hades2PreferenceStore.defaults()['chaosGateProbability'] is None
-assert DESIRED_STATE_SCHEMA_VERSION == 13 and PROFILE_SCHEMA_VERSION == 6
+assert DESIRED_STATE_SCHEMA_VERSION == 13 and PROFILE_SCHEMA_VERSION == 7
 for value in (None, 0, 100, 32.5):
     assert Hades2PreferenceStore.normalize({'chaosGateProbability': value})['chaosGateProbability'] == value
 for value in (True, -1, 101, 10**1000, math.nan, math.inf, '50', [], {}):
@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     assert restarted.preferences['chaosGateProbability'] == 80 and restarted.preference_dirty
     adapter.save_profile('Chaos Gate')
     envelope = json.loads(adapter.profile_service.path('Chaos Gate').read_text())
-    assert envelope['schemaVersion'] == 6 and envelope['desiredSchemaVersion'] == DESIRED_STATE_SCHEMA_VERSION
+    assert envelope['schemaVersion'] == PROFILE_SCHEMA_VERSION and envelope['desiredSchemaVersion'] == DESIRED_STATE_SCHEMA_VERSION
     assert envelope['desired']['chaosGateProbability'] == 80
     adapter.reset_desired()
     assert adapter.preferences['chaosGateProbability'] is None and adapter.state['chaosGateProbability'] is None

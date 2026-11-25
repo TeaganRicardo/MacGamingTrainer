@@ -15,7 +15,7 @@ from games.hades2.preferences import (
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION, Hades2ProfileService
 
 assert DESIRED_STATE_SCHEMA_VERSION == 13
-assert PROFILE_SCHEMA_VERSION == 6
+assert PROFILE_SCHEMA_VERSION == 7
 
 legacy_desired = {"godMode": True, "gardenQoL": True}
 migrated = normalize_persisted_desired(legacy_desired, 4)

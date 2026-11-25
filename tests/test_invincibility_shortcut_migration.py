@@ -26,7 +26,7 @@ defaults.set(legacy.payload, forKey: "shortcut.action.godMode")
 
 let store = Hades2ShortcutStore(defaults: defaults)
 precondition(store.chord(.invincibility) == legacy)
-precondition(defaults.integer(forKey: "hades2.shortcut.layoutVersion") == 7)
+precondition(defaults.integer(forKey: "hades2.shortcut.layoutVersion") == 8)
 precondition(defaults.object(forKey: "shortcut.layoutVersion") == nil)
 precondition(defaults.object(forKey: "shortcut.action.godMode") == nil)
 precondition(defaults.object(forKey: "shortcut.action.invincibility") == nil)
@@ -49,11 +49,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-invincibility-shortcut-") as td:
                 ROOT / "Sources/Core/Input/HotkeyChord.swift",
                 ROOT / "Sources/Core/Input/TrainerShortcutStore.swift",
                 ROOT / "Sources/Core/UI/TrainerSemanticIcon.swift",
+                ROOT / "Sources/Core/Cheats/TrainerCheatDefinition.swift",
                 ROOT / "Sources/Core/UI/TrainerWorkbenchSearch.swift",
             ]),
             SwiftModule("Hades2", [
                 ROOT / "Sources/Hades2/Generated/Hades2Feature.generated.swift",
                 ROOT / "Sources/Hades2/Hades2Types.swift",
+                ROOT / "Sources/Hades2/Hades2Cheats.swift",
                 ROOT / "Sources/Hades2/Services/Hades2WorkbenchNavigation.swift",
                 ROOT / "Sources/Hades2/Services/Hades2ShortcutStore.swift",
             ], (SWIFT_CORE_MODULE,)),

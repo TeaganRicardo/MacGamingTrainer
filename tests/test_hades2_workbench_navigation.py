@@ -161,9 +161,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-workbench-navigation-') as temporar
     # Foundation-level files.
     compile_swift_test(
         modules=[SwiftModule(SWIFT_CORE_MODULE, [ROOT/'Sources/Core/UI/TrainerSemanticIcon.swift',
+                                                 ROOT/'Sources/Core/Cheats/TrainerCheatDefinition.swift',
                                                  ROOT/'Sources/Core/UI/TrainerWorkbenchSearch.swift']),
                  SwiftModule('Hades2', [ROOT/'Sources/Hades2/Generated/Hades2Feature.generated.swift',
                                         ROOT/'Sources/Hades2/Hades2Types.swift',
+                                        ROOT/'Sources/Hades2/Hades2Cheats.swift',
                                         ROOT/'Sources/Hades2/Services/Hades2WorkbenchNavigation.swift'],
                              (SWIFT_CORE_MODULE,))],
         harness_sources=[main], output=binary, flags=(), swiftc=SWIFTC, cwd=ROOT,

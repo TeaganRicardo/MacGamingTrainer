@@ -20,7 +20,7 @@ from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpContr
 
 FAMILIES = ('flora', 'mining', 'digging', 'shades', 'fishing')
 assert DESIRED_STATE_SCHEMA_VERSION == 13
-assert PROFILE_SCHEMA_VERSION == 6
+assert PROFILE_SCHEMA_VERSION == 7
 assert Hades2PreferenceStore.defaults()['gatheringProbabilities'] == {}
 valid = dict(zip(FAMILIES, (0, 100, 32.5, 1, 99)))
 assert Hades2PreferenceStore.normalize({'gatheringProbabilities': valid})['gatheringProbabilities'] == valid
@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     adapter.state['gatheringTargets'] = {'mining': {'available': True, 'scopeToken': 'ephemeral'}}
     adapter.save_profile('Gathering')
     envelope = json.loads(adapter.profile_service.path('Gathering').read_text())
-    assert envelope['schemaVersion'] == 6 and envelope['desiredSchemaVersion'] == DESIRED_STATE_SCHEMA_VERSION
+    assert envelope['schemaVersion'] == PROFILE_SCHEMA_VERSION and envelope['desiredSchemaVersion'] == DESIRED_STATE_SCHEMA_VERSION
     assert envelope['desired']['gatheringProbabilities'] == wanted
     assert 'gatheringTargets' not in envelope['desired'] and 'scopeToken' not in envelope['desired']
     adapter.reset_desired()

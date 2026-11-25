@@ -130,8 +130,8 @@ struct HadesTrainerView: View {
                     TrainerMetricGrid {
                         ForEach(Self.multipliers) { feature in
                             // Native units: multipliers are ×, additional dashes a count.
-                            TrainerMultiplierMetricCard(
-                                title: text(feature.key), icon: feature.icon,
+                            TrainerCheatMultiplierCard(
+                                definition: feature.cheatDefinition,
                                 text: draft(.feature(feature)), focus: $focusedField, focusValue: .feature(feature),
                                 suffix: feature == .dashBonus ? "" : "×", editable: model.canEditIntent,
                                 onCommit: completing(.feature(feature))

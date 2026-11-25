@@ -5,10 +5,25 @@ import TrainerCore
 typealias Hades2ShortcutProfileApplyResult = TrainerShortcutProfileApplyResult
 
 struct Hades2ShortcutStore {
-    static let currentLayoutVersion = 7
+    static let currentLayoutVersion = 8
     private static let moduleNamespace = "hades2"
     static var layoutVersionKey: String { "\(moduleNamespace).shortcut.layoutVersion" }
     private static let legacyLayoutVersionKey = "shortcut.layoutVersion"
+
+    static let legacyActionAliases: [String: ShortcutAction] = {
+        var result: [String: ShortcutAction] = [:]
+        for (legacyKey, canonicalKey) in Hades2CheatCatalog.legacyAliases {
+            if let action = ShortcutAction(rawValue: canonicalKey) {
+                result[legacyKey] = action
+            }
+        }
+        return result
+    }()
+
+    private static let retiredAndAliasSuffixes: [String] = Array(
+        Hades2CheatCatalog.catalog.retiredIDs.union(Hades2CheatCatalog.legacyAliases.keys)
+    ).sorted()
+
     private var core: TrainerShortcutStore<ShortcutAction>
 
     /// Frozen key sequence used only to recognize the released v4 defaults.
@@ -57,16 +72,13 @@ struct Hades2ShortcutStore {
                 moduleID: "hades2",
                 defaults: defaults,
                 actionPrefix: "shortcut.action.",
+                canWrite: { defaults.integer(forKey: Self.layoutVersionKey) <= Self.currentLayoutVersion },
                 finalizePersistence: {
-                    defaults.set(Self.currentLayoutVersion, forKey: Self.layoutVersionKey)
-                    Self.removeLegacyAndRetiredKeys(defaults)
+                    Self.finalizePersistence(defaults)
                 }
             ),
             cleanupLegacy: {
-                if defaults.integer(forKey: Self.layoutVersionKey) < Self.currentLayoutVersion {
-                    defaults.set(Self.currentLayoutVersion, forKey: Self.layoutVersionKey)
-                }
-                Self.removeLegacyAndRetiredKeys(defaults)
+                Self.finalizePersistence(defaults)
             },
             migrateOverrides: { Self.migrateHistoricalOverrides(defaults) }
         )
@@ -107,19 +119,53 @@ struct Hades2ShortcutStore {
     mutating func applyProfile(_ values: [String: Any]) -> Hades2ShortcutProfileApplyResult {
         core.applyProfile(
             values,
-            legacyDefaultTables: [Self.legacyV4DefaultLayout(), Self.legacyV3DefaultChords()],
+            legacyDefaultTables: [
+                Self.canonicalizeLegacyTable(Self.legacyV4DefaultLayout()),
+                Self.canonicalizeLegacyTable(Self.legacyV3DefaultChords()),
+            ],
             completeLegacyLayouts: [
-                Self.legacyV4ActionOrder.filter { ShortcutAction(rawValue: $0) != nil },
-                Self.legacyV3DefaultDigits.keys.filter { ShortcutAction(rawValue: $0) != nil },
-            ]
+                Self.legacyV4ActionOrder.compactMap { (ShortcutAction(rawValue: $0) ?? Self.legacyActionAliases[$0])?.rawValue },
+                Self.legacyV4ActionOrder.filter { ShortcutAction(rawValue: $0) != nil || Self.legacyActionAliases[$0] != nil },
+                Self.legacyV3DefaultDigits.keys.compactMap { (ShortcutAction(rawValue: $0) ?? Self.legacyActionAliases[$0])?.rawValue },
+                Self.legacyV3DefaultDigits.keys.filter { ShortcutAction(rawValue: $0) != nil || Self.legacyActionAliases[$0] != nil },
+            ],
+            legacyActionAliases: Self.legacyActionAliases
         )
     }
 
+    private static func canonicalizeLegacyTable(_ table: [String: HotkeyChord]) -> [String: HotkeyChord] {
+        var result = table
+        for (legacyKey, action) in legacyActionAliases {
+            if let chord = table[legacyKey], result[action.rawValue] == nil {
+                result[action.rawValue] = chord
+            }
+        }
+        return result
+    }
+
+    private static func finalizePersistence(_ defaults: UserDefaults) {
+        let storedVersion = defaults.integer(forKey: layoutVersionKey)
+        guard storedVersion <= currentLayoutVersion else { return }
+        if storedVersion < currentLayoutVersion {
+            defaults.set(currentLayoutVersion, forKey: layoutVersionKey)
+        }
+        removeLegacyAndRetiredKeys(defaults)
+    }
+
     private static func migrateHistoricalOverrides(_ defaults: UserDefaults) -> [ShortcutAction: HotkeyChord]? {
-        if defaults.integer(forKey: layoutVersionKey) >= currentLayoutVersion {
+        let storedVersion = defaults.integer(forKey: layoutVersionKey)
+        if storedVersion >= currentLayoutVersion {
             return nil
         }
         let legacyVersion = defaults.integer(forKey: legacyLayoutVersionKey)
+        if storedVersion == 7 {
+            // Version 7 already promoted overrides to `hades2.shortcut.action.*`. Never let
+            // leftover unprefixed keys or stale v1-v5 markers overwrite or wipe committed v7 bindings.
+            if legacyVersion >= 6 {
+                return migrateV6Unprefixed(defaults)
+            }
+            return migrateV7Namespaced(defaults)
+        }
         if legacyVersion >= 6 { return migrateV6Unprefixed(defaults) }
         if legacyVersion == 5 { return migrateV5Identity(defaults) }
         if legacyVersion == 4 { return migrateV4Layout(defaults) }
@@ -128,14 +174,34 @@ struct Hades2ShortcutStore {
             // Pre-v3 layouts have already had two historical migrations in released builds.
             return [:]
         }
+        if hasNamespacedAliasKeys(defaults) {
+            return migrateV7Namespaced(defaults)
+        }
         return nil
+    }
+
+    private static func migrateV7Namespaced(_ defaults: UserDefaults) -> [ShortcutAction: HotkeyChord] {
+        var result: [ShortcutAction: HotkeyChord] = [:]
+        var used = Set<String>()
+        for action in Hades2WorkbenchCatalog.orderedShortcutActions where action != .disableAll {
+            let value = namespacedObject(for: action, in: defaults)
+            guard let value,
+                  let parsed = HotkeyChord(payload: value),
+                  !TrainerHotkeyLayout.sameKeys(parsed, TrainerHotkeyLayout.disableAllChord) else { continue }
+            guard used.insert(TrainerHotkeyLayout.identity(parsed)).inserted else { continue }
+            result[action] = parsed
+        }
+        return result
     }
 
     private static func migrateV6Unprefixed(_ defaults: UserDefaults) -> [ShortcutAction: HotkeyChord] {
         var result: [ShortcutAction: HotkeyChord] = [:]
         var used = Set<String>()
+        let preservePartiallyMigratedV7 = defaults.integer(forKey: layoutVersionKey) == 7
         for action in Hades2WorkbenchCatalog.orderedShortcutActions {
-            guard let value = defaults.object(forKey: unprefixedKey(action)),
+            let value = (preservePartiallyMigratedV7 ? namespacedObject(for: action, in: defaults) : nil)
+                ?? unprefixedObject(for: action, in: defaults)
+            guard let value,
                   let parsed = HotkeyChord(payload: value) else { continue }
             guard used.insert(TrainerHotkeyLayout.identity(parsed)).inserted else { continue }
             result[action] = parsed
@@ -147,7 +213,7 @@ struct Hades2ShortcutStore {
         var result: [ShortcutAction: HotkeyChord] = [:]
         var used = Set<String>()
         for action in Hades2WorkbenchCatalog.orderedShortcutActions {
-            let value = defaults.object(forKey: legacyKey(action)) ?? defaults.object(forKey: unprefixedKey(action))
+            let value = legacyObject(for: action, in: defaults) ?? unprefixedObject(for: action, in: defaults)
             guard let value,
                   let parsed = HotkeyChord(payload: value) else { continue }
             guard used.insert(TrainerHotkeyLayout.identity(parsed)).inserted else { continue }
@@ -160,7 +226,7 @@ struct Hades2ShortcutStore {
         var result: [ShortcutAction: HotkeyChord] = [:]
         var used = Set<String>()
         for action in ShortcutAction.legacyDigitActions {
-            guard let digit = defaults.object(forKey: legacyKey(action)) as? Int,
+            guard let digit = legacyObject(for: action, in: defaults) as? Int,
                   digit != legacyV3DefaultDigits[action.rawValue],
                   let chord = HotkeyChord.controlOptionDigit(digit) else { continue }
             guard used.insert(TrainerHotkeyLayout.identity(chord)).inserted else { continue }
@@ -176,10 +242,10 @@ struct Hades2ShortcutStore {
         var used = Set<String>()
 
         for identity in legacyV4ActionOrder {
-            guard let action = ShortcutAction(rawValue: identity),
-                  let value = defaults.object(forKey: legacyKey(action)),
+            guard let action = ShortcutAction(rawValue: identity) ?? legacyActionAliases[identity],
+                  let value = defaults.object(forKey: "shortcut.action.\(identity)") ?? legacyObject(for: action, in: defaults),
                   let parsed = HotkeyChord(payload: value) else { continue }
-            if parsed == currentDefaults[action.rawValue] || parsed == brokenDefaults[action.rawValue] {
+            if parsed == currentDefaults[identity] || parsed == brokenDefaults[identity] {
                 continue
             }
             guard used.insert(TrainerHotkeyLayout.identity(parsed)).inserted else { continue }
@@ -215,11 +281,54 @@ struct Hades2ShortcutStore {
         return layout
     }
 
-    private static let retiredSuffixes: [String] = ["godMode", "gardenQoL", "damageEnabled"]
+    private static func aliases(for action: ShortcutAction) -> [String] {
+        legacyActionAliases.compactMap { alias, target in
+            target == action ? alias : nil
+        }.sorted()
+    }
+
+    private static func namespacedKey(suffix: String) -> String {
+        "\(moduleNamespace).shortcut.action.\(suffix)"
+    }
+
+    private static func namespacedObject(for action: ShortcutAction, in defaults: UserDefaults) -> Any? {
+        if let value = defaults.object(forKey: namespacedKey(suffix: action.rawValue)) {
+            return value
+        }
+        for alias in aliases(for: action) {
+            if let value = defaults.object(forKey: namespacedKey(suffix: alias)) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func unprefixedObject(for action: ShortcutAction, in defaults: UserDefaults) -> Any? {
+        if let value = defaults.object(forKey: unprefixedKey(action)) {
+            return value
+        }
+        for alias in aliases(for: action) {
+            if let value = defaults.object(forKey: "shortcut.action.\(alias)") {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func legacyObject(for action: ShortcutAction, in defaults: UserDefaults) -> Any? {
+        if let value = defaults.object(forKey: legacyKey(action)) {
+            return value
+        }
+        return unprefixedObject(for: action, in: defaults)
+    }
+
+    private static func hasNamespacedAliasKeys(_ defaults: UserDefaults) -> Bool {
+        legacyActionAliases.keys.contains { defaults.object(forKey: namespacedKey(suffix: $0)) != nil }
+    }
 
     private static func hasLegacyUnprefixedKeys(_ defaults: UserDefaults) -> Bool {
         if defaults.object(forKey: legacyLayoutVersionKey) != nil { return true }
-        for suffix in retiredSuffixes where defaults.object(forKey: "shortcut.action.\(suffix)") != nil {
+        for suffix in retiredAndAliasSuffixes where defaults.object(forKey: "shortcut.action.\(suffix)") != nil {
             return true
         }
         return ShortcutAction.allCases.contains { defaults.object(forKey: unprefixedKey($0)) != nil }
@@ -227,9 +336,9 @@ struct Hades2ShortcutStore {
 
     private static func removeLegacyAndRetiredKeys(_ defaults: UserDefaults) {
         defaults.removeObject(forKey: legacyLayoutVersionKey)
-        for suffix in retiredSuffixes {
+        for suffix in retiredAndAliasSuffixes {
             defaults.removeObject(forKey: "shortcut.action.\(suffix)")
-            defaults.removeObject(forKey: "\(moduleNamespace).shortcut.action.\(suffix)")
+            defaults.removeObject(forKey: namespacedKey(suffix: suffix))
         }
         for action in ShortcutAction.allCases {
             defaults.removeObject(forKey: unprefixedKey(action))

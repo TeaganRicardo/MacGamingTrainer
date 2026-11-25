@@ -18,15 +18,25 @@ package struct TrainerShortcutStorage<Action: RawRepresentable> where Action.Raw
         moduleID: String,
         defaults: UserDefaults,
         actionPrefix: String = "shortcut.",
+        canWrite: @escaping () -> Bool = { true },
         finalizePersistence: @escaping () -> Void = {}
     ) {
         precondition(!moduleID.isEmpty && !moduleID.contains("."), "moduleID must be a single module identifier")
         precondition(!actionPrefix.isEmpty, "actionPrefix must be non-empty")
         let prefix = "\(moduleID).\(actionPrefix)"
         self.read = { defaults.object(forKey: prefix + $0.rawValue) }
-        self.write = { defaults.set($1, forKey: prefix + $0.rawValue) }
-        self.remove = { defaults.removeObject(forKey: prefix + $0.rawValue) }
-        self.finalizePersistence = finalizePersistence
+        self.write = { action, value in
+            guard canWrite() else { return }
+            defaults.set(value, forKey: prefix + action.rawValue)
+        }
+        self.remove = { action in
+            guard canWrite() else { return }
+            defaults.removeObject(forKey: prefix + action.rawValue)
+        }
+        self.finalizePersistence = {
+            guard canWrite() else { return }
+            finalizePersistence()
+        }
     }
 }
 

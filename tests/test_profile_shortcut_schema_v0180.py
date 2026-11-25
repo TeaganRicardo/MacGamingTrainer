@@ -13,7 +13,7 @@ from games.hades2.profile_service import (
     _normalize_shortcuts,
 )
 
-assert PROFILE_SCHEMA_VERSION == 6
+assert PROFILE_SCHEMA_VERSION == 7
 
 def chord(code, modifiers, label):
     return {'keyCode':code, 'modifiers':modifiers, 'keyLabel':label}

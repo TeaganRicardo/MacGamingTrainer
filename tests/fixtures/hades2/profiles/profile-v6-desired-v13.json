@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 6,
+  "desiredSchemaVersion": 13,
+  "name": "profile-v6-desired-v13",
+  "updatedAt": "2026-11-24T12:00:00+0000",
+  "desired": {
+    "invincibility": true,
+    "damageMultiplier": 3.0
+  },
+  "shortcuts": {
+    "_layoutVersion": 1,
+    "applyNextRoomReward": {"keyCode": 13, "modifiers": 6144, "keyLabel": "W"}
+  }
+}

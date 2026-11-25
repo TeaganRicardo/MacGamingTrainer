@@ -5,6 +5,7 @@ from pathlib import Path
 
 from core.persistence import ProfileStore, normalize_shortcut_map
 
+from .cheats import HADES2_CHEAT_CATALOG
 from .error_presentation import Hades2ValueError
 from .persistence import (
     PersistenceError,
@@ -12,14 +13,14 @@ from .persistence import (
 )
 from .preferences import DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
 
-PROFILE_SCHEMA_VERSION = 6
+PROFILE_SCHEMA_VERSION = 7
 PROFILE_COMPATIBILITY_FLOOR = 3
 _LEGACY_V3_SHORTCUT_MODIFIERS = (1 << 11) | (1 << 12)
 _LEGACY_V3_DIGIT_KEYCODES = {
     0:29, 1:18, 2:19, 3:20, 4:21, 5:23, 6:22, 7:26, 8:28, 9:25,
 }
 _SHORTCUT_ACTION_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
-_RETIRED_SHORTCUT_ACTIONS = frozenset(('godMode','gardenQoL','damageEnabled'))
+_RETIRED_SHORTCUT_ACTIONS = HADES2_CHEAT_CATALOG.retired_ids | frozenset(HADES2_CHEAT_CATALOG.alias_map())
 
 
 def _normalize_shortcuts(raw):
@@ -46,11 +47,7 @@ def _migrate_v3_shortcuts(raw):
 def _migrate_legacy_shortcut_identity(raw):
     """Rename legacy shortcut action IDs only while upgrading historical Profiles."""
     if not isinstance(raw,dict):return raw
-    migrated=dict(raw)
-    if 'invincibility' not in migrated and 'godMode' in migrated:
-        migrated['invincibility']=migrated['godMode']
-    migrated.pop('godMode',None)
-    return migrated
+    return HADES2_CHEAT_CATALOG.migrate_shortcut_payload(raw)
 
 
 def _migrate_profile_payload(payload, version):

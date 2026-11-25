@@ -303,12 +303,16 @@ struct Hades2TrainerView: View {
     private var commonSection: some View {
         TrainerSection(title: text("hades2.section.common"), icon: Hades2WorkbenchSection.common.icon) {
             VStack(spacing: 1) {
-                ForEach(Hades2WorkbenchCatalog.shortcutActions(in: .common).filter { $0.commonFeatureIcon != nil }) { action in
-                    if let key = action.featureKey, let icon = action.commonFeatureIcon {
+                ForEach(Hades2CheatCatalog.commonToggleDefinitions) { definition in
+                    if let key = Hades2FeatureKey(rawValue: definition.id) {
                         let enabled = model.isFeatureEnabled(key)
-                        featureRow(text(action.presentationKey), key: key, icon: icon,
-                                   enabled: enabled, shortcut: action,
-                                   help: action.commonFeatureHelpKey.map { text($0) } ?? "") {
+                        let shortcut = ShortcutAction(rawValue: definition.shortcutID ?? definition.id)
+                        TrainerCheatToggleRow(
+                            definition: definition,
+                            state: model.featurePresentation(key, enabled: enabled)
+                                .trainerControlState(using: theme, localization: localization),
+                            shortcutText: shortcut.map { model.shortcutText($0) }
+                        ) {
                             model.feature(key, value: !model.isFeatureEnabled(key))
                         }
                     }
@@ -736,12 +740,13 @@ struct Hades2TrainerView: View {
         TrainerSection(title: text("hades2.section.resourcesAndGathering"), icon: Hades2WorkbenchSection.resources.icon) {
             resourcePanel
             Hades2GatheringPanel(model: model)
-            TrainerLabeledControlRow(
-                title: text("hades2.garden.title"), icon: Hades2WorkbenchIcon.garden,
+            TrainerCheatOneShotRow(
+                definition: Hades2CheatCatalog.definition(id: "matureGarden")!,
                 tint: model.canMatureGarden ? theme.accent : theme.inactive,
                 emphasized: model.canMatureGarden
             ) {
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.matureGarden))
+            } actionButton: {
                 TrainerSecondaryActionButton(title: text("hades2.garden.matureNow"),
                     enabled: model.canMatureGarden) {
                     _ = model.matureGarden()
@@ -798,12 +803,14 @@ struct Hades2TrainerView: View {
     }
 
     private var gameSpeedPanel: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let definition = Hades2CheatCatalog.definition(id: "gameSpeed")!
+        return VStack(alignment: .leading, spacing: 4) {
             TrainerLabeledControlRow(
-                title: text("hades2.gameSpeed.title"), icon: TrainerSemanticIcon.Concept.timeScale,
+                title: definition.label.resolve(using: localization),
+                icon: definition.icon,
                 tint: model.canEditDesired ? theme.accent : theme.inactive,
                 emphasized: model.canEditDesired,
-                helpText: text("hades2.gameSpeed.hint")
+                helpText: definition.help?.resolve(using: localization) ?? ""
             ) {
                 TrainerNumberField(
                     text: gameSpeedInputBinding,
@@ -1117,7 +1124,7 @@ struct Hades2TrainerView: View {
     @ViewBuilder
     private var expandedSessionMetrics: some View {
         damageMetric
-        editableStatMetric(text("hades2.stat.grasp"), icon: Hades2WorkbenchIcon.grasp, stat: "grasp", text: draft(.grasp), focus: .grasp, suffix: "", locked: model.graspLocked)
+        editableStatMetric(stat: "grasp", text: draft(.grasp), focus: .grasp, suffix: "", locked: model.graspLocked)
         editableAmountMetric(
             text("hades2.metric.rerolls"), icon: TrainerSemanticIcon.Concept.randomize, text: draft(.rerolls), focus: .rerolls,
             color: accent, locked: model.rerollsLocked, enabled: model.canSetRerolls,
@@ -1142,16 +1149,16 @@ struct Hades2TrainerView: View {
         ) {
             model.lockBiomeTime(!model.biomeTimeLocked)
         }
-        editableStatMetric(text("hades2.stat.dodge"), icon: TrainerSemanticIcon.Concept.defense, stat: "dodge", text: draft(.dodge), focus: .dodge, suffix: "%", locked: model.dodgeLocked)
-        editableStatMetric(text("hades2.stat.crit"), icon: TrainerSemanticIcon.Concept.precision, stat: "crit", text: draft(.crit), focus: .crit, suffix: "%", locked: model.critLocked)
-        editableStatMetric(text("hades2.stat.enemyDamage"), icon: TrainerSemanticIcon.Concept.impact, stat: "enemyDamage", text: draft(.enemyDamage), focus: .enemyDamage, suffix: "%", locked: model.enemyDamageLocked)
-        editableStatMetric(text("hades2.stat.enemyHealth"), icon: TrainerSemanticIcon.Concept.vitality, stat: "enemyHealth", text: draft(.enemyHealth), focus: .enemyHealth, suffix: "%", locked: model.enemyHealthLocked)
-        editableStatMetric(text("hades2.stat.chargeSpeed"), icon: TrainerSemanticIcon.Concept.timer, stat: "chargeSpeed", text: draft(.chargeSpeed), focus: .chargeSpeed, suffix: "%", locked: model.chargeSpeedLocked)
-        editableStatMetric(text("hades2.stat.moveSpeed"), icon: TrainerSemanticIcon.Concept.movement, stat: "moveSpeed", text: draft(.moveSpeed), focus: .moveSpeed, suffix: "%", locked: model.moveSpeedLocked)
-        editableStatMetric(text("hades2.stat.sprintSpeed"), icon: Hades2WorkbenchIcon.sprintSpeed, stat: "sprintSpeed", text: draft(.sprintSpeed), focus: .sprintSpeed, suffix: "%", locked: model.sprintSpeedLocked)
-        editableStatMetric(text("hades2.stat.dashSpeed"), icon: TrainerSemanticIcon.Concept.dash, stat: "dashSpeed", text: draft(.dashSpeed), focus: .dashSpeed, suffix: "%", locked: model.dashSpeedLocked)
-        editableStatMetric(text("hades2.stat.attackSpeed"), icon: TrainerSemanticIcon.Concept.actionSpeed, stat: "attackSpeed", text: draft(.attackSpeed), focus: .attackSpeed, suffix: "%", locked: model.attackSpeedLocked)
-        editableStatMetric(text("hades2.stat.manaRegen"), icon: TrainerSemanticIcon.Concept.energy, stat: "manaRegen", text: draft(.manaRegen), focus: .manaRegen, suffix: "/s", locked: model.manaRegenLocked)
+        editableStatMetric(stat: "dodge", text: draft(.dodge), focus: .dodge, suffix: "%", locked: model.dodgeLocked)
+        editableStatMetric(stat: "crit", text: draft(.crit), focus: .crit, suffix: "%", locked: model.critLocked)
+        editableStatMetric(stat: "enemyDamage", text: draft(.enemyDamage), focus: .enemyDamage, suffix: "%", locked: model.enemyDamageLocked)
+        editableStatMetric(stat: "enemyHealth", text: draft(.enemyHealth), focus: .enemyHealth, suffix: "%", locked: model.enemyHealthLocked)
+        editableStatMetric(stat: "chargeSpeed", text: draft(.chargeSpeed), focus: .chargeSpeed, suffix: "%", locked: model.chargeSpeedLocked)
+        editableStatMetric(stat: "moveSpeed", text: draft(.moveSpeed), focus: .moveSpeed, suffix: "%", locked: model.moveSpeedLocked)
+        editableStatMetric(stat: "sprintSpeed", text: draft(.sprintSpeed), focus: .sprintSpeed, suffix: "%", locked: model.sprintSpeedLocked)
+        editableStatMetric(stat: "dashSpeed", text: draft(.dashSpeed), focus: .dashSpeed, suffix: "%", locked: model.dashSpeedLocked)
+        editableStatMetric(stat: "attackSpeed", text: draft(.attackSpeed), focus: .attackSpeed, suffix: "%", locked: model.attackSpeedLocked)
+        editableStatMetric(stat: "manaRegen", text: draft(.manaRegen), focus: .manaRegen, suffix: "/s", locked: model.manaRegenLocked)
     }
 
     private var elementPanel: some View {
@@ -1164,8 +1171,8 @@ struct Hades2TrainerView: View {
     }
 
     private var damageMetric: some View {
-        TrainerMultiplierMetricCard(
-            title: text("hades2.feature.damageMultiplier"), icon: TrainerSemanticIcon.Concept.impact,
+        TrainerCheatMultiplierCard(
+            definition: Hades2CheatCatalog.definition(id: "damageMultiplier")!,
             text: draft(.damageMultiplier), focus: $focusedField, focusValue: .damageMultiplier,
             suffix: "×", editable: model.canEditDesired,
             onCommit: completing(.multiplier("damageMultiplier"))
@@ -1529,10 +1536,26 @@ struct Hades2TrainerView: View {
             VStack(spacing: 1) {
                 // The two gain multipliers are one family; keep them adjacent so the
                 // shared "gain" meaning is visible instead of split around the editor.
-                multiplierRow(text("hades2.feature.moneyMultiplier"), enabled: model.moneyMultiplierEnabled, actual: model.moneyMultiplier,
-                    text: draft(.moneyMultiplier), feature: "moneyMultiplier", toggle: .moneyMultiplierEnabled, shortcut: .moneyMultiplierEnabled)
-                multiplierRow(text("hades2.feature.resourceMultiplier"), enabled: model.resourceMultiplierEnabled, actual: model.resourceMultiplier,
-                    text: draft(.resourceMultiplier), feature: "resourceMultiplier", toggle: .resourceMultiplierEnabled, shortcut: .resourceMultiplierEnabled)
+                ForEach(Hades2CheatCatalog.multiplierToggleDefinitions) { definition in
+                    let isMoney = definition.id == "moneyMultiplierEnabled"
+                    let feature = isMoney ? "moneyMultiplier" : "resourceMultiplier"
+                    let enabled = isMoney ? model.moneyMultiplierEnabled : model.resourceMultiplierEnabled
+                    let field: EditField = isMoney ? .moneyMultiplier : .resourceMultiplier
+                    if let toggle = Hades2FeatureKey(rawValue: definition.id) {
+                        let shortcut = ShortcutAction(rawValue: definition.shortcutID ?? definition.id)
+                        TrainerCheatMultiplierRow(
+                            definition: definition,
+                            state: model.featurePresentation(toggle, enabled: enabled)
+                                .trainerControlState(using: theme, localization: localization),
+                            text: draft(field),
+                            onCommit: completing(.multiplier(feature)),
+                            onEditingChanged: tracking(field),
+                            shortcutText: shortcut.map { model.shortcutText($0) }
+                        ) {
+                            model.feature(toggle, value: !enabled)
+                        }
+                    }
+                }
             }
             .trainerGroupedRows()
             TrainerResourceEditor(
@@ -1843,35 +1866,10 @@ struct Hades2TrainerView: View {
         )
     }
 
-    private func multiplierRow(_ title: String, enabled: Bool, actual: Double, text: Binding<String>, feature: String, toggle: Hades2FeatureKey, shortcut: ShortcutAction? = nil) -> some View {
-        TrainerFeatureMultiplierRow(
-            title: title,
-            icon: feature == "moneyMultiplier" ? TrainerSemanticIcon.Concept.currency : TrainerSemanticIcon.Section.inventory,
-            state: model.featurePresentation(toggle, enabled: enabled).trainerControlState(using: theme, localization: localization),
-            text: text,
-            onCommit: completing(.multiplier(feature)),
-            onEditingChanged: tracking(feature == "moneyMultiplier" ? .moneyMultiplier : .resourceMultiplier),
-            shortcutText: shortcut.map { model.shortcutText($0) }
-        ) {
-            model.feature(toggle, value: !enabled)
-        }
-    }
-
     private var management: some View {
         TrainerSection(title: text("hades2.section.management"), icon: Hades2WorkbenchSection.management.icon) {
             Hades2ManagementUtilities()
         }
-    }
-
-    private func featureRow(_ title: String, key: Hades2FeatureKey, icon: String, enabled: Bool, shortcut: ShortcutAction? = nil, help: String = "", action: @escaping () -> Void) -> some View {
-        TrainerFeatureToggleRow(
-            title: title,
-            icon: icon,
-            state: model.featurePresentation(key, enabled: enabled).trainerControlState(using: theme, localization: localization),
-            helpText: help,
-            shortcutText: shortcut.map { model.shortcutText($0) },
-            action: action
-        )
     }
 
     private func editableVitalMetric(_ title: String, icon: String, current: Binding<String>, maximum: Binding<String>,
@@ -1926,11 +1924,12 @@ struct Hades2TrainerView: View {
         )
     }
 
-    private func editableStatMetric(_ title: String, icon: String, stat: String, text: Binding<String>, focus: EditField,
+    private func editableStatMetric(stat: String, text: Binding<String>, focus: EditField,
         suffix: String, locked: Bool) -> some View {
-        TrainerStatMetricCard(
-            title: title,
-            icon: icon,
+        let definition = Hades2CheatCatalog.definition(id: stat)!
+        return TrainerStatMetricCard(
+            title: definition.label.resolve(using: localization),
+            icon: definition.icon,
             text: text,
             focus: $focusedField,
             focusValue: focus,

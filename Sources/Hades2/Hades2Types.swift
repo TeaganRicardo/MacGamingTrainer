@@ -86,8 +86,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     case boonRarityEnabled, forceLegendary, forceDuo, acquireChaosPair, acquireExactBoon, openSellTraits
     case moneyMultiplierEnabled, resourceMultiplierEnabled
     case generateFlora, generateMining, generateDigging, generateShades, generateFishing, matureGarden
-    /// Current source identity; raw value preserves the released shortcut/profile storage key only.
-    case applyWorldExit = "applyNextRoomReward"
+    case applyWorldExit
     case applyNextOccurrence, generateChamberFacility, generateChaosGate
     case spawnOlympian, spawnPickup, spawnSpecial
     case disableAll
