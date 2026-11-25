@@ -649,7 +649,7 @@ class CatalogSaveWorkspace(CoreSaveWorkspace[_Document]):
             path = field.path
             if not path:
                 continue
-            for _other_id, other, _other_intent in staged[index + 1:]:
+            for _other_id, other, _other_intent in staged[index + 1 :]:
                 other_path = other.path
                 if not other_path:
                     continue
