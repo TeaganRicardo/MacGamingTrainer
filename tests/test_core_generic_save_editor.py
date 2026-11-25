@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+from dataclasses import replace
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -58,7 +60,16 @@ class _SampleJsonCodec:
         return self.decode(path.read_bytes())
 
 
-def _sample_spec() -> SaveEditorSpec[dict]:
+class _RoundedSampleJsonCodec(_SampleJsonCodec):
+    def encode(self, document: dict) -> bytes:
+        normalized = deepcopy(document)
+        inventory = normalized.get("inventory")
+        if isinstance(inventory, dict) and "speed" in inventory:
+            inventory["speed"] = round(inventory["speed"], 1)
+        return super().encode(normalized)
+
+
+def _sample_spec(*, codec=None, include_parent_field: bool = False) -> SaveEditorSpec[dict]:
     catalog = SaveFieldCatalog(
         domains=(
             SaveDomainSpec("general", {"en": "General", "zh-CN": "常规"}, icon="gearshape"),
@@ -157,17 +168,33 @@ def _sample_spec() -> SaveEditorSpec[dict]:
             else None
         ),
     )
-    return SaveEditorSpec(codec=_SampleJsonCodec(), eligibility=eligibility, catalog=catalog)
+    spec = SaveEditorSpec(codec=codec or _SampleJsonCodec(), eligibility=eligibility, catalog=catalog)
+    if include_parent_field:
+        parent = SaveFieldSpec(
+            id="inventory",
+            domain="advanced",
+            path=("inventory",),
+            names={"en": "Inventory Object", "zh-CN": "物品栏对象"},
+            group_id="inventory-parent",
+            group_names={"en": "Inventory Object", "zh-CN": "物品栏对象"},
+            owner_id="owner.inventory-parent",
+            owner_names={"en": "Inventory", "zh-CN": "物品栏"},
+            value_type="json",
+        )
+        spec = replace(spec, catalog=replace(spec.catalog, fields=(parent, *spec.catalog.fields)))
+    return spec
 
 
 class SampleJsonGameAdapter(GameAdapter):
     """Third-game adapter proving Save Editor works with zero Core edits."""
 
-    def __init__(self, context: GameAdapterContext, *, max_open: int = 2) -> None:
+    def __init__(
+        self, context: GameAdapterContext, *, max_open: int = 2, codec=None, include_parent_field: bool = False
+    ) -> None:
         super().__init__(context)
         self.save_workspaces = CatalogSaveWorkspace.registry(
             lambda: self.save_service,
-            _sample_spec(),
+            _sample_spec(codec=codec, include_parent_field=include_parent_field),
             max_open=max_open,
         )
 
@@ -245,6 +272,68 @@ def main() -> None:
             save_management=sample_spec,
             home=root / "sample/home",
         )
+        # Review must describe the codec-normalized bytes that Apply will install.
+        rounded_saves = root / "rounded/saves"
+        _write_sample_saves(rounded_saves)
+        rounded_spec = replace(sample_spec, roots=(replace(sample_spec.roots[0], path=str(rounded_saves)),))
+        rounded_ctx = replace(sample_ctx, game_id="rounded_json", save_management=rounded_spec, home=root / "rounded/home")
+        rounded_adapter = SampleJsonGameAdapter(rounded_ctx, codec=_RoundedSampleJsonCodec())
+        rounded_router = JsonlRequestRouter(rounded_adapter, save_data_root=root / "rounded/data", target_running_probe=lambda: False)
+        try:
+            rounded_open = rounded_router.handle({
+                "id": "rounded-open", "command": "save_editor_open",
+                "params": {"source": {"rootId": "main", "relativePath": "Slot1.json"}},
+            })["result"]
+            rounded_ws, rounded_gen = rounded_open["workspaceId"], rounded_open["baselineGeneration"]
+            rounded_router.handle({
+                "id": "rounded-target", "command": "save_editor_target",
+                "params": {"workspaceId": rounded_ws, "baselineGeneration": rounded_gen,
+                           "target": {"rootId": "main", "relativePath": "Slot1.json"}},
+            })
+            rounded_router.handle({
+                "id": "rounded-stage", "command": "save_editor_stage",
+                "params": {"workspaceId": rounded_ws, "baselineGeneration": rounded_gen,
+                           "entryId": "inventory.speed", "operation": "set", "value": 1.72},
+            })
+            rounded_review = rounded_router.handle({
+                "id": "rounded-review", "command": "save_editor_review",
+                "params": {"workspaceId": rounded_ws, "baselineGeneration": rounded_gen},
+            })["result"]
+            assert rounded_review["actions"][0]["after"] == "1.7"
+            assert rounded_review["actions"][0]["value"] == 1.7
+            rounded_apply = rounded_router.handle({
+                "id": "rounded-apply", "command": "save_editor_apply",
+                "params": {"workspaceId": rounded_ws, "baselineGeneration": rounded_gen},
+            })
+            assert rounded_apply["ok"] is True, rounded_apply
+            assert json.loads((rounded_saves / "Slot1.json").read_text(encoding="utf-8"))["inventory"]["speed"] == 1.7
+        finally:
+            rounded_router.close()
+
+        # Parent/child staged fields are rejected because their combined result
+        # cannot be represented as two independent signed-off actions.
+        overlap_adapter = SampleJsonGameAdapter(sample_ctx, include_parent_field=True)
+        overlap_router = JsonlRequestRouter(overlap_adapter, save_data_root=root / "overlap/data", target_running_probe=lambda: False)
+        try:
+            overlap_open = overlap_router.handle({
+                "id": "overlap-open", "command": "save_editor_open",
+                "params": {"source": {"rootId": "main", "relativePath": "Slot1.json"}},
+            })["result"]
+            overlap_ws, overlap_gen = overlap_open["workspaceId"], overlap_open["baselineGeneration"]
+            overlap_router.handle({
+                "id": "overlap-stage-parent", "command": "save_editor_stage",
+                "params": {"workspaceId": overlap_ws, "baselineGeneration": overlap_gen,
+                           "entryId": "inventory", "operation": "set", "value": {"gold": 10, "speed": 1.0}},
+            })
+            overlap_child = overlap_router.handle({
+                "id": "overlap-stage-child", "command": "save_editor_stage",
+                "params": {"workspaceId": overlap_ws, "baselineGeneration": overlap_gen,
+                           "entryId": "inventory.gold", "operation": "set", "value": 20},
+            })
+            assert overlap_child["ok"] is False and overlap_child["error"]["code"] == "invalid_request"
+        finally:
+            overlap_router.close()
+
         sample_adapter = SampleJsonGameAdapter(sample_ctx, max_open=2)
         router = JsonlRequestRouter(sample_adapter, save_data_root=root / "sample/data", target_running_probe=lambda: False)
         try:
