@@ -504,7 +504,7 @@ class ProfileStore:
                 normalized_payload = self._normalize_payload(payload_data, version)
         except _UnsupportedProfileSchema:
             raise
-        except Exception as exc:
+        except ValueError as exc:
             if quarantine:
                 self._quarantine(path, "Invalid profile envelope")
             raise self._corrupt_error("invalid_envelope", exc) from exc
