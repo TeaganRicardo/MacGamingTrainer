@@ -252,7 +252,8 @@
 "host.saveEditor.applied" = "存档修改已应用并通过校验";
 "host.saveEditor.recoverableBackup" = "可恢复备份";
 "host.saveEditor.loadInGame" = "请在游戏中读取该存档以查看修改后的数值。";
-"host.saveEditor.hot" = "已在游戏运行期间写入目标存档；请在游戏内重新读取后再继续。";
+"host.saveEditor.hot" = "本次仅验证了磁盘中的存档写入。请在游戏中重新读取以使用修改；游戏再次保存可能覆盖这些修改。";
+"host.saveEditor.runtimeReloaded" = "已验证磁盘中的存档写入，并由游戏重新加载。";
 "host.saveEditor.recovery" = "应用失败且未能完整回滚，恢复证据已保留在：";
 "host.saveEditor.invalidValue" = "请输入符合该字段类型与范围的合法值。";
 "host.saveEditor.invalidResponse" = "Save Editor 后端返回了无法识别的响应。";
