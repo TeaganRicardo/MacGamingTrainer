@@ -157,7 +157,8 @@ class SaveRestoreTransaction:
                         if not isinstance(path_text, str) or not Path(path_text).is_absolute():
                             raise ValueError('invalid unresolved target path')
                         if digest is not None and (
-                            not isinstance(digest, str) or len(digest) != 64
+                            not isinstance(digest, str)
+                            or len(digest) != 64
                             or any(character not in '0123456789abcdef' for character in digest)
                         ):
                             raise ValueError('invalid unresolved target digest')
@@ -219,13 +220,15 @@ class SaveRestoreTransaction:
         keys = set(baseline_hashes) | set(target_hashes)
         targets = []
         for key in sorted(keys):
-            targets.append({
-                'rootId': key[0],
-                'relativePath': key[1],
-                'path': str(self._physical_target_path(key)),
-                'sha256': baseline_hashes.get(key),
-                'resolved': False,
-            })
+            targets.append(
+                {
+                    'rootId': key[0],
+                    'relativePath': key[1],
+                    'path': str(self._physical_target_path(key)),
+                    'sha256': baseline_hashes.get(key),
+                    'resolved': False,
+                }
+            )
         atomic_write_text(
             Path(rollback_root) / 'unresolved-targets.json',
             json.dumps({'schemaVersion': 1, 'targets': targets}, ensure_ascii=False, allow_nan=False),
@@ -396,9 +399,7 @@ class SaveRestoreTransaction:
         result = None
 
         try:
-            self._require_targets_recovered(
-                set(baseline_hashes) | set(target_hashes), exclude_root=rollback_root
-            )
+            self._require_targets_recovered(set(baseline_hashes) | set(target_hashes), exclude_root=rollback_root)
             destinations = self._capture_destinations(set(baseline_hashes) | set(target_hashes), destination_stack)
             if preserve_current and snapshot_rows:
                 previous = self.store.create_snapshot(
