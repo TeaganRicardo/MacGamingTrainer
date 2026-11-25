@@ -6,15 +6,26 @@ from pathlib import Path
 import tempfile
 
 from core.adapter import AdapterError
-from core.target_probe import BoundedCommandTimeoutError, bounded_run
+from core.target_probe import bounded_run
 from .operation_budgets import PROCESS_IDENTITY_TIMEOUT_SECONDS
+
+
+_PROCESS_IDENTITY_PREFIX = 'ps-utc-v1:'
 
 
 def _identified_start(value):
     if not isinstance(value, str):
         return None
     value = value.strip()
-    return value if value and value.isprintable() else None
+    if not value or not value.isprintable():
+        return None
+    if value.startswith(_PROCESS_IDENTITY_PREFIX):
+        start = value[len(_PROCESS_IDENTITY_PREFIX):].strip()
+        return _PROCESS_IDENTITY_PREFIX + ' '.join(start.split()) if start else None
+    # Earlier ps identities used local wall time without recording its zone.
+    # Their whitespace-delimited timestamps cannot prove same-PID replacement.
+    # Opaque identity-provider tokens remain comparable.
+    return value if not any(character.isspace() for character in value) else None
 
 
 def process_identity(pid):
@@ -24,10 +35,13 @@ def process_identity(pid):
             PROCESS_IDENTITY_TIMEOUT_SECONDS,
             text=True,
             check=False,
+            env={**os.environ, 'TZ': 'UTC', 'LC_ALL': 'C'},
         )
-    except (OSError, BoundedCommandTimeoutError):
+    except OSError:
         return None
-    return _identified_start(result.stdout) if result.returncode == 0 else None
+    if result.returncode != 0 or not isinstance(result.stdout, str) or not result.stdout.strip():
+        return None
+    return _identified_start(_PROCESS_IDENTITY_PREFIX + result.stdout.strip())
 
 
 class HadesRecoveryJournal:

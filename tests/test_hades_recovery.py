@@ -160,7 +160,7 @@ print('hades_ambiguous_process_identity_preserves_recovery_ok')
 # ps may fail while returning text, or return multiple candidate starts. Only
 # a successful single identity is evidence that a game process was replaced.
 for result, expected in (
-    (types.SimpleNamespace(returncode=0, stdout=' birth-A\n'), 'birth-A'),
+    (types.SimpleNamespace(returncode=0, stdout=' birth-A\n'), 'ps-utc-v1:birth-A'),
     (types.SimpleNamespace(returncode=1, stdout='birth-B'), None),
     (types.SimpleNamespace(returncode=0, stdout=''), None),
     (types.SimpleNamespace(returncode=0, stdout='birth-A\nbirth-B\n'), None),
