@@ -136,6 +136,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-speed-observation-") as temporary:
     else:
         raise AssertionError('lost PID default was adopted as actual speed')
     assert lost._time_warp_speed is None and lost.preference_dirty
+    assert lost.state['recovery']['method'] == 'time_warp.current_speed'
+    assert lost.state['recovery']['outcome'] == 'unknown'
 
     # Every connection-loss route invalidates the last observed helper value,
     # including read-only observations and preflight failures before dispatch.
@@ -145,7 +147,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-speed-observation-") as temporary:
             disconnected_driver, Path(temporary) / 'helper', ['Hades II'])
         disconnected_session = FakeResidentSession(session.payload)
         disconnected_session.payload['runtimeDiagnostics'] = {}
-        disconnected = Hades2Adapter(context=context, resident_session=disconnected_session,
+        # These are independent fixture games. The lost query above correctly
+        # retains its own lifetime's recovery evidence across backend restart.
+        loss_context = hades2_adapter_context(Path(temporary) / ('loss-' + loss))
+        disconnected = Hades2Adapter(context=loss_context, resident_session=disconnected_session,
                                      time_warp_controller=disconnected_controller)
         disconnected.state.update(connected=True, pid=4242)
         assert disconnected.observe_runtime()['activeFeatures']['gameSpeed']
