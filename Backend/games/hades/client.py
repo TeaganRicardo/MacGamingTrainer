@@ -51,30 +51,26 @@ class HadesRuntimeClient:
         lifetime = (self.pid, self.process_identity, self.sidecar)
         sidecar = self.sidecar
         sidecar.reply_timeout_seconds = self._reply_timeout(method)
-        # Status installs resident/world hooks, and disconnect resets native
-        # time before detaching. Both need journal protection on lost replies.
-        crosses_runtime = method != 'time_warp.current_speed'
-        if crosses_runtime and self.uncertain_pid is not None and self.uncertain_pid == self.pid:
+        # Status installs hooks, disconnect resets native time, and even a
+        # speed query can stop/resume the process. Protect every boundary.
+        if self.uncertain_pid is not None and self.uncertain_pid == self.pid:
             raise AdapterError('restart_required', 'hades.error.restartRequired')
-        pending = None
-        if crosses_runtime:
-            pending = self.recovery.begin(self.pid, self.process_identity, method)
+        pending = self.recovery.begin(self.pid, self.process_identity, method)
         try:
             response = sidecar.request(
                 method, params or {}, allow_start=method == 'connect',
-                outcome_unknown_on_loss=crosses_runtime,
+                outcome_unknown_on_loss=True,
             )
         except SidecarStartError as error:
             self._require_current_lifetime(lifetime)
-            if crosses_runtime:
-                self.recovery.complete(pending)
+            self.recovery.complete(pending)
             raise AdapterError('debugger_start', 'hades.error.debuggerStart', diagnostic=str(error)) from error
         except SidecarTerminalError as error:
             self._require_current_lifetime(lifetime)
             self.connected = False
             if error.outcome_unknown:
                 self.uncertain_pid = self.pid
-            elif crosses_runtime:
+            else:
                 self.recovery.complete(pending)
             key = 'outcomeUnknown' if error.outcome_unknown else 'debuggerLost'
             raise AdapterError('outcome_unknown' if error.outcome_unknown else 'debugger_lost',
@@ -88,27 +84,23 @@ class HadesRuntimeClient:
             else:
                 if error['code'] in ('not_connected', 'debugger_lost', 'detach_failed'):
                     self.connected = False
-                if crosses_runtime:
-                    self.recovery.complete(pending)
+                self.recovery.complete(pending)
             raise AdapterError(error['code'], error['presentation'],
                                diagnostic=error.get('diagnostic'), arguments=error.get('arguments', []))
         result = response.get('result')
         if not isinstance(result, dict) or type(result.get('connected')) is not bool:
             self.sidecar.close()
             self.connected = False
-            if crosses_runtime:
-                self.uncertain_pid = self.pid
+            self.uncertain_pid = self.pid
             raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
         if method in ('time_warp.current_speed', 'time_warp.set_speed'):
             speed = result.get('gameSpeed')
             if type(speed) not in (int, float) or not 0 <= speed <= 10:
                 self.sidecar.close()
                 self.connected = False
-                if crosses_runtime:
-                    self.uncertain_pid = self.pid
+                self.uncertain_pid = self.pid
                 raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
-        if crosses_runtime:
-            self.recovery.complete(pending)
+        self.recovery.complete(pending)
         self.connected = result['connected']
         return result
 

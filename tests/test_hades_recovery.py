@@ -196,6 +196,62 @@ with tempfile.TemporaryDirectory(prefix='hades-status-recovery-') as directory:
     assert not restarted_sidecar.calls
 print('hades_status_maintenance_keeps_recovery_protection_ok')
 
+# Reading Process Time Warp can stop and resume the native process. A failed
+# resume or a lost query reply must remain blocked after the backend restarts.
+for lost_reply in (False, True):
+    with tempfile.TemporaryDirectory(prefix='hades-speed-query-recovery-') as directory:
+        journal = HadesRecoveryJournal(Path(directory) / 'pending.json')
+        class SpeedQuery(Sidecar):
+            fail = False
+            def request(self, method, params, **options):
+                if method != 'time_warp.current_speed':
+                    return super().request(method, params, **options)
+                self.calls.append((method, params))
+                if not self.fail:
+                    return {'result': {'connected': True, 'pid': 42, 'gameSpeed': 1.0}}
+                if lost_reply:
+                    raise SidecarTerminalError(
+                        'lost native speed-query completion',
+                        outcome_unknown=options['outcome_unknown_on_loss'],
+                    )
+                return {'error': {'code': 'outcome_unknown', 'presentation': 'hades.error.outcomeUnknown'}}
+        sidecar = SpeedQuery()
+        client = HadesRuntimeClient(sidecar, recovery=journal, identity=lambda pid: 'birth-A')
+        client.connect(42, '/tmp/Hades/Game.macOS')
+        assert client.current_game_speed() == 1.0 and not journal.path.exists()
+        sidecar.fail = True
+        try:
+            client.current_game_speed()
+        except AdapterError as error:
+            assert error.code == 'outcome_unknown'
+        else:
+            raise AssertionError('failed native resume lost its unknown-outcome classification')
+        assert journal.path.exists(), 'native speed-query failure lost durable recovery evidence'
+        assert json.loads(journal.path.read_text()) == {
+            'pid': 42, 'identity': 'birth-A', 'method': 'time_warp.current_speed',
+        }
+        calls = len(sidecar.calls)
+        try:
+            client.current_game_speed()
+        except AdapterError as error:
+            assert error.code == 'restart_required'
+        else:
+            raise AssertionError('uncertain process control permitted another speed query')
+        assert len(sidecar.calls) == calls
+        replacement = Sidecar()
+        restarted = HadesRuntimeClient(replacement, recovery=journal, identity=lambda pid: 'birth-A')
+        try:
+            restarted.connect(42, '/tmp/Hades/Game.macOS')
+        except AdapterError as error:
+            assert error.code == 'restart_required'
+        else:
+            raise AssertionError('backend restart bypassed uncertain speed-query process control')
+        assert not replacement.calls
+        new_game = HadesRuntimeClient(Sidecar(), recovery=journal, identity=lambda pid: 'birth-B')
+        assert new_game.connect(42, '/tmp/Hades/Game.macOS')['connected']
+        assert not journal.path.exists()
+print('hades_speed_query_process_control_recovery_survives_backend_restart_ok')
+
 # Complete an old request only after another lifetime has connected and left
 # its own unknown request. This exercises the client reply path, including a
 # late reply held by the backend that existed before replacement.
