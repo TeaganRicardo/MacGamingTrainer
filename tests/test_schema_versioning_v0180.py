@@ -267,7 +267,19 @@ try:
 
     mig_adapter = Hades2Adapter(context=mig_context, transport=FutureSchemaTransport())
     assert mig_adapter.preferences['invincibility'] is True
-    assert not (legacy_root / 'desired-state.json').exists()
+    legacy_marker = legacy_root / 'desired-state.json'
+    marker_bytes = legacy_marker.read_bytes()
+    assert json.loads(marker_bytes)['relocatedTo'] == 'hades2/desired-state.json'
+    old_path_store = Hades2PreferenceStore(legacy_marker)
+    _, initialized = old_path_store.load()
+    assert initialized is False and old_path_store.write_blocked_error is not None
+    try:
+        old_path_store.save(dict(loaded, invincibility=False))
+    except UnsupportedSchemaVersionError:
+        pass
+    else:
+        raise AssertionError('a pre-namespace writer can create a second desired-state history')
+    assert legacy_marker.read_bytes() == marker_bytes
     assert (mig_context.data_dir / 'desired-state.json').is_file()
     assert not (legacy_root / 'profiles').exists()
     assert [row['name'] for row in mig_adapter.profile_service.list()] == ['migrated-preset']
@@ -286,6 +298,60 @@ try:
     (legacy_root / 'desired-state.json').write_text(json.dumps(dict(loaded, invincibility=False)), encoding='utf-8')
     mig_adapter_reload = Hades2Adapter(context=mig_context, transport=FutureSchemaTransport())
     assert mig_adapter_reload.preferences['invincibility'] is True
+    retained = list((mig_context.data_dir / 'legacy-desired-state').glob('*.json'))
+    assert len(retained) == 1 and json.loads(retained[0].read_text())['invincibility'] is False
+    assert json.loads(legacy_marker.read_text())['relocatedTo'] == 'hades2/desired-state.json'
+
+    # Interruption after publishing the refusal marker leaves the original bytes
+    # staged, blocks writes, and resumes the final move on the next startup.
+    interrupted_context = hades2_adapter_context(base / 'migration-interrupted')
+    interrupted_source = interrupted_context.data_dir.parent / 'desired-state.json'
+    interrupted_source.parent.mkdir(parents=True)
+    interrupted_bytes = (json.dumps(dict(loaded, invincibility=True)) + '\r\n').encode('utf-8')
+    interrupted_source.write_bytes(interrupted_bytes)
+    interrupted_target = interrupted_context.data_dir / 'desired-state.json'
+    pending = interrupted_context.data_dir / '.legacy-desired-state.json'
+    original_replace = os.replace
+
+    def interrupt_final_move(src, dst):
+        if Path(src) == pending and Path(dst) == interrupted_target:
+            raise OSError('synthetic interruption before final move')
+        return original_replace(src, dst)
+
+    with patch('games.hades2.persistence.os.replace', side_effect=interrupt_final_move):
+        interrupted_adapter = Hades2Adapter(context=interrupted_context, transport=FutureSchemaTransport())
+    assert pending.read_bytes() == interrupted_bytes and not interrupted_target.exists()
+    try:
+        interrupted_adapter.set_desired('invincibility', False)
+    except PersistenceError:
+        pass
+    else:
+        raise AssertionError('interrupted namespace transition left a writable defaults store')
+    resumed_adapter = Hades2Adapter(context=interrupted_context, transport=FutureSchemaTransport())
+    assert resumed_adapter.preferences['invincibility'] is True
+    assert interrupted_target.read_bytes() == interrupted_bytes and not pending.exists()
+
+    # A fresh installation retires the old path before its first setting write,
+    # while an unsaved startup still has the usual uninitialized defaults state.
+    fresh_context = hades2_adapter_context(base / 'fresh-namespace')
+    fresh_source = fresh_context.data_dir.parent / 'desired-state.json'
+    fresh_target = fresh_context.data_dir / 'desired-state.json'
+    fresh_adapter = Hades2Adapter(context=fresh_context, transport=FutureSchemaTransport())
+    assert fresh_adapter.preference_initialized is False and not fresh_target.exists()
+    fresh_again = Hades2Adapter(context=fresh_context, transport=FutureSchemaTransport())
+    assert fresh_again.preference_initialized is False and not fresh_again.preference_write_blocked
+    fresh_again.set_desired('invincibility', True)
+    assert fresh_target.is_file()
+    downgraded_store = Hades2PreferenceStore(fresh_source)
+    defaults, initialized = downgraded_store.load()
+    assert initialized is False
+    try:
+        downgraded_store.save(defaults)
+    except UnsupportedSchemaVersionError:
+        pass
+    else:
+        raise AssertionError('first namespaced write left the legacy path writable')
+    assert Hades2PreferenceStore(fresh_target).load()[0]['invincibility'] is True
 
     # #821: OSError / PermissionError during legacy migration leaves files in place,
     # logs one warning, sets hades2.warning.dataMigrationFailed, and lets Hades2Adapter keep running.

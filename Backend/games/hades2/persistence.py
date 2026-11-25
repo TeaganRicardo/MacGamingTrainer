@@ -1,4 +1,6 @@
 """Hades II persistence errors, schema compatibility and corrupt-file quarantine."""
+import hashlib
+import json
 import logging
 from pathlib import Path
 
@@ -66,13 +68,57 @@ _LEGACY_ROOT_FILES = ('desired-state.json',)
 _LEGACY_ROOT_DIRS = ('profiles', 'backups', 'diagnostics')
 
 
+def _migrate_desired_state(source, destination):
+    from .preferences import DESIRED_STATE_SCHEMA_VERSION
+
+    relative_destination = 'hades2/' + destination.name
+    pending = destination.parent / ('.legacy-' + destination.name)
+    marker = {'schemaVersion': DESIRED_STATE_SCHEMA_VERSION + 1, 'relocatedTo': relative_destination}
+    if source.is_symlink() or destination.is_symlink() or pending.is_symlink():
+        raise OSError('Desired-state migration paths must not be symbolic links.')
+    text = source.read_bytes().decode('utf-8') if source.is_file() else None
+    try:
+        raw = json.loads(text) if text is not None else None
+    except json.JSONDecodeError:
+        raw = None
+    if isinstance(raw, dict) and {'schemaVersion', 'relocatedTo'} <= set(raw) <= {
+        'schemaVersion', 'relocatedTo', 'sourceWasPresent'
+    } and (
+        type(raw['schemaVersion']) is int and raw['relocatedTo'] == relative_destination
+        and type(raw.get('sourceWasPresent', True)) is bool
+    ):
+        if not destination.is_file():
+            if pending.is_file():
+                os.replace(pending, destination)
+            elif raw.get('sourceWasPresent', True):
+                raise OSError('Relocated desired-state is missing; original transition marker was preserved.')
+        return
+
+    if destination.is_file():
+        # Earlier releases may already have split the two histories. Keep the
+        # namespaced state and retain the old root bytes before retiring its path.
+        if text is not None:
+            digest = hashlib.sha256(text.encode('utf-8')).hexdigest()
+            archive = destination.parent / 'legacy-desired-state' / (digest + '.json')
+            if not archive.exists():
+                _atomic_write_text(archive, text)
+    elif text is not None:
+        # Publish the old-reader refusal only after the original data is durable.
+        # A failed final rename resumes from this copy on the next startup.
+        _atomic_write_text(pending, text)
+    marker['sourceWasPresent'] = text is not None or destination.is_file()
+    _atomic_write_text(source, json.dumps(marker, sort_keys=True) + '\n')
+    if pending.is_file() and not destination.is_file():
+        os.replace(pending, destination)
+
+
 def migrate_legacy_root_data_dir(data_dir):
     """Migrate pre-WP4.2 flat root Hades II files and directories into `MacGamingTrainer/hades2/`."""
     target_dir = Path(data_dir)
     if target_dir.name != 'hades2' or target_dir.is_symlink():
         return []
     legacy_root = target_dir.parent
-    if not legacy_root.is_dir() or legacy_root.is_symlink():
+    if legacy_root.is_symlink() or (legacy_root.exists() and not legacy_root.is_dir()):
         return []
     failures = []
 
@@ -88,15 +134,12 @@ def migrate_legacy_root_data_dir(data_dir):
         legacy_file = legacy_root / filename
         target_file = target_dir / filename
         try:
-            if (legacy_file.is_file() or legacy_file.is_symlink()) and not (
-                target_file.exists() or target_file.is_symlink()
-            ):
-                _move(legacy_file, target_file)
+            _migrate_desired_state(legacy_file, target_file)
             for corrupt in sorted(legacy_root.glob(f'{filename}.corrupt-*')):
                 dest_corrupt = target_dir / corrupt.name
                 if not (dest_corrupt.exists() or dest_corrupt.is_symlink()):
                     _move(corrupt, dest_corrupt)
-        except OSError as error:
+        except (OSError, UnicodeError) as error:
             failures.append(f'{filename}: {error}')
 
     for dirname in _LEGACY_ROOT_DIRS:
