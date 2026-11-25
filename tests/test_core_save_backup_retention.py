@@ -161,6 +161,10 @@ class BackupRetentionTests(unittest.TestCase):
         recovery = self.service._recovery_paths()
         self.assertTrue(recovery)
         before = set(self.rows())
+        with self.assertRaises(SaveRollbackError):
+            self.edit(b'blocked')
+        baseline = Path(recovery[0]) / 'files/main/Profile1.sav'
+        self.target.write_bytes(baseline.read_bytes())
         result = self.edit(b'success')
         self.assertTrue(result['replaced'])
         self.assertEqual(result['retention']['warning'], 'recovery_pending')
