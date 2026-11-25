@@ -73,6 +73,19 @@ def build_libraries(
         subprocess.run(['codesign', '--verify', '--strict', str(destination)], check=True)
 
 
+def process_time_warp_architectures(manifest):
+    architectures = []
+    for module in manifest.get('modules', [manifest]):
+        if not module.get('buildRequirements', {}).get('processTimeWarp', False):
+            continue
+        architecture = module.get('supportedBuild', {}).get('architecture')
+        if architecture not in ('arm64', 'x86_64'):
+            raise ValueError('Process Time Warp requires a supported target architecture.')
+        if architecture not in architectures:
+            architectures.append(architecture)
+    return architectures
+
+
 def build_process_time_warp(
     manifest,
     time_warp_root,
@@ -81,7 +94,6 @@ def build_process_time_warp(
     output_dir,
     clang,
     sdk,
-    architectures,
     minimum_macos,
     clean_signing_metadata=None,
     app=None,
@@ -89,6 +101,9 @@ def build_process_time_warp(
 ):
     if not manifest.get('buildRequirements', {}).get('processTimeWarp', False):
         return False
+    architectures = process_time_warp_architectures(manifest)
+    if not architectures:
+        raise ValueError('Process Time Warp has no selected target architecture.')
     build_libraries(
         {'nativeLibraries': [PROCESS_TIME_WARP_LIBRARY]},
         time_warp_root,
@@ -131,7 +146,6 @@ def main():
             output_dir=args.output_dir,
             clang=args.clang,
             sdk=args.sdk,
-            architectures=args.architectures,
             minimum_macos=args.minimum_macos,
             clean_signing_metadata=args.clean_signing_metadata,
             app=args.app,

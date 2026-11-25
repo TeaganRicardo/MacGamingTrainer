@@ -3,6 +3,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
@@ -14,6 +15,30 @@ from supported_build import resolved_resource_source
 MANIFEST = json.loads((ROOT / "Backend/games/hades2/module.json").read_text(encoding="utf-8"))
 SUPPORTED_BUILD = MANIFEST["supportedBuild"]
 SOURCE_REFERENCE = ROOT / SUPPORTED_BUILD["referenceDirectory"] / "ui_terminology.json"
+
+
+def test_time_warp_target_slices():
+    import build_module_native as native
+    selection = {
+        'frontend': {'architectures': ['arm64']},
+        'buildRequirements': {'processTimeWarp': True},
+        'modules': [{
+            'supportedBuild': {'architecture': 'x86_64'},
+            'buildRequirements': {'processTimeWarp': True},
+        }],
+    }
+    with tempfile.TemporaryDirectory(prefix='mgt-target-slices-') as temporary:
+        with patch.object(native, 'build_libraries') as build:
+            assert native.build_process_time_warp(
+                selection, Path(temporary), Path(temporary), output_dir=Path(temporary),
+                clang='fixture-clang', sdk='fixture-sdk', minimum_macos='26.0',
+            )
+        assert build.call_args.kwargs['architectures'] == ['x86_64']
+    selection['modules'].append({
+        'supportedBuild': {'architecture': 'arm64'},
+        'buildRequirements': {'processTimeWarp': True},
+    })
+    assert native.process_time_warp_architectures(selection) == ['x86_64', 'arm64']
 
 
 def test_bundled_resource_wins_over_source_tree_fallback():
@@ -169,6 +194,38 @@ def test_product_contains_hades_resources_and_isolated_modules_exclude_them():
 
             assert verify_module_build.verify_module_build("hades", dist) == app_path.resolve()
 
+            unrelated_native = res_dir / 'Backend/core/native/other-capability.dat'
+            unrelated_native.parent.mkdir(parents=True)
+            unrelated_native.write_bytes(b'unrelated shared native resource')
+            assert verify_module_build.verify_module_build('hades', dist) == app_path.resolve()
+            unwanted_helper = unrelated_native.parent / 'libMGTTimeWarp.dylib'
+            unwanted_helper.write_bytes(b'fixture helper')
+            try:
+                verify_module_build.verify_module_build('hades', dist)
+            except ValueError as error:
+                assert 'Unrequested Process Time Warp' in str(error)
+            else:
+                raise AssertionError('opted-out Time Warp artifacts were accepted')
+            unwanted_helper.unlink()
+
+            # A module-relative name may equal a real Host-owned root file.
+            # Test both non-selected and selected module declarations.
+            foreign_manifest = project / 'Backend/games/hades2/module.json'
+            foreign_original = foreign_manifest.read_text()
+            foreign = json.loads(foreign_original)
+            foreign['appResources'].append({**foreign['appResources'][0], 'destination': 'ACTIVE_GAME_ID'})
+            foreign_manifest.write_text(json.dumps(foreign))
+            assert verify_module_build.verify_module_build('hades', dist) == app_path.resolve()
+            foreign_manifest.write_text(foreign_original)
+            selected_manifest = project / 'Backend/games/hades/module.json'
+            selected = json.loads(selected_manifest.read_text())
+            selected['appResources'].append({**selected['appResources'][0], 'destination': 'ACTIVE_GAME_ID'})
+            selected_manifest.write_text(json.dumps(selected))
+            shutil.copy2(selected_manifest, res_dir / 'Backend/games/hades/module.json')
+            norm_manifest.write_text(json.dumps(product_support.load_selection('hades').normalized()))
+            package_app.package_app_resources(norm_manifest, project, res_dir)
+            assert verify_module_build.verify_module_build('hades', dist) == app_path.resolve()
+
             leaked = res_dir / "Modules/hades2/ui_terminology.json"
             leaked.parent.mkdir(parents=True, exist_ok=True)
             leaked.write_text("{}", encoding="utf-8")
@@ -193,6 +250,7 @@ def test_product_contains_hades_resources_and_isolated_modules_exclude_them():
 
 
 for _test in (
+    test_time_warp_target_slices,
     test_bundled_resource_wins_over_source_tree_fallback,
     test_development_execution_falls_back_to_source_reference,
     test_present_but_invalid_bundle_is_not_hidden_by_source_fallback,
