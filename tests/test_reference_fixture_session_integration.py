@@ -83,7 +83,7 @@ func connectionCard(backend: Bool = true, connected: Bool = false,
         onRefresh: { selectedActions.append("refresh") },
         onPrimary: { selectedActions.append(connected ? "disconnect" : "connect") },
         onRestart: { selectedActions.append("restart") }, targetRunning: running,
-        onLaunch: supportsLaunch ? { selectedActions.append("launch") } : nil
+        onLaunch: supportsLaunch ? { @MainActor in selectedActions.append("launch") } : nil
     )
 }
 for (card, title) in [
