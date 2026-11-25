@@ -147,7 +147,7 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
     private let services: TrainerModuleServices
     private var statusObserver: UUID?
     private var shortcuts: ReferenceFixtureShortcutStore
-    private var diagnosticsReport: [String: Any]?
+    private var diagnosticsGeneration: UInt = 0
     private lazy var hotkeys = services.makeHotkeys(registrationChanged: { [weak self] failure in
         self?.shortcutRegistrationFailure = failure
     }) { [weak self] action in
@@ -253,14 +253,24 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
     func exportDiagnostics(saveHandler: TrainerDiagnosticsService.ExportSaveHandler? = nil) {
         backendSession.flushDiagnostics()
         services.logSink.flush()
+        var generationAtStart: UInt?
         send(
             .diagnostics,
             operation: "referenceFixture.diagnostics.export",
-            announceSuccess: false
-        ) { [weak self] ok in
-            guard ok, let self, let report = self.diagnosticsReport else { return }
-            self.services.diagnostics.exportReport(report, saveHandler: saveHandler)
-        }
+            announceSuccess: false,
+            started: { [weak self] in generationAtStart = self?.diagnosticsGeneration },
+            reply: { [weak self] reply in
+                guard reply.success, let self else { return }
+                // The session applies this reply before its request callback;
+                // only an accepted diagnostics payload advances the generation.
+                guard let generationAtStart, self.diagnosticsGeneration != generationAtStart,
+                      let report = reply.result?["diagnostics"] as? [String: Any] else {
+                    self.services.feedback.present("host.error.diagnosticsExport", tone: .warning)
+                    return
+                }
+                self.services.diagnostics.exportReport(report, saveHandler: saveHandler)
+            }
+        )
     }
 
     func reportSampleFeedback(argument: String, tone: TrainerFeedbackTone = .warning) {
@@ -320,6 +330,8 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
         _ request: ReferenceFixtureRequest,
         operation: String,
         announceSuccess: Bool = true,
+        started: (() -> Void)? = nil,
+        reply: ((BackendReply) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
         backendSession.send(
@@ -329,6 +341,8 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
             announceSuccess: announceSuccess,
             timeout: request.command.timeout,
             requiresTrustedTarget: request.command.requiresTrustedTarget(connected: connected),
+            started: started,
+            reply: reply,
             completion: completion
         )
     }
@@ -375,7 +389,7 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
            let checks = report["checks"] as? [[String: Any]]
         {
             diagnostics = checks.compactMap(TrainerDiagnosticCheck.decode)
-            diagnosticsReport = report
+            diagnosticsGeneration &+= 1
         }
         if let connected = payload["connected"] as? Bool {
             self.connected = connected
@@ -388,7 +402,6 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
     func backendDidStop() {
         connected = false
         enabled = false
-        diagnosticsReport = nil
     }
 }
 
