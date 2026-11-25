@@ -10,7 +10,7 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 
 from games.hades2.adapter import Hades2Adapter
-from games.hades2.persistence import UnsupportedSchemaVersionError
+from games.hades2.persistence import PersistenceError, UnsupportedSchemaVersionError
 from games.hades2.preferences import DESIRED_STATE_SCHEMA_VERSION, Hades2PreferenceStore
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION, Hades2ProfileService
 from hades2_resident_session_fakes import FakeTimeWarpController, hades2_adapter_context
@@ -342,6 +342,20 @@ try:
     ):
         scanned = fail_adapter.scan()
     assert scanned['warnings'] == ['hades2.warning.dataMigrationFailed']
+
+    # A failed move of the legacy desired-state file must keep its source
+    # authoritative. Detached setting edits cannot create a competing default
+    # namespaced store that wins on the next launch.
+    before_preferences = dict(fail_adapter.preferences)
+    try:
+        fail_adapter.set_desired('invincibility', not before_preferences['invincibility'])
+    except PersistenceError as error:
+        assert 'could not be migrated' in error.diagnostic
+    else:
+        raise AssertionError('desired-state edit succeeded while its legacy migration was incomplete')
+    assert fail_desired.read_bytes() == fail_desired_bytes
+    assert not (fail_context.data_dir / 'desired-state.json').exists()
+    assert fail_adapter.preferences == before_preferences
 
     # Real filesystem permission check: read-only legacy profiles/ while target hades2/profiles/ exists.
     if os.geteuid() != 0:
