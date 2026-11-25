@@ -33,10 +33,15 @@ jobs:
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
 
+      - name: Read declared Python version
+        id: python-runtime
+        if: steps.scope.outputs.run == 'true'
+        run: python3 -c 'import json; print("version=" + json.load(open("Tools/python_runtime.json"))["version"])' >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         if: steps.scope.outputs.run == 'true'
         with:
-          python-version-file: .python-version
+          python-version: ${{ steps.python-runtime.outputs.version }}
 
       - name: Lint and type-check
         if: steps.scope.outputs.run == 'true'
