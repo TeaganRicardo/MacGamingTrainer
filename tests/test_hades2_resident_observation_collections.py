@@ -197,7 +197,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             session.status()
             assert transport.wire["__trainerObservation"]["retained"] == []
             old_generation = transport.wire["__trainerObservation"]["generation"]
-            runtime = lua_value(str(ROOT / "Backend/games/hades2/runtime/hades.lua"))
+            runtime = lua_value(str(transport.runtime_path))
             transport.execute("__MacGamingTrainerV1.dispatch('cleanup'); __MacGamingTrainerV1=nil; dofile("
                               + runtime + "); return '{}'")
             text_generation(2)

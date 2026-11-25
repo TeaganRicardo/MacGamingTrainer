@@ -84,10 +84,8 @@ def _git(root: Path, *args: str) -> str:
 def module_manifests_at_ref(ref: str, root: Path = ROOT) -> tuple[tuple[str, str, dict], ...]:
     """Return (manifest_path, game_id, data) for every manifest under Backend/games.
 
-    The actual path is retained because the runtime-revision gate deliberately
-    protects recursively discovered manifests, including adversarial nested
-    layouts that are not valid build modules. Reconstructing a path from the id
-    would move that manifest and point at the wrong resident runtime.
+    Retain the actual path for recursively discovered manifests. Reconstructing
+    a path from the id would misidentify nested layouts in the compared refs.
     """
     listing = _git(
         root,

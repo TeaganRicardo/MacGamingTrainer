@@ -16,11 +16,6 @@ if str(BACKEND) not in sys.path:
 from core.module_manifest import GameModuleManifest, ManifestError
 from core.protocol import HOST_PROTOCOL_VERSION
 from supported_build import validate_supported_build, resolved_resource_source
-from resident_runtime import (
-    DECLARATION_KEY,
-    ResidentRuntimeDeclarationError,
-    parse_resident_runtime_declaration,
-)
 from swift_module_layout import SWIFT_APP_MODULE, SWIFT_CORE_MODULE
 
 _SWIFT_TYPE_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
@@ -189,29 +184,6 @@ def load_manifest(game_id: str) -> BuildManifest:
             or '/' in executable or ':' in executable or '\\' in executable
             or any(ord(character) < 32 for character in executable)):
         raise ManifestError('Info.plist CFBundleExecutable must be a safe executable filename.')
-
-    declaration = raw.get(DECLARATION_KEY, _ABSENT)
-    if declaration is not _ABSENT:
-        module_dir = path.parent.resolve()
-
-        def resident_source_exists(runtime_path):
-            runtime_path = Path(runtime_path)
-            if runtime_path.is_symlink():
-                return False
-            try:
-                resolved = runtime_path.resolve()
-            except OSError:
-                return False
-            return resolved.is_file() and module_dir in resolved.parents
-
-        try:
-            parse_resident_runtime_declaration(
-                declaration,
-                manifest_path=path,
-                source_exists=resident_source_exists,
-            )
-        except ResidentRuntimeDeclarationError as error:
-            raise ManifestError(str(error)) from error
 
     frontend = raw.get('frontend')
     if not isinstance(frontend, dict):

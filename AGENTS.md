@@ -52,7 +52,7 @@ python3 Tools/supported_build.py
 
 Every PR needs two checks, and both always run:
 
-- `backend-contracts` (`.github/workflows/linux-contracts.yml`): lint, Lua 5.2, `Tools/check_runtime_revision.py`, then `Tools/run_linux_checks.sh`.
+- `backend-contracts` (`.github/workflows/linux-contracts.yml`): lint, Lua 5.2, then `Tools/run_linux_checks.sh`.
 - `build` (`.github/workflows/build2-macos.yml`): `./build.sh --all`, `codesign --verify`, then `Tools/run_macos_checks.sh --skip-foreground`, and uploads the App.
 
 A PR that changes only Markdown skips the work in both jobs. A manual run of `Build 2 macOS` also runs the foreground journeys. The manual `Release` workflow builds `main`, tags it from `Info.plist` and publishes the zip with its SHA-256. Workflows pin third-party Actions to commit SHAs; the macOS runner and Xcode version live in the workflows.
@@ -68,7 +68,6 @@ A PR that changes only Markdown skips the work in both jobs. A manual run of `Bu
 | `steamAppId` | The App launches the game through Steam |
 | `supportedBuild` | Code depends on one exact game image: offsets, symbols, injected code |
 | `nativeLibraries` | The module builds C code that loads into the game |
-| `residentRuntime` | The module injects resident Lua that has a revision number |
 | `saveManagement` | The module offers backups and a Save Editor |
 | `commandContract` | Typed commands with timeouts. Regenerate the Swift side with `python3 Tools/generate_module_commands.py --all` |
 | `buildRequirements` | The module needs an LLDB bridge, a debugger entitlement or Process Time Warp (`processTimeWarp`) |
@@ -86,7 +85,7 @@ Architectures are separate. The App runs on the `app.json` architectures. The ga
 
 - **Product version:** only in `Info.plist`, and only a release PR edits it. A new game is a MINOR bump; fixes are PATCH. The manual `Release` workflow tags `vX.Y.Z`, or `vX.Y.Z+bN` for a later build of the same version. Never move or reuse a tag.
 - **Supported game build:** only `supportedBuild` in `module.json`. To move to a new game build, follow `docs/development/supported-game-build-update.md`.
-- **Other revisions:** a module's `protocolVersion`, its resident Lua revision and each persisted schema version are separate integers. Bump one only when its own contract changes. A changed resident Lua source needs a revision bump; `Tools/check_runtime_revision.py` checks PRs.
+- **Other revisions:** a module's `protocolVersion` and each persisted schema version are separate integers. Bump one only when its own contract changes. Resident Lua identity is the SHA-256 of the source loaded by the backend; no manual revision bump is needed.
 - Never copy a version, UUID or hash into code, docs or workflows. Read it from its owner.
 
 ## Hard rules

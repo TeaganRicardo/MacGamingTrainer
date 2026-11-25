@@ -1,24 +1,26 @@
 """Hades-owned continuous intent, native coroutine lifetime and absolute edits."""
+import hashlib
 import json
 from pathlib import Path
-import re
 import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tests'))
+sys.path.insert(0, str(ROOT / 'Backend'))
+from core.resident_source import resident_source
 from lua_runtime_support import require_lua52
 
 lua = require_lua52('Hades runtime feature journeys')
-source = (ROOT / 'Backend/games/hades/runtime.lua').read_text()
-resident = json.loads((ROOT / 'Backend/games/hades/module.json').read_text())['residentRuntime']
-revision = int(re.search(resident['moduleRevisionPattern'], source).group(1))
+raw_source = (ROOT / 'Backend/games/hades/runtime.lua').read_text()
+source = resident_source(raw_source)
+revision = hashlib.sha256(raw_source.encode('utf-8')).hexdigest()
 
 def run_lua(script):
     """Run the resident source through stdin so test size never depends on ARG_MAX."""
     return subprocess.run(
         [lua, '-'],
-        input='local SOURCE=' + json.dumps(source) + '\nlocal EXPECTED_REVISION=' + str(revision) + '\n' + script,
+        input='local SOURCE=' + json.dumps(source) + '\nlocal EXPECTED_REVISION=' + json.dumps(revision) + '\n' + script,
         text=True,
         capture_output=True,
     )
@@ -392,7 +394,9 @@ assert(runtime.version == 1 and runtime.revision == EXPECTED_REVISION and runtim
 local firstHook = SetupHeroObject
 assert(assert(load(SOURCE))() == runtime and SetupHeroObject == firstHook, "repeat load duplicated hooks")
 local oldRuntimes = { {} }
-for previous = 0, EXPECTED_REVISION - 1 do oldRuntimes[#oldRuntimes + 1] = { revision = previous } end
+for _, previous in ipairs({0, 1, 18, 143, "old-content-hash"}) do
+  oldRuntimes[#oldRuntimes + 1] = { revision = previous }
+end
 for _, old in ipairs(oldRuntimes) do
   MacGamingTrainerHades = old
   expectError("hades.error.restartRequired", function() assert(load(SOURCE))() end)

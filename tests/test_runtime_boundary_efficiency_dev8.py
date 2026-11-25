@@ -1,9 +1,9 @@
+import hashlib
 import json
 import sys
 import tempfile
 from pathlib import Path
 
-from runtime_revision_support import runtime_revision
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
@@ -70,14 +70,14 @@ assert first_source_bytes <= LUA_TRANSPORT_SOURCE_LIMIT_BYTES, (
     f'fresh resident bootstrap exceeds transport source cap: {first_source_bytes}'
 )
 assert LUA_TRANSPORT_RESULT_LIMIT_BYTES == 262_144
-revision = runtime_revision(runtime_source)
-assert f'revision = {revision}' in transport.sources[0]
+revision = hashlib.sha256(runtime_source.encode("utf-8")).hexdigest()
+assert revision in transport.sources[0]
 assert '["includeCatalogs"]=true' in transport.sources[0]
 
 second_reply = session.status()
 assert len(transport.sources) == 2
 assert len(transport.sources[1].encode('utf-8')) < 2_000
-assert f'revision = {revision}' not in transport.sources[1]
+assert revision not in transport.sources[1]
 assert '["includeCatalogs"]=false' in transport.sources[1]
 assert 'rewards' not in second_reply.payload and 'boons' not in second_reply.payload
 

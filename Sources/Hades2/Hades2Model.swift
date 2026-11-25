@@ -794,7 +794,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let runtimeDiagnostics = payload["runtimeDiagnostics"] as? [String: Any]
         logSink.updateCurrentSessionRuntimeIdentity(
             gameVersion: patch.version,
-            runtimeRevision: (runtimeDiagnostics?["revision"] as? NSNumber)?.intValue
+            runtimeRevision: runtimeDiagnostics?["revision"] as? String
+                ?? (runtimeDiagnostics?["revision"] as? NSNumber)?.stringValue
         )
         let wasConnected = connected
         let oldPID = pid

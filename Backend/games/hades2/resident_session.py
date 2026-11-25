@@ -16,6 +16,7 @@ from core.operation_profile import correlation, record
 from pathlib import Path
 
 from core.adapter import AdapterError
+from core.resident_source import resident_source
 
 from .catalog import localize_catalog
 from .error_presentation import Hades2ValueError
@@ -128,7 +129,7 @@ class Hades2ResidentSession:
         self._recovery = recovery
         if bootstrap is None:
             bootstrap = (Path(__file__).with_name("runtime") / "hades.lua").read_text()
-        self._bootstrap = bootstrap
+        self._bootstrap = resident_source(bootstrap)
         self._game_path = Path(game_path) if game_path is not None else None
         self._generation_ready = False
         self._catalog_ready = False

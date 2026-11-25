@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 from core.adapter import AdapterError
+from core.resident_source import resident_source
 from games.hades2.resident_session import lua_value
 from lua_runtime_support import RESIDENT_DISPATCH_CONTRACT, require_lua52
 
@@ -39,9 +40,13 @@ end
         self.temporary = tempfile.TemporaryDirectory(prefix="mgt-lua-observation-")
         harness = Path(self.temporary.name) / 'resident.lua'
         harness.write_text(fixture)
+        runtime = Path(self.temporary.name) / 'runtime.lua'
+        runtime.write_text(resident_source(
+            (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text(encoding='utf-8')
+        ), encoding='utf-8')
         self.process = subprocess.Popen(
             [require_lua52("resident observation integration"), str(harness),
-             str(ROOT / 'Backend/games/hades2/runtime/hades.lua'), str(RESIDENT_DISPATCH_CONTRACT)],
+             str(runtime), str(RESIDENT_DISPATCH_CONTRACT)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         self.pid = 4242
@@ -59,7 +64,11 @@ end
         self.process.stdin.flush()
         result = self.process.stdout.readline().rstrip('\n')
         if result.startswith('ERROR:'):
-            raise AdapterError('lua_error', result[6:])
+            message = result[6:]
+            if 'MGT_OUTCOME_UNKNOWN:' in message:
+                self.tainted = True
+                raise AdapterError('outcome_unknown', 'hades2.error.outcomeUnknownGeneric', diagnostic=message)
+            raise AdapterError('lua_error', message)
         if not result:
             raise AssertionError(self.process.stderr.read())
         return result

@@ -87,6 +87,7 @@ class SaveBatchValidationError(Hades2ValueError):
 # tried top to bottom and the first match wins.
 
 REGISTRY = [
+    {'match': 'literal', 'message': 'Resident update is waiting for an accepted action to finish', 'key': 'hades2.error.residentActionPending', 'runtime': {'commands': '*', 'producer': {'kind': 'helper', 'name': 'resident bootstrap'}}},
     {'match': 'literal', 'message': 'hades2.garden.unavailable', 'key': 'hades2.garden.unavailable', 'runtime': {'commands': ['mature_garden'], 'producer': {'kind': 'helper', 'name': 'prepareGardenMaturity'}}},
     {'match': 'literal', 'message': 'Disable Infinite Gold before selecting a fixed-value gold lock', 'key': 'hades2.error.infiniteMoneyLockConflict', 'runtime': {'commands': ['lock_resource'], 'producer': {'kind': 'command', 'name': 'lock_resource'}}},
     {'match': 'literal', 'message': 'Disable Infinite Rerolls before selecting a fixed-value reroll lock', 'key': 'hades2.error.infiniteRerollsLockConflict', 'runtime': {'commands': ['lock_rerolls'], 'producer': {'kind': 'command', 'name': 'lock_rerolls'}}},

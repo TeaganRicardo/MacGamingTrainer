@@ -35,7 +35,6 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
     for name in (
         'module_inventory.py',
         'module_support.py',
-        'resident_runtime.py',
         'supported_build.py',
         'validate_game_module.py',
         'generate_game_binding.py',
@@ -237,8 +236,6 @@ with patch.object(product, 'load_manifest', side_effect=frontends), patch.object
         + (root / 'Tools/module_support.py').read_text()
         + '\n'
         + (root / 'Tools/module_inventory.py').read_text()
-        + '\n'
-        + (root / 'Tools/resident_runtime.py').read_text()
     )
     assert 'ReferenceFixture' not in generic
     assert 'reference_fixture' not in generic

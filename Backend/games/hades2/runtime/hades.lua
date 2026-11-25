@@ -5,8 +5,27 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
   if type(_G[name]) ~= "table" then error("Unsupported game runtime: missing table " .. name) end
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
+local residentRevision = "__MGT_RESIDENT_SOURCE_SHA256__"
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 143 then
+if previousModule and previousModule.revision ~= residentRevision then
+  if previousModule.terminalActionUnknown then
+    error("MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry")
+  end
+  -- Accepted callbacks still close over the previous resident. Keep their
+  -- owner until they publish a terminal receipt, before any cleanup runs.
+  local pendingAction = false
+  for _, request in pairs(previousModule.requests or {}) do
+    if request.status == "outcome_unknown" then
+      error("MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry")
+    end
+    if request.status == "accepted" then pendingAction = true end
+  end
+  if previousModule.retainsPendingActions ~= true and #(previousModule.requestOrder or {}) >= 128 then
+    error("MGT_RESIDENT_RESTART_REQUIRED: previous resident action history may have discarded pending callbacks")
+  end
+  if pendingAction then
+    error("Resident update is waiting for an accepted action to finish")
+  end
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +34,8 @@ if previousModule and previousModule.revision ~= 143 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 143,
+    version = 1, revision = residentRevision,
+    retainsPendingActions = true,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -11517,6 +11537,23 @@ if __MacGamingTrainerV1 == nil then
     local function publishActionReceipt(record)
       if record.status == "outcome_unknown" then nativeOperations.taint(record.error) end
       M.lastActionReceipt = actionReceipt(record, record.requestId, false)
+      -- An accepted callback must remain discoverable during a content update.
+      -- Retain pending requests plus the 128 most recently published receipts.
+      for index, requestId in ipairs(M.requestOrder) do
+        if requestId == record.requestId then table.remove(M.requestOrder, index); break end
+      end
+      M.requestOrder[#M.requestOrder + 1] = record.requestId
+      local completed = 0
+      for index = #M.requestOrder, 1, -1 do
+        local requestId = M.requestOrder[index]
+        if M.requests[requestId].status ~= "accepted" then
+          completed = completed + 1
+          if completed > 128 then
+            M.requests[requestId] = nil
+            table.remove(M.requestOrder, index)
+          end
+        end
+      end
     end
     local function action(command, params, work, preflight)
       local requestId = params.requestId
@@ -11552,7 +11589,6 @@ if __MacGamingTrainerV1 == nil then
         status = "outcome_unknown", nativeOwner = nativeOperations.owner(ownerKeys) }
       M.requests[requestId] = record
       M.requestOrder[#M.requestOrder + 1] = requestId
-      if #M.requestOrder > 128 then M.requests[table.remove(M.requestOrder, 1)] = nil end
       local ok, value, outcome = pcall(work, record)
       if not ok then
         record.status = "outcome_unknown"

@@ -247,7 +247,7 @@ do {
             processIdentifier: 1001
         )
     )
-    sink.updateCurrentSessionRuntimeIdentity(gameVersion: "1.143476", runtimeRevision: 112)
+    sink.updateCurrentSessionRuntimeIdentity(gameVersion: "1.143476", runtimeRevision: String(repeating: "a", count: 64))
     sink.append("host-in-session", source: "HOST")
     sink.append("backend-in-session", source: "BACKEND")
     sink.append("runtime-in-session", source: "RUNTIME")
@@ -272,14 +272,14 @@ do {
     guard let manifest = readJSON(bundle.appendingPathComponent("manifest.json")) else {
         fail("session manifest missing")
     }
-    if manifest["schemaVersion"] as? Int != 1 { fail("unexpected manifest schema") }
+    if manifest["schemaVersion"] as? Int != 2 { fail("unexpected manifest schema") }
     if manifest["state"] as? String != "active" { fail("active session state missing") }
     if manifest["targetProcessName"] as? String != "Hades II" { fail("target identity missing") }
     if manifest["targetBundleIdentifier"] as? String != "com.supergiantgames.hades2" {
         fail("target bundle identity missing")
     }
     if manifest["gameVersion"] as? String != "1.143476" { fail("game version identity missing") }
-    if manifest["runtimeRevision"] as? Int != 112 { fail("resident revision identity missing") }
+    if manifest["runtimeRevision"] as? String != String(repeating: "a", count: 64) { fail("resident revision identity missing") }
 
     guard let streams = manifest["streams"] as? [String: String] else {
         fail("manifest stream map missing")
@@ -524,6 +524,9 @@ do {
     guard let resumedManifest = readJSON(bundle.appendingPathComponent("manifest.json")),
           resumedManifest["state"] as? String == "active" else {
         fail("same-PID finalization recovery did not reopen the bundle as active")
+    }
+    if resumedManifest["schemaVersion"] as? Int != 2 || resumedManifest["runtimeRevision"] as? String != "109" {
+        fail("legacy integer resident revision was not migrated without losing the session")
     }
     if !(resumedManifest["endedAt"] is NSNull) && resumedManifest["endedAt"] != nil {
         fail("same-PID finalization recovery retained a terminal end time")

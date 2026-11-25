@@ -22,11 +22,6 @@
     "debuggerEntitlement": true,
     "entitlements": "Backend/games/hades/trainer-entitlements.plist"
   },
-  "residentRuntime": {
-    "source": "runtime.lua",
-    "previousRevisionPattern": "existing\\.revision\\s*~=\\s*(\\d+)",
-    "moduleRevisionPattern": "revision\\s*=\\s*(\\d+)"
-  },
   "targetApplication": {
     "processName": "Game.macOS",
     "bundleIdentifier": "",

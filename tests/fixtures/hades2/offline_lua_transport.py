@@ -6,9 +6,11 @@ Tests set `MGT_PROFILE_EVENTS` (stderr log path) and the inventory sizes
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 import time
 
 from core import operation_profile as profile
+from core.resident_source import resident_source
 from games.hades2.resident_session import lua_value
 from lua_runtime_support import require_lua52
 
@@ -21,10 +23,15 @@ class OfflineLuaTransport:
         self.pid, self.tainted, self.last_duration = 4242, False, 0.0
         self.last_expression_duration, self.last_attach_profile = 0.0, {}
         self.counter = 0
+        self.temporary = tempfile.TemporaryDirectory(prefix="mgt-offline-resident-")
+        self.runtime_path = Path(self.temporary.name) / "runtime.lua"
+        self.runtime_path.write_text(resident_source(
+            (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text(encoding="utf-8")
+        ), encoding="utf-8")
         self.events = open(os.environ["MGT_PROFILE_EVENTS"], "a", encoding="utf-8")
         self.lua = subprocess.Popen([
             require_lua52("offline resident"), str(RESIDENT_FIXTURE),
-            str(ROOT / "Backend/games/hades2/runtime/hades.lua"), "1",
+            str(self.runtime_path), "1",
             os.environ.get("MGT_PROFILE_TRAITS", "32"), os.environ.get("MGT_PROFILE_CATALOG", "96"),
             os.environ.get("MGT_PROFILE_RESOURCES", "32"), "serve",
         ], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.events, text=True, bufsize=1)
@@ -48,6 +55,7 @@ class OfflineLuaTransport:
             self.lua.wait(timeout=2)
         self.lua.stdout.close()
         self.events.close()
+        self.temporary.cleanup()
 
     def execute(self, source, **kwargs):
         identity = profile.correlation() or {"request_id": "unobserved", "command": "fixture"}

@@ -14,7 +14,6 @@ from games.hades2.preferences import (
     normalize_persisted_desired,
 )
 from games.hades2.profile_service import Hades2ProfileService
-from runtime_revision_support import runtime_revision
 
 assert DESIRED_STATE_SCHEMA_VERSION == 13
 for old_version in (3, 4, 11, 12, 13):
@@ -35,7 +34,6 @@ for old_version in (3, 4, 11, 12, 13):
         assert key not in normalized, (old_version, key, normalized)
 
 lua = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text(encoding="utf-8")
-assert runtime_revision(lua) >= 127
 assert 'command == "set_next_room_reward"' not in lua
 assert "M.nextRoomReward" not in lua
 assert "nextRoomRewardToken" not in lua
