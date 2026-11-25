@@ -245,6 +245,46 @@ def main() -> None:
     assert by_path[("root", "x")].owner_id == "owner:root"
     assert by_path[("$root",)].owner_id != by_path[("root", "x")].owner_id
 
+    typed_document = {1: {"v": 10}, "1": {"v": 20}, "builtins.int:1": {"v": 30}}
+    typed_fields = discover_mapping_fields(typed_document, frozenset())
+    assert len({field.id for field in typed_fields}) == 3
+    assert len({field.owner_id for field in typed_fields}) == 3
+    typed_spec = _sample_spec()
+    typed_spec = replace(typed_spec, catalog=replace(typed_spec.catalog, fields=()))
+    typed_workspace = CatalogSaveWorkspace(SimpleNamespace(document=typed_document), typed_spec)
+    assert typed_workspace.query()["total"] == 3
+    typed_by_path = {field.path: field for field in typed_fields}
+    integer_field = typed_by_path[(1, "v")]
+    string_field = typed_by_path[("1", "v")]
+    assert typed_workspace.detail(integer_field.id)["row"]["value"] == 10
+    assert typed_workspace.detail(string_field.id)["row"]["value"] == 20
+    integer_field.write_value(typed_document, 11)
+    string_field.write_value(typed_document, 21)
+    assert typed_document == {1: {"v": 11}, "1": {"v": 21}, "builtins.int:1": {"v": 30}}
+
+    for key in (False, 1.5, None, b"key", (1, "key")):
+        paired = discover_mapping_fields({key: 1, str(key): 2}, frozenset())
+        assert len({field.id for field in paired}) == 2
+
+    # A custom catalog/discoverer also cannot silently shadow a field ID.
+    collision = replace(string_field, id=integer_field.id)
+    for curated, extras in (
+        ((integer_field, collision), ()),
+        ((integer_field,), (collision,)),
+        ((), (integer_field, collision)),
+    ):
+        collision_spec = replace(
+            typed_spec,
+            catalog=replace(typed_spec.catalog, fields=curated, discover_unknown=lambda _document, _known: extras),
+        )
+        collision_workspace = CatalogSaveWorkspace(SimpleNamespace(document=typed_document), collision_spec)
+        try:
+            collision_workspace.query()
+        except ValueError as error:
+            assert integer_field.id in str(error)
+        else:
+            raise AssertionError("Duplicate field identity was silently accepted")
+
     ancestor_skip_check = discover_mapping_fields(
         {"knownParent": {}, "nonEmptyParent": {"known": 1, "sibling": 2}},
         frozenset({("knownParent", "leaf"), ("nonEmptyParent", "known")}),
