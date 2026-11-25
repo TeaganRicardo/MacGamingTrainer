@@ -155,6 +155,31 @@ else:
 assert future_desired_path.read_bytes() == future_desired_bytes
 assert not list((base / "profiles").glob(future_desired_path.name + ".corrupt-*"))
 
+# An older supported outer envelope can still carry a future nested payload.
+# Listing/loading it and attempting a same-name save must preserve its bytes.
+for envelope_version in range(PROFILE_COMPATIBILITY_FLOOR, PROFILE_SCHEMA_VERSION):
+    older_future_name = f"older-v{envelope_version}-future-desired"
+    older_future_path = service.path(older_future_name)
+    older_future_bytes = json.dumps(dict(
+        future_desired_doc,
+        schemaVersion=envelope_version,
+        name=older_future_name,
+    ), sort_keys=True).encode("utf-8")
+    older_future_path.write_bytes(older_future_bytes)
+    assert older_future_name not in {row["name"] for row in service.list()}
+    for operation in (
+        lambda: service.load(older_future_name),
+        lambda: service.save(older_future_name, {"invincibility": False}, {}),
+    ):
+        try:
+            operation()
+        except UnsupportedSchemaVersionError as error:
+            assert error.kind == "Profile desired-state"
+        else:
+            raise AssertionError("future nested payload in an older envelope was accepted or overwritten")
+        assert older_future_path.read_bytes() == older_future_bytes
+    assert not list(service.root.glob(older_future_path.name + ".corrupt-*"))
+
 future_path = service.path("future-profile")
 future_doc = {
     "schemaVersion": PROFILE_SCHEMA_VERSION + 1,

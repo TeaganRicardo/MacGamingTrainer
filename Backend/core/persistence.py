@@ -458,6 +458,7 @@ class ProfileStore:
 
     def _validate_envelope(self, path: Path, raw: dict[str, Any], *, quarantine: bool = True) -> dict[str, Any]:
         version = self._validate_version(path, raw, quarantine=quarantine)
+        self._protect_future_payload(raw)
         document = (
             self._migrate_envelope(raw, version)
             if self._migrate_envelope is not None and version < self.schema_version
@@ -519,6 +520,14 @@ class ProfileStore:
             ),
         }
 
+    def _protect_future_payload(self, payload: dict[str, Any]):
+        if self.payload_version_key is not None and self.payload_schema_version is not None:
+            payload_version = payload.get(self.payload_version_key)
+            if type(payload_version) is int and payload_version > self.payload_schema_version:
+                raise _UnsupportedProfileSchema(
+                    self._newer_payload_schema_error(payload_version, self.payload_schema_version)
+                )
+
     def protect_future_overwrite(self, path: Path):
         if not path.is_file():
             return
@@ -529,14 +538,10 @@ class ProfileStore:
             return
         if version > self.schema_version:
             raise self._newer_schema_error(version, self.schema_version)
-        if (
-            version == self.schema_version
-            and self.payload_version_key is not None
-            and self.payload_schema_version is not None
-        ):
-            payload_version = payload.get(self.payload_version_key)
-            if type(payload_version) is int and payload_version > self.payload_schema_version:
-                raise self._newer_payload_schema_error(payload_version, self.payload_schema_version)
+        try:
+            self._protect_future_payload(payload)
+        except _UnsupportedProfileSchema as wrapper:
+            raise wrapper.error
 
     def list(self) -> list[dict[str, Any]]:
         try:
