@@ -225,6 +225,70 @@ package final class TrainerLogSink {
         }
     }
 
+    package struct ExportSnapshot {
+        package var logs: [String: String] = [:]
+        package var warnings: [String: String] = [:]
+    }
+
+    /// Read one owned scope while queued appends and session changes are paused.
+    /// Attachments are regular files opened relative to that directory; a
+    /// replaced stream cannot redirect the export through a symbolic link.
+    package func exportSnapshot() -> ExportSnapshot {
+        queue.sync {
+            for opened in handles.values {
+                try? opened.handle.synchronize()
+            }
+            let scope: URL
+            let names: [String]
+            if managedSessions, let record = activeSessionRecordLocked() {
+                scope = sessionDirectoryURL(for: record)
+                names = ["manifest.json", "host.log", "backend.log", "runtime.log"]
+            } else {
+                scope = hostURL.deletingLastPathComponent()
+                names = [hostURL.lastPathComponent]
+            }
+            var snapshot = ExportSnapshot()
+            let directory = open(scope.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+            guard directory >= 0 else {
+                if errno != ENOENT {
+                    for name in names { snapshot.warnings[name] = "unreadable_scope" }
+                }
+                return snapshot
+            }
+            defer { close(directory) }
+            for name in names {
+                let descriptor = openat(directory, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+                guard descriptor >= 0 else {
+                    if errno != ENOENT {
+                        snapshot.warnings[name] = errno == ELOOP ? "unsafe_file" : "unreadable"
+                    }
+                    continue
+                }
+                var metadata = stat()
+                guard fstat(descriptor, &metadata) == 0,
+                      metadata.st_mode & S_IFMT == S_IFREG else {
+                    close(descriptor)
+                    snapshot.warnings[name] = "not_regular_file"
+                    continue
+                }
+                let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+                defer { try? handle.close() }
+                do {
+                    let bytes = try handle.readToEnd() ?? Data()
+                    if let text = String(data: bytes, encoding: .utf8) {
+                        snapshot.logs[name] = text
+                    } else {
+                        snapshot.logs[name] = String(decoding: bytes, as: UTF8.self)
+                        snapshot.warnings[name] = "invalid_utf8"
+                    }
+                } catch {
+                    snapshot.warnings[name] = "unreadable"
+                }
+            }
+            return snapshot
+        }
+    }
+
     /// Enter or leave one OS target-process lifetime. Reconnects and Backend
     /// restarts never call this seam, so they remain inside the same session.
     func targetLifetimeChanged(running: Bool, identity: TargetIdentity) {

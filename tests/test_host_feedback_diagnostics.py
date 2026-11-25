@@ -212,6 +212,34 @@ struct HostFeedbackDiagnosticsTest {
         precondition(context.feedback.notice?.text.key == "host.backend.notice.completed" && context.feedback.notice?.tone == .success,
                      "Host diagnostics export completion must present success feedback")
 
+        // Damaged or replaced stream attachments cannot leak files outside the
+        // selected log bundle or prevent the healthy report from being saved.
+        let bundle = logSink.currentSessionURL()!
+        let outside = tempRoot.appendingPathComponent("outside-secret.txt")
+        try "outside private marker".write(to: outside, atomically: true, encoding: .utf8)
+        let backendLog = bundle.appendingPathComponent("backend.log")
+        try FileManager.default.removeItem(at: backendLog)
+        try FileManager.default.createSymbolicLink(at: backendLog, withDestinationURL: outside)
+        let runtimeLog = bundle.appendingPathComponent("runtime.log")
+        try Data([0x61, 0xff, 0x62]).write(to: runtimeLog)
+        let partialData = try diagnostics.buildExportData(report: report)
+        let partialJSON = try JSONSerialization.jsonObject(with: partialData) as! [String: Any]
+        let partialLogs = partialJSON["logs"] as! [String: String]
+        let partialWarnings = partialJSON["logWarnings"] as! [String: String]
+        precondition(partialLogs["backend.log"] == nil && partialWarnings["backend.log"] != nil,
+                     "symlink attachment escaped the owned log scope")
+        precondition(partialLogs["host.log"]?.isEmpty == false && partialLogs["runtime.log"] == "a\u{fffd}b",
+                     "damaged stream discarded the healthy or recoverable log text")
+        precondition(partialWarnings["runtime.log"] == "invalid_utf8")
+        precondition(!String(decoding: partialData, as: UTF8.self).contains("outside private marker"))
+        precondition((partialJSON["checks"] as? [[String: Any]])?.count == 1)
+        try FileManager.default.removeItem(at: backendLog)
+        try FileManager.default.createDirectory(at: backendLog, withIntermediateDirectories: false)
+        let nonregularData = try diagnostics.buildExportData(report: report)
+        let nonregularJSON = try JSONSerialization.jsonObject(with: nonregularData) as! [String: Any]
+        precondition((nonregularJSON["logs"] as! [String: String])["backend.log"] == nil)
+        precondition((nonregularJSON["logWarnings"] as! [String: String])["backend.log"] == "not_regular_file")
+
         context.feedback.clearNotice()
         diagnostics.exportReport(report, defaultFilename: "Stub-Diagnostics.json") { _, _, done in
             done(.cancelled)

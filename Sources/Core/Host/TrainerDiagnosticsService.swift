@@ -108,21 +108,10 @@ package final class TrainerDiagnosticsService {
 
     package func buildExportData(report: [String: Any]) throws -> Data {
         session.flushDiagnostics()
-        logSink.flush()
         var payload = report
-        var logs: [String: String] = [:]
-        let urls: [URL]
-        if let bundle = logSink.currentSessionURL() {
-            urls = ["manifest.json", "host.log", "backend.log", "runtime.log"].map {
-                bundle.appendingPathComponent($0)
-            }
-        } else {
-            urls = [logSink.currentLogURL()]
-        }
-        for url in urls where FileManager.default.fileExists(atPath: url.path) {
-            logs[url.lastPathComponent] = try String(contentsOf: url, encoding: .utf8)
-        }
-        payload["logs"] = logs
+        let snapshot = logSink.exportSnapshot()
+        payload["logs"] = snapshot.logs
+        if !snapshot.warnings.isEmpty { payload["logWarnings"] = snapshot.warnings }
         if payload["gameID"] == nil { payload["gameID"] = descriptor.id }
         if payload["generatedAt"] == nil {
             let formatter = ISO8601DateFormatter()
