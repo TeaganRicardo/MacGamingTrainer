@@ -30,7 +30,9 @@ def _resolve_game_app(game_path=None):
     if not _OFFICIAL_TEXT_CACHE:
         _RESOLVED_GAME_APP = None
     if _RESOLVED_GAME_APP is not None:
-        return _RESOLVED_GAME_APP
+        if _RESOLVED_GAME_APP.exists():
+            return _RESOLVED_GAME_APP
+        invalidate_display_names()
     from .preparation import resolve_paths
     game = resolve_paths()[0]
     if game.exists():
