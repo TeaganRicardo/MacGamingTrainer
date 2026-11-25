@@ -4,10 +4,39 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from copy import deepcopy
 from pathlib import Path
+from unittest.mock import patch
 
 root = Path(__file__).resolve().parents[1]
 fixture = root / 'ContractFixtures/reference_module'
+sys.path.insert(0, str(root / 'Tools'))
+from package_app import build_python_runtime_metadata, smoke_packaged_adapters, verify_python_runtime_metadata
+
+runtime_source = json.loads((root / 'Tools/python_runtime.json').read_text())
+architecture = next(iter(runtime_source['distributions']))
+runtime_metadata = build_python_runtime_metadata(runtime_source, [architecture])
+assert verify_python_runtime_metadata(runtime_source, runtime_metadata) == runtime_metadata
+for field in ('schemaVersion', 'provider', 'release', 'version'):
+    invalid = deepcopy(runtime_source)
+    del invalid[field]
+    try:
+        build_python_runtime_metadata(invalid, [architecture])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f'missing runtime {field} was accepted')
+for field, value in (('target', ''), ('url', ''), ('sha256', 'invalid')):
+    invalid = deepcopy(runtime_source)
+    invalid['distributions'][architecture][field] = value
+    copied_invalid = {**runtime_metadata, 'distributions': {architecture: invalid['distributions'][architecture]}}
+    try:
+        verify_python_runtime_metadata(invalid, copied_invalid)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f'invalid matching runtime {field} was accepted')
+
 with tempfile.TemporaryDirectory(prefix='mgt-packaged-module-') as temporary:
     package = Path(temporary) / 'MacGamingTrainer.app/Contents/Resources'
     backend = package / 'Backend'
@@ -19,6 +48,19 @@ with tempfile.TemporaryDirectory(prefix='mgt-packaged-module-') as temporary:
     shutil.copytree(root / 'Backend/core', backend / 'core')
     shutil.copy2(root / 'Backend/games/__init__.py', games / '__init__.py')
     shutil.copytree(fixture / 'backend', reference)
+
+    # Repeated importable calls must validate each requested tree. The second
+    # call cannot reuse the first call's registry/adapter module cache.
+    empty_backend = Path(temporary) / 'empty-backend'
+    empty_backend.mkdir()
+    with patch.dict(os.environ, {'HOME': str(Path(temporary) / 'smoke-home')}):
+        smoke_packaged_adapters(backend, False, ['reference_fixture'])
+        try:
+            smoke_packaged_adapters(empty_backend, False, ['reference_fixture'])
+        except ValueError as error:
+            assert 'core' in str(error)
+        else:
+            raise AssertionError('empty staged backend reused the preceding adapter imports')
 
     proc = subprocess.Popen(
         [sys.executable, '-u', str(backend / 'core/server.py'), '--game', 'reference_fixture'],

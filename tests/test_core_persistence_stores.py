@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 import sys
 import tempfile
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
@@ -152,6 +153,20 @@ with tempfile.TemporaryDirectory(prefix="mgt-core-stores-") as temporary:
     assert loaded_profile["settings"] == {"x": 42}
     assert loaded_profile["shortcuts"] == {"_layoutVersion": 1, "invincibility": _chord(18, "1")}
 
+    # Runtime faults in a module normalizer say nothing about the file's data.
+    # Preserve the original path and surface that fault without quarantining it.
+    valid_profile_path = profiles.path("Run Build")
+    valid_profile_bytes = valid_profile_path.read_bytes()
+    with patch.object(profiles, "_normalize_payload", side_effect=RuntimeError("normalizer unavailable")):
+        try:
+            profiles.load("Run Build")
+        except RuntimeError as error:
+            assert str(error) == "normalizer unavailable"
+        else:
+            raise AssertionError("unexpected normalizer failure was hidden")
+    assert valid_profile_path.read_bytes() == valid_profile_bytes
+    assert not list(profiles.root.glob(valid_profile_path.name + ".corrupt-*"))
+
     # Wrong gameID fails validation and quarantines corrupt envelope.
     wrong_game = profiles.path("wrong-game")
     wrong_game.write_text(
@@ -288,6 +303,15 @@ with tempfile.TemporaryDirectory(prefix="mgt-core-stores-") as temporary:
     assert [row["name"] for row in listed] == ["Legacy No Shortcuts", "With Shortcuts"]
     assert "Ignoring corrupt profile" in captured_log.getvalue()
     assert "Ignoring unsupported Profile schema" not in captured_log.getvalue()
+    invalid_features = json.loads(bad_hades.read_text(encoding="utf-8"))
+    invalid_features["features"] = dict(DEFAULT_PREFERENCES, damageMultiplier="invalid")
+    bad_hades.write_text(json.dumps(invalid_features), encoding="utf-8")
+    try:
+        hades_adapter.profiles.load("Corrupt Hades")
+    except AdapterError as error:
+        assert error.code == "profile_read_failed"
+    else:
+        raise AssertionError("invalid Profile preferences bypassed the module read-error mapping")
     bad_hades.unlink()
 
     try:

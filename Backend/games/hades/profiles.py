@@ -36,6 +36,13 @@ def _write_failed(error):
     return AdapterError('profile_write_failed', 'hades.error.profileWriteFailed', diagnostic=str(error))
 
 
+def _normalize_profile_features(features, version):
+    try:
+        return persisted_preference_document(version, features)
+    except AdapterError as error:
+        raise ValueError(error.diagnostic or str(error)) from error
+
+
 class HadesProfileStore:
     def __init__(self, root):
         self.root = Path(root)
@@ -44,7 +51,7 @@ class HadesProfileStore:
             schema_version=PREFERENCE_SCHEMA_VERSION,
             compatibility_floor=1,
             payload_key='features',
-            normalize_payload=lambda features, version: persisted_preference_document(version, features),
+            normalize_payload=_normalize_profile_features,
             prepare_save_payload=preference_document,
             game_id='hades',
             slug_length=None,
@@ -83,7 +90,8 @@ class HadesProfileStore:
         return self._store.load(name)['features']
 
     def save(self, name, features, shortcuts=None):
-        self._store.save(name, features, shortcuts)
+        return self._store.save(name, features, shortcuts)
 
     def delete(self, name):
-        self._store.delete(name)
+        _name, profiles = self._store.delete(name)
+        return profiles

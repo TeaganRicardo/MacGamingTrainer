@@ -380,7 +380,11 @@ struct Hades2StatePatch {
         spellChargeCost = Self.numberField(payload, "spellChargeCost")
         money = Self.numberField(payload, "money")
         runCount = Self.field(payload, "runCount", Int.self)
-        elements = (payload["elements"] as? [[String: Any]])?.compactMap(Self.decodeElement)
+        var elementIDs = Set<String>()
+        elements = (payload["elements"] as? [[String: Any]])?.compactMap { row in
+            guard let element = Self.decodeElement(row), elementIDs.insert(element.id).inserted else { return nil }
+            return element
+        }
         currentRunTraits = (payload["currentRunTraits"] as? [[String: Any]])?.compactMap(Self.decodeCurrentRunTrait)
         currentRunTraitIdentityScope = payload["currentRunTraitIdentityScope"] as? String
         currentRunTraitIdentityPersistent = payload["currentRunTraitIdentityPersistent"] as? Bool

@@ -132,6 +132,8 @@ precondition(loaded.hasKey("alpha.title"))
 precondition(!loaded.hasKey("alpha.onlyEn"))
 precondition(loaded.string("alpha.banner", language: .en, arguments: ["alpha.title", "Ignored"]) == "Hello - Title []")
 precondition(loaded.string("alpha.banner", language: .zhCN, arguments: ["World"]) == "你好 - World []")
+precondition(loaded.string("alpha.banner", language: .en, arguments: ["literal {2} {1}", "tail"]) == "Hello - literal {2} {1} []")
+precondition(TrainerModuleStringTable.substitute("{1} / {0}", arguments: ["literal {1}", "literal {0}"]) == "literal {0} / literal {1}")
 """,
             encoding="utf-8",
         )

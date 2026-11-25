@@ -73,7 +73,6 @@ MAX_CACHE_ENTRIES = 16
 CACHE_ENV_VAR = "MGT_SWIFT_TEST_CACHE"
 CACHE_DIR_ENV_VAR = "MGT_SWIFT_TEST_CACHE_DIR"
 _CLT_SDK_PREFIX = "/Library/Developer/CommandLineTools/"
-_IMPORT = re.compile(r"^[ \t]*(?:@\w+[ \t]+)*import[ \t]+(\w+)", re.MULTILINE)
 # Runs with the checkout's own Tools, which read that checkout's manifests.
 _LAYOUT_PROGRAM = """
 import json, sys
@@ -105,6 +104,7 @@ class SwiftModule:
     name: str
     sources: tuple[Path, ...]
     dependencies: tuple[str, ...] = ()
+    private: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "sources", tuple(Path(path) for path in self.sources))
@@ -559,24 +559,28 @@ def _write_harness_shims(
     shim_dir: Path,
     modules: Sequence[str],
 ) -> list[Path]:
-    """Copy harness files that do not import every library module, adding a
-    ``@testable import`` for each module they do not import."""
+    """Give each harness file explicit imports of the libraries built for it.
+
+    Existing imports may be conditional; a duplicate import is harmless and
+    keeps Swift, rather than a source regex, responsible for conditional code.
+    """
     shim_dir.mkdir(parents=True, exist_ok=True)
     shimmed: list[Path] = []
-    seen_names: dict[str, int] = {}
+    used_names: set[str] = set()
     for raw_path in harness_sources:
         path = Path(raw_path)
         text = path.read_text(encoding="utf-8")
-        imported = set(_IMPORT.findall(text))
-        missing = [module for module in modules if module not in imported]
-        if not missing:
+        if not modules:
             shimmed.append(path)
             continue
-        count = seen_names.get(path.name, 0)
-        seen_names[path.name] = count + 1
-        target_name = path.name if count == 0 else f"{count}_{path.name}"
+        target_name = path.name
+        count = 0
+        while target_name in used_names:
+            count += 1
+            target_name = f"{count}_{path.name}"
+        used_names.add(target_name)
         target = shim_dir / target_name
-        target.write_text("".join(f"@testable import {module}\n" for module in missing) + text, encoding="utf-8")
+        target.write_text("".join(f"@testable import {module}\n" for module in modules) + text, encoding="utf-8")
         shimmed.append(target)
     return shimmed
 
@@ -596,13 +600,15 @@ def _patch_modules(
     result = []
     for module in library:
         sources = []
+        private = module.private or bool(instrumentation.get(module.name))
         for path in module.sources:
             replacement = replacements.get(path.resolve())
             if replacement is not None:
                 unused.discard(path.resolve())
+                private = True
             sources.append(replacement or path)
         sources += [Path(path) for path in instrumentation.get(module.name, ())]
-        result.append(SwiftModule(module.name, tuple(sources), module.dependencies))
+        result.append(SwiftModule(module.name, tuple(sources), module.dependencies, private=private))
     if unused:
         raise SwiftCompilerError(f"patched files are not compiled by this harness: {sorted(map(str, unused))}")
     unknown = set(instrumentation) - {module.name for module in library}
@@ -679,7 +685,7 @@ def compile_swift_test(
                 raise SwiftCompilerError(f"{module.name} imports modules not built before it: {missing}")
             dependency_dirs = [module_dirs[name] for name in module.dependencies]
             records, cacheable = _support_file_records(module.sources, generated_root)
-            if cache_enabled and cacheable and all(module_keys[name] for name in module.dependencies):
+            if cache_enabled and cacheable and not module.private and all(module_keys[name] for name in module.dependencies):
                 key = compute_support_key(
                     toolchain=toolchain,
                     support_flags=normalized_support_flags,

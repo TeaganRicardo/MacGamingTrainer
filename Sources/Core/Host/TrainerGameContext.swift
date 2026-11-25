@@ -136,7 +136,11 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
         model.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] _ in
             self?.modelChanged()
         }.store(in: &subscriptions)
-        let statusObserver = session.observeStatus { [weak self] _, _ in
+        let statusObserver = session.observeStatus { [weak self] previous, current in
+            if previous.backendProtocolVersion == nil, current.backendProtocolVersion != nil,
+               current.backendAvailable, current.protocolCompatible {
+                self?.connectionPolicy.backendBecameReady()
+            }
             // Session status can become idle mid-reply. Reconcile only after
             // the payload and receipt have reached their owners.
             DispatchQueue.main.async { [weak self] in self?.modelChanged() }
@@ -224,7 +228,12 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
     }
 
     func restartBackend() {
+        restartBackend(resetRecoveryBudget: true)
+    }
+
+    private func restartBackend(resetRecoveryBudget: Bool) {
         guard backendRestartAllowed else { return }
+        if resetRecoveryBudget { connectionPolicy.userWillRestartBackend() }
         model.backendWillRestart()
         session.restart()
     }
@@ -289,13 +298,11 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
         localization: TrainerLocalizationStore,
         theme: TrainerTheme = .standard
     ) -> TrainerManagementCatalog? {
-        guard let catalog = Module.makeManagementCatalog(
+        let catalog = Module.makeManagementCatalog(
             model: model,
             localization: localization,
             toolWindows: toolWindows.actions(localization: localization, theme: theme)
-        ) else {
-            return nil
-        }
+        ) ?? TrainerManagementCatalog()
         let saveManagementAction: TrainerManagementAction? = Module.descriptor.supportsSaveManagement
             ? TrainerManagementAction(
                 .saveManagement,
@@ -417,7 +424,7 @@ package final class TrainerGameContext<Module: TrainerGameModule>: ObservableObj
         case .refreshAfterTargetExit:
             model.refreshFromHost()
         case .restartBackend:
-            restartBackend()
+            restartBackend(resetRecoveryBudget: false)
         case .connect(let targetJustLaunched):
             model.connectFromHost(reason: .automatic(targetJustLaunched: targetJustLaunched))
         case .none:

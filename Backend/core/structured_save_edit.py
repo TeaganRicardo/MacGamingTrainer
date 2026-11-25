@@ -154,6 +154,7 @@ class StructuredSaveEditSession(Generic[_Document]):
         "_source_identity",
         "_target",
         "_version_pinned",
+        "_allow_running",
         "_eligibility",
         "_source_metadata",
         "_source_sha256",
@@ -174,6 +175,7 @@ class StructuredSaveEditSession(Generic[_Document]):
         document: _Document,
         *,
         version_pinned: bool = False,
+        allow_running: bool = False,
         eligibility: Optional[StructuredSaveEligibilityProtocol] = None,
         source_metadata: Optional[Mapping[str, str]] = None,
     ) -> None:
@@ -183,6 +185,7 @@ class StructuredSaveEditSession(Generic[_Document]):
         self._source_identity = dict(source_identity)
         self._target = target
         self._version_pinned = bool(version_pinned)
+        self._allow_running = allow_running
         self._eligibility = eligibility
         self._source_metadata = dict(source_metadata) if source_metadata is not None else dict(source_identity)
         self._source_sha256 = original_sha256
@@ -201,6 +204,7 @@ class StructuredSaveEditSession(Generic[_Document]):
         snapshot_id: Optional[str] = None,
         target: object = None,
         version_pinned: bool = False,
+        allow_running: bool = False,
         eligibility: Optional[StructuredSaveEligibilityProtocol] = None,
         source_metadata: Optional[Mapping[str, str]] = None,
     ) -> StructuredSaveEditSession[_Document]:
@@ -220,6 +224,7 @@ class StructuredSaveEditSession(Generic[_Document]):
             sha256(raw).hexdigest(),
             document,
             version_pinned=version_pinned,
+            allow_running=allow_running,
             eligibility=eligibility,
             source_metadata=source_metadata,
         )
@@ -253,6 +258,7 @@ class StructuredSaveEditSession(Generic[_Document]):
         target: Optional[Mapping[str, Any]] = None,
         default_target: bool = False,
         version_pinned: bool = False,
+        allow_running: bool = False,
     ) -> StructuredSaveEditSession[_Document]:
         is_source_fn = getattr(eligibility, "is_source", None)
         if not callable(is_source_fn):
@@ -316,6 +322,7 @@ class StructuredSaveEditSession(Generic[_Document]):
             snapshot_id=snapshot_id,
             target=selected_target,
             version_pinned=version_pinned,
+            allow_running=allow_running,
             eligibility=eligibility,
             source_metadata=source_metadata,
         )
@@ -485,7 +492,7 @@ class StructuredSaveEditSession(Generic[_Document]):
                     expected_hashes,
                     post_install_verify=verify_installed,
                     expected_paths={key: target_path},
-                    allow_running=True,
+                    allow_running=self._allow_running,
                 )
             except BaseException as error:
                 self._capture_recovery_after_failure(error, recovery_before)
@@ -665,9 +672,12 @@ class SaveEditorWorkspaceRegistry(Generic[_Workspace]):
         return self._workspaces[identifier]
 
     def require_baseline(self, identifier: object, generation: object) -> _Workspace:
-        workspace = self.require(identifier)
+        if not isinstance(identifier, str) or not identifier or identifier not in self._workspaces:
+            raise self._not_open_error(identifier)
+        workspace = self._workspaces[identifier]
         if generation != workspace.baseline_generation:
             raise self._stale_baseline_error()
+        self._workspaces.move_to_end(identifier)
         return workspace
 
     def rotate_baseline(self, identifier: str) -> str:

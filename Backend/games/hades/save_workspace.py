@@ -221,6 +221,7 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
             target=target,
             default_target=False,
             version_pinned=True,
+            allow_running=True,
         )
         return cls(session)
 

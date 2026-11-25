@@ -173,16 +173,15 @@ def resolve_save_files(
                 relative = candidate.relative_to(root).as_posix()
                 declared.append(_validate_file(root_spec.id, root, relative))
 
-    rows: Iterable[Tuple[str, str]]
-    if spec.provider is None:
-        rows = ((row.root_id, row.relative_path) for row in declared)
-    else:
-        loader = provider_loader or load_save_provider
-        provider = loader(spec.provider)
-        rows = provider.resolve(dict(roots), tuple(declared))
-
     unique = {}
     try:
+        rows: Iterable[Tuple[str, str]]
+        if spec.provider is None:
+            rows = ((row.root_id, row.relative_path) for row in declared)
+        else:
+            loader = provider_loader or load_save_provider
+            provider = loader(spec.provider)
+            rows = provider.resolve(dict(roots), tuple(declared))
         for row in rows:
             if not isinstance(row, (tuple, list)) or len(row) != 2:
                 raise SaveResolutionError('存档 Provider 必须返回 (rootId, relativePath)。')

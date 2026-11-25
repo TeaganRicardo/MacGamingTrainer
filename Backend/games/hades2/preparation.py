@@ -171,7 +171,12 @@ def _file_signature(path: Path):
 
 def compatibility(strict=False, game_path=None, *, query_running=True):
     """Report version drift without blocking supported operations by default."""
-    game, exe, steam = resolve_paths(game_path=game_path, query_running=query_running)
+    paths = resolve_paths(game_path=game_path, query_running=query_running)
+    return _compatibility_for_paths(paths, strict=strict)
+
+
+def _compatibility_for_paths(paths, *, strict=False):
+    game, exe, steam = paths
     info_path = game / 'Contents/Info.plist'
     if not game.exists() or not info_path.is_file() or not exe.is_file():
         raise Hades2PresentationError(
@@ -367,8 +372,9 @@ def _resolve_backup_parent(data_dir=None):
 def prepare(data_dir=None):
     backup_parent = _resolve_backup_parent(data_dir)
     _require_stopped()
-    game, exe, _steam = resolve_paths(query_running=False)
-    identity = compatibility(query_running=False)
+    paths = resolve_paths(query_running=False)
+    game, exe, _steam = paths
+    identity = _compatibility_for_paths(paths)
     current = sha(exe)
 
     for root, record in _records(backup_parent, game):
@@ -423,8 +429,9 @@ def prepare(data_dir=None):
 def restore(data_dir=None):
     backup_parent = _resolve_backup_parent(data_dir)
     _require_stopped()
-    game, exe, _steam = resolve_paths(query_running=False)
-    compatibility(query_running=False)
+    paths = resolve_paths(query_running=False)
+    game, exe, _steam = paths
+    _compatibility_for_paths(paths)
     current = sha(exe)
     for root, record in _records(backup_parent, game):
         if current == record.get('original_sha256'):

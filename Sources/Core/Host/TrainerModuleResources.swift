@@ -165,13 +165,12 @@ package struct TrainerModuleStringTable {
     ) -> String {
         let template = tables[language]?[key] ?? key
         let transformed = transform(template, language)
-        let rendered = Self.substitute(transformed, arguments: arguments) { _, argument in
+        return Self.substitute(transformed, arguments: arguments, dropUnfilled: true) { _, argument in
             if resolveArgumentKeys, hasKey(argument) {
                 return string(argument, language: language)
             }
             return argument
         }
-        return Self.dropUnfilledPlaceholders(rendered)
     }
 
     package func hasKey(_ key: String) -> Bool {
@@ -188,20 +187,28 @@ package struct TrainerModuleStringTable {
     package static func substitute(
         _ template: String,
         arguments: [String],
+        dropUnfilled: Bool = false,
         map: (Int, String) -> String = { _, value in value }
     ) -> String {
-        var result = template
-        for index in arguments.indices.reversed() {
-            result = result.replacingOccurrences(of: "{\(index)}", with: map(index, arguments[index]))
+        let source = template as NSString
+        var result = ""
+        var cursor = 0
+        for match in placeholders.matches(in: template, range: NSRange(location: 0, length: source.length)) {
+            result += source.substring(with: NSRange(location: cursor, length: match.range.location - cursor))
+            if let index = Int(source.substring(with: match.range(at: 1))), arguments.indices.contains(index) {
+                result += map(index, arguments[index])
+            } else if !dropUnfilled {
+                result += source.substring(with: match.range)
+            }
+            cursor = NSMaxRange(match.range)
         }
+        result += source.substring(from: cursor)
         return result
     }
 
+    private static let placeholders = try! NSRegularExpression(pattern: #"\{(0|[1-9][0-9]*)\}"#)
+
     package static func dropUnfilledPlaceholders(_ text: String) -> String {
-        var result = text
-        for index in stride(from: 32, through: 0, by: -1) {
-            result = result.replacingOccurrences(of: "{\(index)}", with: "")
-        }
-        return result
+        substitute(text, arguments: [], dropUnfilled: true)
     }
 }

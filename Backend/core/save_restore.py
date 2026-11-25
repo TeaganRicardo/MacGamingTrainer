@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -10,6 +11,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 from .errors import CoreSaveError
+from .persistence import atomic_write_text
 from .save_resolution import ResolvedSaveFile
 from .save_metadata import copy_owned_save_file, copy_save_metadata, remove_owned_save_tree
 from .save_snapshots import SaveSnapshotError, _safe_relative, _sha256
@@ -110,6 +112,132 @@ class SaveRestoreTransaction:
             if isinstance(error, KeyboardInterrupt):
                 raise SaveRestorePreparationInterrupted() from error
             raise
+
+    def _physical_target_path(self, key):
+        root_id, relative = key
+        root = self.roots.get(root_id)
+        if root is None:
+            raise SaveRestoreError('Save transaction references an unknown root.')
+        return (root.expanduser() / _safe_relative(relative)).resolve(strict=False)
+
+    @staticmethod
+    def _target_matches_baseline(path, digest):
+        if path.is_symlink():
+            return False
+        if digest is None:
+            return not path.exists()
+        return path.is_file() and _sha256(path) == digest
+
+    def _unresolved_recovery_targets(self, *, exclude_root=None):
+        parent = self._transaction_parent()
+        unresolved = []
+        excluded = Path(exclude_root).resolve(strict=False) if exclude_root is not None else None
+        for recovery_root in sorted(parent.glob('.rollback-*')):
+            if excluded is not None and recovery_root.resolve(strict=False) == excluded:
+                continue
+            if recovery_root.is_symlink() or not recovery_root.is_dir():
+                continue
+            marker = recovery_root / 'unresolved-targets.json'
+            if marker.is_symlink():
+                unresolved.append((None, recovery_root))
+                continue
+            if marker.is_file():
+                try:
+                    payload = json.loads(marker.read_text(encoding='utf-8'))
+                    if payload.get('schemaVersion') != 1 or not isinstance(payload.get('targets'), list):
+                        raise ValueError('invalid unresolved target marker')
+                    entries = payload['targets']
+                    resolved_changed = False
+                    for entry in entries:
+                        if not isinstance(entry, dict) or type(entry.get('resolved', False)) is not bool:
+                            raise ValueError('invalid unresolved target entry')
+                        if entry.get('resolved') is True:
+                            continue
+                        path_text, digest = entry.get('path'), entry.get('sha256')
+                        if not isinstance(path_text, str) or not Path(path_text).is_absolute():
+                            raise ValueError('invalid unresolved target path')
+                        if digest is not None and (
+                            not isinstance(digest, str)
+                            or len(digest) != 64
+                            or any(character not in '0123456789abcdef' for character in digest)
+                        ):
+                            raise ValueError('invalid unresolved target digest')
+                        path = Path(path_text)
+                        if self._target_matches_baseline(path, digest):
+                            entry['resolved'] = True
+                            resolved_changed = True
+                        else:
+                            unresolved.append((path, recovery_root))
+                    if resolved_changed:
+                        atomic_write_text(
+                            marker,
+                            json.dumps(payload, ensure_ascii=False, allow_nan=False),
+                        )
+                except (OSError, ValueError, TypeError, AttributeError):
+                    unresolved.append((None, recovery_root))
+                continue
+
+            # Migrate older full-set recovery copies before a later edit can
+            # make a restored target differ from its captured baseline again.
+            files_root = recovery_root / 'files'
+            try:
+                if files_root.is_symlink() or not files_root.is_dir():
+                    unresolved.append((None, recovery_root))
+                    continue
+                baseline = {}
+                for root_dir in files_root.iterdir():
+                    if root_dir.is_symlink() or not root_dir.is_dir() or root_dir.name not in self.roots:
+                        raise ValueError('invalid legacy recovery root')
+                    for backup in root_dir.rglob('*'):
+                        if backup.is_symlink():
+                            raise ValueError('symlink in legacy recovery copy')
+                        if not backup.is_file():
+                            continue
+                        relative = backup.relative_to(root_dir).as_posix()
+                        key = (root_dir.name, relative)
+                        baseline[key] = _sha256(backup)
+                current = {self._key(row): None for row in self.resolver()}
+                payload = self._target_marker(baseline, current)
+                for entry in payload['targets']:
+                    path = Path(entry['path'])
+                    entry['resolved'] = self._target_matches_baseline(path, entry['sha256'])
+                    if not entry['resolved']:
+                        unresolved.append((path, recovery_root))
+                atomic_write_text(marker, json.dumps(payload, ensure_ascii=False, allow_nan=False))
+            except (OSError, ValueError, SaveRestoreError):
+                unresolved.append((None, recovery_root))
+        return unresolved
+
+    def _require_targets_recovered(self, keys, *, exclude_root=None):
+        requested = {self._physical_target_path(key) for key in keys}
+        for unresolved_path, recovery_root in self._unresolved_recovery_targets(exclude_root=exclude_root):
+            if unresolved_path is None or unresolved_path in requested:
+                raise SaveRollbackError(
+                    'A previous Save Editor rollback remains unresolved for this physical target.',
+                    recovery_root,
+                )
+
+    def _target_marker(self, baseline_hashes, target_hashes, *, resolved=False):
+        keys = set(baseline_hashes) | set(target_hashes)
+        targets = []
+        for key in sorted(keys):
+            targets.append(
+                {
+                    'rootId': key[0],
+                    'relativePath': key[1],
+                    'path': str(self._physical_target_path(key)),
+                    'sha256': baseline_hashes.get(key),
+                    'resolved': resolved,
+                }
+            )
+        return {'schemaVersion': 1, 'targets': targets}
+
+    def _write_unresolved_target_marker(self, rollback_root, baseline_hashes, target_hashes, *, resolved=False):
+        payload = self._target_marker(baseline_hashes, target_hashes, resolved=resolved)
+        atomic_write_text(
+            Path(rollback_root) / 'unresolved-targets.json',
+            json.dumps(payload, ensure_ascii=False, allow_nan=False),
+        )
 
     def _current_files(self, owned_keys=None):
         current = list(self.resolver())
@@ -276,6 +404,7 @@ class SaveRestoreTransaction:
         result = None
 
         try:
+            self._require_targets_recovered(set(baseline_hashes) | set(target_hashes), exclude_root=rollback_root)
             destinations = self._capture_destinations(set(baseline_hashes) | set(target_hashes), destination_stack)
             if preserve_current and snapshot_rows:
                 previous = self.store.create_snapshot(
@@ -299,6 +428,7 @@ class SaveRestoreTransaction:
 
             self._verify_target_paths(expected_paths)
             self._verify_destinations(destinations)
+            self._write_unresolved_target_marker(rollback_root, baseline_hashes, target_hashes)
             self._install_entries(target_entries, destinations, progress=mutated)
             self._delete_keys(set(baseline_hashes) - set(target_hashes), destinations, progress=mutated)
             self._verify_destinations(destinations)
@@ -367,6 +497,17 @@ class SaveRestoreTransaction:
                     logging.exception('Verified save transaction cleanup failed: %s', rollback_root)
                     if result is not None:
                         result['maintenanceWarning'] = 'rollback_cleanup_failed'
+                        # The installed result was verified. A retained cleanup
+                        # copy must not later masquerade as a failed rollback.
+                        # Failure to record that fact cannot undo this success.
+                        try:
+                            self._write_unresolved_target_marker(
+                                rollback_root, baseline_hashes, target_hashes, resolved=True
+                            )
+                        except OSError:
+                            logging.exception(
+                                'Completed save transaction marker could not be updated: %s', rollback_root
+                            )
 
     def _replacement_entries(self, replacements):
         if not isinstance(replacements, (list, tuple)) or not replacements:

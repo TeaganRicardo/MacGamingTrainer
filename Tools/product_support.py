@@ -76,7 +76,7 @@ def swift_layout(modules):
     App imports Core and every selected game.
     """
     games = [module.frontend.swift_module for module in modules]
-    return {
+    layout = {
         'packageName': SWIFT_PACKAGE_NAME,
         'modules': [
             {'name': SWIFT_CORE_MODULE, 'role': 'core', 'sources': [CORE_SWIFT_SOURCES],
@@ -88,6 +88,24 @@ def swift_layout(modules):
              'dependencies': [SWIFT_CORE_MODULE, *games]},
         ],
     }
+    _validate_swift_ownership(layout['modules'], ROOT)
+    return layout
+
+
+def _validate_swift_ownership(modules, root):
+    names = set()
+    roots = []
+    for module in modules:
+        name = module['name']
+        if name in names:
+            raise ManifestError(f'Duplicate Swift module name: {name}.')
+        names.add(name)
+        for relative in module['sources']:
+            path = (Path(root) / relative).resolve()
+            for owner, owned in roots:
+                if owner != name and (path == owned or path in owned.parents or owned in path.parents):
+                    raise ManifestError(f'Overlapping Swift source ownership: {owner} and {name}: {relative}.')
+            roots.append((name, path))
 
 
 def swift_module_sources(modules, root, generated):
@@ -98,7 +116,9 @@ def swift_module_sources(modules, root, generated):
     files for it under ``generated/<module>``. The product build and the Swift
     test harnesses both take their source lists from here.
     """
+    _validate_swift_ownership(modules, root)
     built = set()
+    source_owners = {}
     result = []
     for module in modules:
         name = module['name']
@@ -116,6 +136,12 @@ def swift_module_sources(modules, root, generated):
         sources += sorted((Path(generated) / name).glob('*.swift'))
         if not sources:
             raise ManifestError(f'No Swift sources for module {name}.')
+        for source in sources:
+            canonical = source.resolve()
+            owner = source_owners.get(canonical)
+            if owner is not None and owner != name:
+                raise ManifestError(f'Swift source belongs to both {owner} and {name}: {source}.')
+            source_owners[canonical] = name
         result.append((module, sources))
         built.add(name)
     return result
@@ -128,8 +154,8 @@ def swift_library_modules(game_ids, generated):
     test harness compiles these modules and takes the App module's place.
     """
     manifests = [load_manifest(game_id) for game_id in game_ids]
-    generate_module_sources(manifests, Path(generated))
     modules = [module for module in swift_layout(manifests)['modules'] if module['role'] != 'app']
+    generate_module_sources(manifests, Path(generated))
     return swift_module_sources(modules, ROOT, generated)
 
 

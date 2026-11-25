@@ -2,6 +2,7 @@ import sys
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Backend"))
 from games.hades2 import preparation
@@ -119,17 +120,33 @@ with tempfile.TemporaryDirectory(prefix="mgt-unverified-build-") as directory:
         assert identity["compatible"] is False
         assert identity["warnings"]
 
-        result = preparation.prepare(data_dir)
+        alternate_game = root / "Other Library/Hades II.app"
+        alternate_executable = alternate_game / "Contents/MacOS/Hades II"
+        alternate_executable.parent.mkdir(parents=True)
+        alternate_executable.write_bytes(b"another installed executable")
+        (alternate_game / "Contents/Info.plist").write_bytes((game / "Contents/Info.plist").read_bytes())
+        alternate_manifest = root / "Other Library/appmanifest_1145350.acf"
+        alternate_manifest.write_text('"buildid" "88888888"', encoding="utf-8")
+        selected_paths = (game, executable, manifest)
+        alternate_paths = (alternate_game, alternate_executable, alternate_manifest)
+        with patch.object(preparation, "resolve_paths", side_effect=[selected_paths, alternate_paths]) as resolve:
+            result = preparation.prepare(data_dir)
+        assert resolve.call_count == 1, "prepare reselected the installation while validating identity"
         assert result["prepared"] is True
         assert result["manifest"]["compatible"] is False
+        assert result["manifest"]["game"] == str(game)
+        assert result["manifest"]["steam_build"] == "99999999"
         assert result["manifest"]["uuid"] == unknown_uuid
         assert result["manifest"]["original_signature_baseline"]["bundle_returncode"] == 1
         prepared_bytes = executable.read_bytes()
         assert prepared_bytes != original_bytes
 
-        restored = preparation.restore(data_dir)
+        with patch.object(preparation, "resolve_paths", side_effect=[selected_paths, alternate_paths]) as resolve:
+            restored = preparation.restore(data_dir)
+        assert resolve.call_count == 1, "restore reselected the installation while validating identity"
         assert restored["restored"] is True
         assert executable.read_bytes() == original_bytes
+        assert alternate_executable.read_bytes() == b"another installed executable"
         assert ("/usr/bin/codesign", "--verify", "--strict", str(game)) in commands
     finally:
         for name, value in old_values.items():

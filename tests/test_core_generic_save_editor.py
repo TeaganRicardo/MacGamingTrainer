@@ -30,7 +30,8 @@ from core.save_editor import (  # noqa: E402
     SaveFieldSpec,
     discover_mapping_fields,
 )
-from core.save_restore import SaveRestoreTransaction  # noqa: E402
+from core.save_restore import SaveBusyError, SaveRestoreTransaction  # noqa: E402
+from core.save_service import CoreSaveService  # noqa: E402
 from core.structured_save_edit import StructuredSaveEligibility  # noqa: E402
 from games.hades.adapter import HadesAdapter  # noqa: E402
 from games.hades.preferences import HadesPreferenceStore  # noqa: E402
@@ -244,6 +245,46 @@ def main() -> None:
     assert by_path[("root", "x")].owner_id == "owner:root"
     assert by_path[("$root",)].owner_id != by_path[("root", "x")].owner_id
 
+    typed_document = {1: {"v": 10}, "1": {"v": 20}, "builtins.int:1": {"v": 30}}
+    typed_fields = discover_mapping_fields(typed_document, frozenset())
+    assert len({field.id for field in typed_fields}) == 3
+    assert len({field.owner_id for field in typed_fields}) == 3
+    typed_spec = _sample_spec()
+    typed_spec = replace(typed_spec, catalog=replace(typed_spec.catalog, fields=()))
+    typed_workspace = CatalogSaveWorkspace(SimpleNamespace(document=typed_document), typed_spec)
+    assert typed_workspace.query()["total"] == 3
+    typed_by_path = {field.path: field for field in typed_fields}
+    integer_field = typed_by_path[(1, "v")]
+    string_field = typed_by_path[("1", "v")]
+    assert typed_workspace.detail(integer_field.id)["row"]["value"] == 10
+    assert typed_workspace.detail(string_field.id)["row"]["value"] == 20
+    integer_field.write_value(typed_document, 11)
+    string_field.write_value(typed_document, 21)
+    assert typed_document == {1: {"v": 11}, "1": {"v": 21}, "builtins.int:1": {"v": 30}}
+
+    for key in (False, 1.5, None, b"key", (1, "key")):
+        paired = discover_mapping_fields({key: 1, str(key): 2}, frozenset())
+        assert len({field.id for field in paired}) == 2
+
+    # A custom catalog/discoverer also cannot silently shadow a field ID.
+    collision = replace(string_field, id=integer_field.id)
+    for curated, extras in (
+        ((integer_field, collision), ()),
+        ((integer_field,), (collision,)),
+        ((), (integer_field, collision)),
+    ):
+        collision_spec = replace(
+            typed_spec,
+            catalog=replace(typed_spec.catalog, fields=curated, discover_unknown=lambda _document, _known: extras),
+        )
+        collision_workspace = CatalogSaveWorkspace(SimpleNamespace(document=typed_document), collision_spec)
+        try:
+            collision_workspace.query()
+        except ValueError as error:
+            assert integer_field.id in str(error)
+        else:
+            raise AssertionError("Duplicate field identity was silently accepted")
+
     ancestor_skip_check = discover_mapping_fields(
         {"knownParent": {}, "nonEmptyParent": {"known": 1, "sibling": 2}},
         frozenset({("knownParent", "leaf"), ("nonEmptyParent", "known")}),
@@ -272,6 +313,43 @@ def main() -> None:
             save_management=sample_spec,
             home=root / "sample/home",
         )
+        # Generic editing is cold by default even if save backups/restores support hot mode.
+        policy_saves = root / "policy/saves"
+        _write_sample_saves(policy_saves)
+        policy_spec = replace(sample_spec, roots=(replace(sample_spec.roots[0], path=str(policy_saves)),))
+        running = {"value": False}
+        policy_service = CoreSaveService("policy_json", policy_spec, root / "policy/data", lambda: running["value"])
+        selected = {"rootId": "main", "relativePath": "Slot1.json"}
+        policy_editor = CatalogSaveWorkspace.open(policy_service, _sample_spec(), source=selected, target=selected)
+        policy_generation = policy_editor.baseline_generation
+        policy_editor.stage("inventory.gold", "set", 71, baseline_generation=policy_generation)
+        policy_before = (policy_saves / "Slot1.json").read_bytes()
+        running["value"] = True
+        try:
+            policy_editor.apply(baseline_generation=policy_generation)
+        except SaveBusyError:
+            pass
+        else:
+            raise AssertionError("Generic Save Editor wrote while running without an explicit policy")
+        assert (policy_saves / "Slot1.json").read_bytes() == policy_before
+        assert policy_service.list_state()["snapshots"] == []
+        assert policy_editor.baseline_generation == policy_generation
+        assert policy_editor.review()["count"] == 1 and not policy_editor.recovery_unresolved
+        running["value"] = False
+        assert policy_editor.apply(baseline_generation=policy_generation)["hot"] is False
+
+        # An owning module may opt in; the same verified transaction retains the exact prior bytes.
+        running["value"] = True
+        hot_editor = CatalogSaveWorkspace.open(
+            policy_service, replace(_sample_spec(), allow_running=True), source=selected, target=selected,
+        )
+        hot_before = (policy_saves / "Slot1.json").read_bytes()
+        hot_editor.stage("inventory.gold", "set", 72, baseline_generation=hot_editor.baseline_generation)
+        hot_receipt = hot_editor.apply(baseline_generation=hot_editor.baseline_generation)
+        assert hot_receipt["hot"] is True and hot_receipt["runtimeReloaded"] is False
+        prior = policy_service.store.load_verified_snapshot(hot_receipt["previousSnapshotId"])
+        assert (prior["root"] / "files/main/Slot1.json").read_bytes() == hot_before
+
         # Review must describe the codec-normalized bytes that Apply will install.
         rounded_saves = root / "rounded/saves"
         _write_sample_saves(rounded_saves)
@@ -728,6 +806,116 @@ def main() -> None:
             assert replay_reply["ok"] is False and replay_reply["error"]["code"] == "rollback_failed"
             assert len(replace_calls) == 2, "unresolved recovery workspace replayed Apply"
             assert sample_adapter.save_workspaces[bak_ws].recovery_unresolved is True
+            # A second workspace and a fresh Core Save service must inherit the
+            # physical target fence. An unrelated save target remains writable.
+            second_open = router.handle({
+                "id": "second-open-slot1",
+                "command": "save_editor_open",
+                "params": {"source": {"rootId": "main", "relativePath": "Slot1.json"}},
+            })["result"]
+            second_ws = second_open["workspaceId"]
+            second_gen = second_open["baselineGeneration"]
+            router.handle({
+                "id": "second-target-slot1",
+                "command": "save_editor_target",
+                "params": {"workspaceId": second_ws, "baselineGeneration": second_gen,
+                           "target": {"rootId": "main", "relativePath": "Slot1.json"}},
+            })
+            router.handle({
+                "id": "second-stage-slot1",
+                "command": "save_editor_stage",
+                "params": {"workspaceId": second_ws, "baselineGeneration": second_gen,
+                           "entryId": "inventory.gold", "operation": "set", "value": 77},
+            })
+            second_apply = router.handle({
+                "id": "second-apply-slot1",
+                "command": "save_editor_apply",
+                "params": {"workspaceId": second_ws, "baselineGeneration": second_gen},
+            })
+            assert second_apply["ok"] is False and second_apply["error"]["code"] == "rollback_failed"
+
+            fresh_adapter = SampleJsonGameAdapter(sample_ctx)
+            fresh_router = JsonlRequestRouter(
+                fresh_adapter, save_data_root=root / "sample/data", target_running_probe=lambda: False
+            )
+            try:
+                fresh_open = fresh_router.handle({
+                    "id": "fresh-open-slot1", "command": "save_editor_open",
+                    "params": {"source": {"rootId": "main", "relativePath": "Slot1.json"}},
+                })["result"]
+                fresh_ws, fresh_gen = fresh_open["workspaceId"], fresh_open["baselineGeneration"]
+                fresh_router.handle({
+                    "id": "fresh-target-slot1", "command": "save_editor_target",
+                    "params": {"workspaceId": fresh_ws, "baselineGeneration": fresh_gen,
+                               "target": {"rootId": "main", "relativePath": "Slot1.json"}},
+                })
+                fresh_router.handle({
+                    "id": "fresh-stage-slot1", "command": "save_editor_stage",
+                    "params": {"workspaceId": fresh_ws, "baselineGeneration": fresh_gen,
+                               "entryId": "inventory.gold", "operation": "set", "value": 88},
+                })
+                fresh_apply = fresh_router.handle({
+                    "id": "fresh-apply-slot1", "command": "save_editor_apply",
+                    "params": {"workspaceId": fresh_ws, "baselineGeneration": fresh_gen},
+                })
+                assert fresh_apply["ok"] is False and fresh_apply["error"]["code"] == "rollback_failed"
+
+                # Explicitly restore the captured baseline bytes. The fence is
+                # then durably marked resolved, and later writes remain allowed.
+                recovery_root = Path(fail_reply["error"]["recoveryPath"])
+                baseline_file = recovery_root / "files/main/Slot1.json"
+                (sample_saves / "Slot1.json").write_bytes(baseline_file.read_bytes())
+                resolved_adapter = SampleJsonGameAdapter(sample_ctx)
+                resolved_router = JsonlRequestRouter(
+                    resolved_adapter, save_data_root=root / "sample/data", target_running_probe=lambda: False
+                )
+                try:
+                    for index, value in enumerate((111, 112), start=1):
+                        resolved_open = resolved_router.handle({
+                            "id": f"resolved-open-{index}", "command": "save_editor_open",
+                            "params": {"source": {"rootId": "main", "relativePath": "Slot1.json"}},
+                        })["result"]
+                        resolved_ws, resolved_gen = resolved_open["workspaceId"], resolved_open["baselineGeneration"]
+                        resolved_router.handle({
+                            "id": f"resolved-target-{index}", "command": "save_editor_target",
+                            "params": {"workspaceId": resolved_ws, "baselineGeneration": resolved_gen,
+                                       "target": {"rootId": "main", "relativePath": "Slot1.json"}},
+                        })
+                        resolved_router.handle({
+                            "id": f"resolved-stage-{index}", "command": "save_editor_stage",
+                            "params": {"workspaceId": resolved_ws, "baselineGeneration": resolved_gen,
+                                       "entryId": "inventory.gold", "operation": "set", "value": value},
+                        })
+                        resolved_apply = resolved_router.handle({
+                            "id": f"resolved-apply-{index}", "command": "save_editor_apply",
+                            "params": {"workspaceId": resolved_ws, "baselineGeneration": resolved_gen},
+                        })
+                        assert resolved_apply["ok"] is True, resolved_apply
+                finally:
+                    resolved_router.close()
+
+                unrelated_open = fresh_router.handle({
+                    "id": "fresh-open-slot2", "command": "save_editor_open",
+                    "params": {"source": {"rootId": "main", "relativePath": "Slot2.json"}},
+                })["result"]
+                unrelated_ws, unrelated_gen = unrelated_open["workspaceId"], unrelated_open["baselineGeneration"]
+                fresh_router.handle({
+                    "id": "fresh-target-slot2", "command": "save_editor_target",
+                    "params": {"workspaceId": unrelated_ws, "baselineGeneration": unrelated_gen,
+                               "target": {"rootId": "main", "relativePath": "Slot2.json"}},
+                })
+                fresh_router.handle({
+                    "id": "fresh-stage-slot2", "command": "save_editor_stage",
+                    "params": {"workspaceId": unrelated_ws, "baselineGeneration": unrelated_gen,
+                               "entryId": "inventory.gold", "operation": "set", "value": 99},
+                })
+                unrelated_apply = fresh_router.handle({
+                    "id": "fresh-apply-slot2", "command": "save_editor_apply",
+                    "params": {"workspaceId": unrelated_ws, "baselineGeneration": unrelated_gen},
+                })
+                assert unrelated_apply["ok"] is True, unrelated_apply
+            finally:
+                fresh_router.close()
         finally:
             router.close()
 

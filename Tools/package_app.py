@@ -6,11 +6,13 @@ import argparse
 import json
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Iterable, Sequence
+from urllib.parse import urlparse
 
 TOOLS_DIR = Path(__file__).resolve().parent
 ROOT = TOOLS_DIR.parent
@@ -63,6 +65,11 @@ def build_python_runtime_metadata(source: dict, architectures: Iterable[str]) ->
     """Construct the canonical packaged `Python/runtime.json` payload for `architectures`."""
     if not isinstance(source, dict):
         raise ValueError("Python runtime source manifest must be an object")
+    if type(source.get('schemaVersion')) is not int or source['schemaVersion'] != 1:
+        raise ValueError('Python runtime schemaVersion must be 1')
+    for field in ('provider', 'release', 'version'):
+        if not isinstance(source.get(field), str) or not source[field].strip():
+            raise ValueError(f'Python runtime {field} must be a non-empty string')
     arch_list = list(architectures)
     if (
         not arch_list
@@ -78,6 +85,14 @@ def build_python_runtime_metadata(source: dict, architectures: Iterable[str]) ->
         declaration = distributions.get(arch)
         if not isinstance(declaration, dict):
             raise ValueError(f"packaged Python runtime architecture is not declared: {arch}")
+        if not isinstance(declaration.get('target'), str) or not declaration['target'].strip():
+            raise ValueError(f'Python runtime target is missing for {arch}')
+        url = declaration.get('url')
+        if not isinstance(url, str) or urlparse(url).scheme != 'https' or not urlparse(url).netloc:
+            raise ValueError(f'Python runtime URL is invalid for {arch}')
+        digest = declaration.get('sha256')
+        if not isinstance(digest, str) or not re.fullmatch(r'[0-9a-fA-F]{64}', digest):
+            raise ValueError(f'Python runtime SHA-256 is invalid for {arch}')
         selected[arch] = declaration
     if any(arch not in SUPPORTED_RUNTIME_ARCHITECTURES for arch in arch_list):
         raise ValueError(f"Python runtime has unsupported target architecture: {arch_list}")
@@ -176,6 +191,18 @@ def package_app_resources(manifest_path: Path, root: Path, resources_dir: Path) 
 
 def smoke_packaged_adapters(backend_dir: Path, requires_lldb: bool, game_ids: Sequence[str]) -> None:
     """Import and instantiate each packaged adapter against the staged Backend directory."""
+    result = subprocess.run([
+        sys.executable, '-I', '-c',
+        "import runpy, sys; from pathlib import Path; "
+        "runpy.run_path(sys.argv[1])['_smoke_packaged_adapters'](Path(sys.argv[2]), sys.argv[3] == '1', sys.argv[4:])",
+        str(Path(__file__).resolve()), str(Path(backend_dir).resolve()), '1' if requires_lldb else '0', *game_ids,
+    ], capture_output=True, text=True)
+    if result.returncode:
+        raise ValueError(f'Packaged adapter smoke failed: {result.stderr.strip()}')
+
+
+def _smoke_packaged_adapters(backend_dir: Path, requires_lldb: bool, game_ids: Sequence[str]) -> None:
+    """Run inside the fresh interpreter owned by ``smoke_packaged_adapters``."""
     resolved_backend = Path(backend_dir).resolve()
     if str(resolved_backend) not in sys.path:
         sys.path.insert(0, str(resolved_backend))

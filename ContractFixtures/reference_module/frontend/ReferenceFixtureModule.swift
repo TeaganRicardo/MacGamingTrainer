@@ -357,10 +357,11 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
     /// The rejected reply described an earlier target. Read the state again
     /// under the current one rather than keep showing what it replaced.
     func applyStaleBackendPayload(_ payload: [String: Any]) {
+        applyProfileMetadata(payload)
         refreshFromHost()
     }
 
-    func applyBackendPayload(_ payload: [String: Any]) {
+    private func applyProfileMetadata(_ payload: [String: Any]) {
         if let rows = payload["profiles"],
            let data = try? JSONSerialization.data(withJSONObject: rows),
            let decoded = try? JSONDecoder().decode([ReferenceFixtureProfile].self, from: data)
@@ -380,6 +381,10 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
                 )
             }
         }
+    }
+
+    func applyBackendPayload(_ payload: [String: Any]) {
+        applyProfileMetadata(payload)
         if let report = payload["diagnostics"] as? [String: Any],
            let checks = report["checks"] as? [[String: Any]]
         {

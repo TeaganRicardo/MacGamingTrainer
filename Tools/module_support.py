@@ -298,6 +298,8 @@ def load_manifest(game_id: str) -> BuildManifest:
         key = unicodedata.normalize('NFC', destination).casefold()
         if key in destinations:
             raise ManifestError(f'appResources has duplicate destination: {destination}.')
+        if any(key.startswith(other + '/') or other.startswith(key + '/') for other in destinations):
+            raise ManifestError(f'appResources has overlapping file/directory destinations: {destination}.')
         destinations.add(key)
         app_resources.append(AppResource(source, destination))
 

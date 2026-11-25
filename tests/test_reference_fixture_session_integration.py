@@ -35,6 +35,7 @@ assert "model.enabled.toggle()" not in fixture_source, (
 
 harness = r"""
 import AppKit
+import Combine
 import Foundation
 
 func fail(_ message: String) -> Never {
@@ -83,7 +84,7 @@ func connectionCard(backend: Bool = true, connected: Bool = false,
         onRefresh: { selectedActions.append("refresh") },
         onPrimary: { selectedActions.append(connected ? "disconnect" : "connect") },
         onRestart: { selectedActions.append("restart") }, targetRunning: running,
-        onLaunch: supportsLaunch ? { selectedActions.append("launch") } : nil
+        onLaunch: supportsLaunch ? { @MainActor in selectedActions.append("launch") } : nil
     )
 }
 for (card, title) in [
@@ -411,6 +412,33 @@ model.loadProfile("fixture-preset")
 guard waitUntil(2.0, { !model.busy && model.shortcutText(.toggleFeature) == "⌃⌥5" }) else {
     fail("reference fixture profile load did not restore shortcuts")
 }
+
+// Hold a real load reply across target replacement. The profile inventory and
+// shortcuts remain independent; its deliberately old connection state must be rejected.
+model.resetShortcuts()
+model.applyBackendPayload(["profiles": [[String: Any]]()])
+let profileGate = URL(fileURLWithPath: temporaryHome).appendingPathComponent("hold-reference-profile")
+let profileReady = URL(fileURLWithPath: temporaryHome).appendingPathComponent("reference-profile-ready")
+do { try Data().write(to: profileGate) } catch { fail("could not hold reference profile reply") }
+var staleConnectionApplied = false
+let profileObservation = model.$connected.dropFirst().sink { if !$0 { staleConnectionApplied = true } }
+model.loadProfile("fixture-preset")
+guard waitUntil(2.0, { FileManager.default.fileExists(atPath: profileReady.path) }) else {
+    fail("reference profile reply was not held")
+}
+fixtureTarget = TrainerTargetObservation(isRunning: true,
+    launchGeneration: fixtureTarget.launchGeneration + 1,
+    processIdentifier: (fixtureTarget.processIdentifier ?? 1000) + 1)
+fixtureMonitor.refresh()
+do { try FileManager.default.removeItem(at: profileGate) } catch { fail("could not release reference profile reply") }
+guard waitUntil(2.0, { !model.busy && model.shortcutText(.toggleFeature) == "⌃⌥5"
+    && model.profiles.map(\.name) == ["fixture-preset"] }) else {
+    fail("target replacement discarded independent Profile metadata")
+}
+profileObservation.cancel()
+if staleConnectionApplied || !model.connected || !model.enabled {
+    fail("stale Profile connection state reached the current target")
+}
 model.deleteProfile("fixture-preset")
 guard waitUntil(2.0, { !model.busy && model.profiles.isEmpty }) else {
     fail("reference fixture profile delete failed")
@@ -501,6 +529,22 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
     shutil.copytree(FIXTURE / "backend", project / "Backend/games/reference_fixture")
     adapter_path = project / "Backend/games/reference_fixture/adapter.py"
     adapter_path.write_text(adapter_path.read_text() + r'''
+
+# A test-only barrier holds the actual Profile payload across a Host target change.
+_fixture_dispatch = ReferenceFixtureAdapter.dispatch
+def _held_profile_dispatch(self, command, params, request_id=None):
+    result = _fixture_dispatch(self, command, params, request_id)
+    if command == 'load_profile':
+        import pathlib, time
+        gate = pathlib.Path.home() / 'hold-reference-profile'
+        if gate.exists():
+            gate.with_name('reference-profile-ready').write_text('ready')
+            deadline = time.monotonic() + 3
+            while gate.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            return {**result, 'connected': False, 'enabled': False}
+    return result
+ReferenceFixtureAdapter.dispatch = _held_profile_dispatch
 
 _fixture_diagnostics_dispatch = ReferenceFixtureAdapter.dispatch
 def _held_diagnostics_dispatch(self, command, params, request_id=None):

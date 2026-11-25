@@ -220,6 +220,7 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             target=target,
             default_target=default_target,
             version_pinned=True,
+            allow_running=True,
         )
         identity = profile_file_identity(session.source["relativePath"])
         if identity is None:

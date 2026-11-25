@@ -39,6 +39,10 @@ from pathlib import Path
 parser = argparse.ArgumentParser()
 parser.add_argument("--game", required=True)
 args = parser.parse_args()
+if Path(__file__).with_suffix(".crash").exists():
+    with Path(__file__).with_suffix(".starts").open("a", encoding="utf-8") as output:
+        output.write("start\n")
+    sys.exit(7)
 for raw in sys.stdin:
     request = json.loads(raw)
     if request["command"] == "wait":
@@ -306,6 +310,54 @@ struct Runner {
             waitUntil(message: "worker stops with a restartable configuration") {
                 !session.isStarted && !session.currentStatus.busy && session.canRestart
             }
+        }
+
+        // A known conflicting bundle identity cannot fall back to an otherwise
+        // matching executable suffix, for either workspace or kernel events.
+        do {
+            let monitor = TrainerTargetProcessMonitor(
+                processName: LifecycleModuleSpec.processName, bundleIdentifier: LifecycleModuleSpec.bundleID,
+                executablePathSuffix: LifecycleModuleSpec.suffix
+            )
+            let imposter = FakeRunningApp(pid: 41011, bundle: "test.other.fixture",
+                url: LifecycleModuleSpec.fakeAppURL, name: LifecycleModuleSpec.processName)
+            for notification in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didActivateApplicationNotification] {
+                NSWorkspace.shared.notificationCenter.post(name: notification, object: NSWorkspace.shared,
+                    userInfo: [NSWorkspace.applicationUserInfoKey: imposter])
+                pump(0.01)
+            }
+            check(!monitor.isRunning && monitor.launchGeneration == 0 && monitor.activationGeneration == 0,
+                  "conflicting bundle identity fell back to a matching executable name")
+            let bundleless = FakeRunningApp(pid: 41012, bundle: nil,
+                url: LifecycleModuleSpec.fakeAppURL, name: LifecycleModuleSpec.processName)
+            NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didLaunchApplicationNotification,
+                object: NSWorkspace.shared, userInfo: [NSWorkspace.applicationUserInfoKey: bundleless])
+            pump(0.01)
+            check(monitor.isRunning && monitor.launchGeneration == 1,
+                  "missing bundle identity lost the declared executable fallback")
+
+            let bundle = workerURL.deletingLastPathComponent().appendingPathComponent("Imposter.app")
+            let contents = bundle.appendingPathComponent("Contents")
+            let executable = contents.appendingPathComponent("MacOS").appendingPathComponent(LifecycleModuleSpec.processName)
+            try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: targetURL, to: executable)
+            func writeIdentity(_ identifier: String) throws {
+                let info = ["CFBundleIdentifier": identifier, "CFBundleExecutable": LifecycleModuleSpec.processName]
+                try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+                    .write(to: contents.appendingPathComponent("Info.plist"))
+            }
+            try writeIdentity("test.other.fixture")
+            let candidate = try spawnTargetProcess(at: executable)
+            defer { terminateTarget(candidate) }
+            let kernelMonitor = TrainerTargetProcessMonitor(
+                processName: LifecycleModuleSpec.processName, bundleIdentifier: LifecycleModuleSpec.bundleID,
+                executablePathSuffix: "Imposter.app/Contents/MacOS/\(LifecycleModuleSpec.processName)"
+            )
+            check(!kernelMonitor.isRunning, "kernel path fallback ignored a conflicting Info.plist identity")
+            try writeIdentity(LifecycleModuleSpec.bundleID)
+            kernelMonitor.refresh()
+            check(kernelMonitor.isRunning && kernelMonitor.targetObservation.processIdentifier == candidate.processIdentifier,
+                  "matching kernel-path identity was rejected")
         }
 
         // 1. Atomic launch observation and explicit automatic connect.
@@ -1084,6 +1136,34 @@ struct Runner {
             let afterLaunch = sendRuntimeRequest("allowed-after-launch")
             check(afterLaunch.completed && afterLaunch.failure == nil,
                   "runtime request failed after definitive launch released trust gate")
+        }
+
+        // 10. A worker that exits before a verified reply exhausts the session
+        // retries and one Host fallback, even with a foreground detached target.
+        do {
+            let crashMarker = workerURL.deletingPathExtension().appendingPathExtension("crash")
+            let startsURL = workerURL.deletingPathExtension().appendingPathExtension("starts")
+            try Data().write(to: crashMarker)
+            defer { try? FileManager.default.removeItem(at: crashMarker) }
+            app.fakeActive = true
+            defer { app.fakeActive = false }
+            let model = LifecycleStubModel()
+            model.connected = true
+            let context = makeContext(LifecycleStubModule.self, model: model)
+            defer { context.session.stop() }
+            postWorkspace(NSWorkspace.didLaunchApplicationNotification, pid: 41010)
+            context.performConnectionAction()
+            model.connected = false
+            model.notifyChanged()
+            waitUntil(5, message: "startup crash recovery exhausts") {
+                model.restartBackendCount >= 1 && !context.session.isStarted && !context.backendStatus.busy
+            }
+            pump(0.25)
+            let starts = try String(contentsOf: startsURL, encoding: .utf8).split(separator: "\n")
+            check(model.restartBackendCount == 1 && starts.count == 4,
+                  "unverified worker repeatedly rearmed Host fallback: \(model.restartBackendCount), \(starts.count)")
+            check(!context.backendStatus.backendAvailable && !context.backendStatus.busy,
+                  "exhausted startup crash did not settle")
         }
 
         print("core_host_lifecycle_macos_ok")

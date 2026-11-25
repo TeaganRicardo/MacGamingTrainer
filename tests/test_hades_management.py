@@ -76,7 +76,9 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-management-') as directory:
     preferences.save(desired)
     assert adapter.dispatch('list_profiles', {}, 'list') == {'profiles': []}
     rejected('profile_invalid', lambda: adapter.dispatch('save_profile', {'name': '../escape'}, 'invalid'))
-    assert adapter.dispatch('save_profile', {'name': '  战斗  '}, 'save')['profiles'][0]['name'] == '战斗'
+    with patch.object(adapter.profiles._store, 'list', wraps=adapter.profiles._store.list) as profile_scan:
+        assert adapter.dispatch('save_profile', {'name': '  战斗  '}, 'save')['profiles'][0]['name'] == '战斗'
+    assert profile_scan.call_count == 1, 'saving a Profile enumerated the directory more than once'
     assert runtime.calls == [], 'saving a preset must not enter a game/debugger'
     assert adapter.profiles.load('战斗') == desired
     assert HadesProfileStore(root / 'hades2/profiles').list() == [], 'profiles crossed the game boundary'
@@ -198,7 +200,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-management-') as directory:
         logging.disable(logging.NOTSET)
     assert damaged.read_text() == '{"schemaVersion": 1, "gameID": "hades"', 'listing modified a damaged profile'
     damaged.unlink()
-    adapter.dispatch('delete_profile', {'name': '恢复'}, 'delete')
+    with patch.object(adapter.profiles._store, 'list', wraps=adapter.profiles._store.list) as profile_scan:
+        deleted = adapter.dispatch('delete_profile', {'name': '恢复'}, 'delete')
+    assert profile_scan.call_count == 1, 'deleting a Profile enumerated the directory more than once'
+    assert [row['name'] for row in deleted['profiles']] == ['战斗']
     assert [row['name'] for row in adapter.dispatch('list_profiles', {}, 'list-final')['profiles']] == ['战斗']
 
 print('hades_management_profiles_and_diagnostics_ok')

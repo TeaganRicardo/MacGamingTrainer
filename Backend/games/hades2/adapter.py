@@ -839,19 +839,23 @@ class Hades2Adapter(GameAdapter):
 
         previous_pid = self.state.get('pid')
         attached_pid=self.runtime.pid or getattr(self.runtime,'pending_resume_pid',None)
-        if getattr(self.runtime,'cleanup_pending',False) or (self.runtime.pid and (pid!=self.runtime.pid or not self.runtime.alive())):
+        cleanup_pending=getattr(self.runtime,'cleanup_pending',False)
+        attachment_lost=not cleanup_pending and self.runtime.pid is not None and (pid!=self.runtime.pid or not self.runtime.alive())
+        if cleanup_pending or attachment_lost:
             same_process=pid is not None and attached_pid is not None and pid==attached_pid
-            if not same_process:clear_active(self.state,preserve_desired=True)
+            if attachment_lost or not same_process:clear_active(self.state,preserve_desired=True)
             self._detach_runtime()
         elif previous_pid is not None and pid!=previous_pid:
             clear_active(self.state,preserve_desired=True)
             self.state['connected']=False
         observed_pid=previous_pid or attached_pid
-        if observed_pid is not None and pid!=observed_pid:
+        if attachment_lost or (observed_pid is not None and pid!=observed_pid):
             # A failed detach still owns the old PID and never reaches here.
+            # A confirmed dead attachment also retires its values when the OS
+            # has already reused the numeric PID for a replacement.
             self._retire_target_observations()
         self.state['pid']=pid
-        if pid!=previous_pid:
+        if attachment_lost or pid!=previous_pid:
             self.runtime.invalidate_generation()
             self._invalidate_game_speed_observation()
         if not pid:self.state['status']='not_running'

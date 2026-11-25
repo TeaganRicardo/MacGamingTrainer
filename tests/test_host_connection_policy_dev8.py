@@ -143,6 +143,7 @@ if launchPolicy.backgroundConnectionAllowed {
 }
 
 // Busy state defers the same bounded activation request instead of discarding it.
+policy.backendBecameReady()
 policy.targetActivated()
 if policy.choosesRestart(backendAvailable: false, busy: true, recoveryAllowed: true) {
     fail("restarted backend while host was busy")
@@ -160,12 +161,42 @@ if !policy.choosesConnect(backendAvailable: true, busy: false, connected: false,
 
 // An unexpected backend loss while the target is live becomes one fallback
 // restart request after the session-level recovery path is no longer busy.
+policy.backendBecameReady()
 policy.backendBecameUnavailable()
 if policy.choosesRestart(backendAvailable: false, busy: true, recoveryAllowed: true) {
     fail("host raced session-level backend recovery")
 }
 if !policy.choosesRestart(backendAvailable: false, busy: false, recoveryAllowed: true) {
     fail("backend loss did not preserve fallback recovery intent")
+}
+
+// Spawning and losing another worker does not create a new failure episode.
+// Activation can request connection, but cannot replenish a spent restart.
+for _ in 0..<4 {
+    policy.backendBecameAvailable()
+    policy.backendBecameUnavailable()
+    policy.targetActivated()
+    if policy.choosesRestart(backendAvailable: false, busy: false, recoveryAllowed: true) {
+        fail("unverified worker spawn or target activation rearmed recovery")
+    }
+}
+policy.backendBecameReady()
+if !policy.choosesRestart(backendAvailable: false, busy: false, recoveryAllowed: true) {
+    fail("verified readiness did not start a fresh recovery episode")
+}
+policy.backendBecameUnavailable()
+policy.userWillConnect()
+if !policy.choosesRestart(backendAvailable: false, busy: false, recoveryAllowed: true) {
+    fail("explicit connect did not replenish recovery")
+}
+policy.userWillRestartBackend()
+policy.backendBecameUnavailable()
+if !policy.choosesRestart(backendAvailable: false, busy: false, recoveryAllowed: true) {
+    fail("explicit restart did not replenish recovery")
+}
+policy.targetLaunched()
+if !policy.choosesRestart(backendAvailable: false, busy: false, recoveryAllowed: true) {
+    fail("new target lifetime did not replenish recovery")
 }
 
 // Host-owned recovery eligibility (quit, incompatible protocol, no restartable

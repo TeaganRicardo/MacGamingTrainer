@@ -40,6 +40,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
         'validate_game_module.py',
         'generate_game_binding.py',
         'swift_module_layout.py',
+        'product_support.py',
     ):
         shutil.copy2(root / 'Tools' / name, tools / name)
 
@@ -147,6 +148,53 @@ router.close()
         ], text=True, capture_output=True, cwd=project, env=env)
         assert refused.returncode != 0 and 'nativeLibraries' in refused.stderr, refused
     manifest.write_text(original_manifest)
+
+    # Both declaration orders must reject a file occupying another resource's
+    # parent directory, before package staging can fail partway through.
+    for destinations in (('assets', 'assets/entry.json'), ('assets/entry.json', 'assets')):
+        declared = json.loads(original_manifest)
+        for resource, destination in zip(declared['appResources'], destinations):
+            resource['destination'] = destination
+        manifest.write_text(json.dumps(declared))
+        refused = subprocess.run([
+            'python3', str(tools / 'validate_game_module.py'), game_id,
+        ], text=True, capture_output=True, cwd=project, env=env)
+        assert refused.returncode == 2 and 'overlapping' in refused.stderr, refused
+    manifest.write_text(original_manifest)
+
+    subprocess.run(['python3', '-c', '''
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+sys.path.insert(0, 'Tools')
+import product_support as product
+from module_support import ManifestError
+
+def rejected(callback):
+    try:
+        callback()
+    except ManifestError:
+        return
+    raise AssertionError('ambiguous Swift module ownership was accepted')
+
+def module(name, source):
+    return {'name': name, 'role': 'game', 'sources': [source], 'dependencies': []}
+
+for pair in (
+    [module('First', 'Sources/Core'), module('Second', 'Sources/Core/Nested')],
+    [module('First', 'Sources/Core/Nested'), module('Second', 'Sources/Core')],
+    [module('Duplicate', 'Sources/Core'), module('Duplicate', 'Sources/ReferenceFixture')],
+):
+    rejected(lambda: product.swift_module_sources(pair, Path.cwd(), Path('Generated')))
+
+frontends = [SimpleNamespace(id=str(i), frontend=SimpleNamespace(
+    swift_module='Duplicate', source_directory=source,
+)) for i, source in enumerate(('Sources/ReferenceFixture', 'Sources/Other'))]
+with patch.object(product, 'load_manifest', side_effect=frontends), patch.object(product, 'generate_module_sources') as generate:
+    rejected(lambda: product.swift_library_modules(('first', 'second'), Path('Generated')))
+    generate.assert_not_called()
+'''], check=True, cwd=project, env=env)
 
     generated = project / 'Generated'
     subprocess.run([

@@ -1,6 +1,8 @@
 import json
+import plistlib
 from pathlib import Path
 from typing import Any, Optional
+from xml.parsers.expat import ExpatError
 
 from core.module_manifest import GameModuleManifest
 
@@ -203,6 +205,26 @@ def steam_manifest_for_bundle(
     return effective_home / 'Library/Application Support/Steam/steamapps' / filename
 
 
+def _is_complete_game_bundle(candidate: Path) -> bool:
+    """Return true only when a Steam candidate has the declared executable identity."""
+    if candidate.is_symlink() or not candidate.is_dir():
+        return False
+    info_path = candidate / 'Contents' / 'Info.plist'
+    executable = candidate / 'Contents' / 'MacOS' / GAME_EXECUTABLE_NAME
+    if info_path.is_symlink() or executable.is_symlink() or not executable.is_file():
+        return False
+    try:
+        with info_path.open('rb') as stream:
+            info = plistlib.load(stream)
+    except (OSError, ValueError, plistlib.InvalidFileException, ExpatError):
+        return False
+    return (
+        isinstance(info, dict)
+        and info.get('CFBundleIdentifier') == BUNDLE_IDENTIFIER
+        and info.get('CFBundleExecutable') == GAME_EXECUTABLE_NAME
+    )
+
+
 def resolve_game_install(
     located_bundle: Optional[Path] = None,
     *,
@@ -227,7 +249,7 @@ def resolve_game_install(
             for app_dir in dict.fromkeys((install_dir, GAME_APP_DIRNAME)):
                 candidate = steamapps / 'common' / app_dir / GAME_APP_NAME
                 exe = candidate / 'Contents' / 'MacOS' / GAME_EXECUTABLE_NAME
-                if candidate.exists():
+                if _is_complete_game_bundle(candidate):
                     return candidate, exe, acf
             if first_acf is None and acf.is_file():
                 candidate = steamapps / 'common' / install_dir / GAME_APP_NAME

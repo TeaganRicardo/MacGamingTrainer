@@ -647,9 +647,10 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
             "roomName": "F_Combat01",
             "roomKind": "combat",
             "reward": "RoomMoneyDrop",
+            "rewardWarning": "room_no_reward",
             "targets": [
                 ["kind": "reward", "id": "MaxHealthDrop"],
-                ["kind": "roomCategory", "id": "combat", "acceptsReward": true],
+                ["kind": "roomCategory", "id": "combat", "acceptsReward": true, "warning": "door_forced_destination"],
                 ["kind": "roomCategory", "id": "shop"],
             ],
         ],
@@ -665,7 +666,7 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
                 ["kind": "reward", "id": "ZeusUpgrade", "warning": "god_limit"],
                 ["kind": "reward", "id": "MaxManaDrop", "enabled": false, "reason": "reward_eligibility_probe_error"],
                 ["kind": "roomCategory", "id": "combat", "acceptsReward": true],
-                ["kind": "roomCategory", "id": "miniboss", "acceptsReward": true],
+                ["kind": "roomCategory", "id": "miniboss", "acceptsReward": true, "warning": "native_ineligible"],
                 ["kind": "roomCategory", "id": "P_MiniBoss01", "acceptsReward": true, "warning": "biome_depth_too_low"],
                 ["kind": "roomCategory", "id": "story"],
                 ["kind": "roomCategory", "id": "shop", "warning": "max_creations_this_run"],
@@ -773,6 +774,37 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
         fail("worldExitPanel initial button label expected \(applyTitle), got \(applyButton()?.label ?? "nil")")
     }
 
+    let combat = string("hades2.worldActions.route.combat")
+    let health = string("hades2.reward.MaxHealthDrop")
+    let inPlaceTitle = combat + " · " + health + warn + string("hades2.worldActions.unavailable.room_no_reward")
+    guard targetMenu()?.valueText == inPlaceTitle else {
+        fail("in-place selected summary lost its room reward warning: \(targetMenu()?.valueText ?? "nil")")
+    }
+    let anyReward = string("hades2.worldActions.anyReward")
+    let routedAny = anyReward + warn + string("hades2.worldActions.unavailable.door_forced_destination")
+    withOpenNestedMenu(targetMenu()!, in: window) { menu in
+        guard let submenu = visibleItems(menu).first(where: { $0.title == combat })?.submenu,
+              let anyIndex = submenu.items.firstIndex(where: { $0.title == routedAny }),
+              submenu.items.contains(where: {
+                  $0.title == health + warn + string("hades2.worldActions.unavailable.room_no_reward")
+              }) else {
+            fail("own-type choices did not distinguish routing from in-place reward warnings")
+        }
+        submenu.performActionForItem(at: anyIndex)
+    }
+    nativePickerWait("own-type Any Reward summary keeps routing warning") {
+        model.selectedWorldExitTarget == "combat"
+            && targetMenu()?.valueText == combat + " · " + routedAny
+    }
+    withOpenNestedMenu(targetMenu()!, in: window) { menu in
+        guard let submenu = visibleItems(menu).first(where: { $0.title == combat })?.submenu,
+              let healthIndex = submenu.items.firstIndex(where: { $0.title.hasPrefix(health) }) else {
+            fail("own-type reward choice disappeared")
+        }
+        submenu.performActionForItem(at: healthIndex)
+    }
+    nativePickerWait("in-place choice restores reward warning") { targetMenu()?.valueText == inPlaceTitle }
+
     // 1. The Exit picker names each door's current room type and reward.
     let exitMenu = selectNativePicker(exitPicker()!, in: window, moving: 1, opening: .pointer)
     let firstExit = localization.string("hades2.worldActions.exitNumber", arguments: ["1"])
@@ -804,22 +836,24 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
             }
         }
     }
-    let combat = string("hades2.worldActions.route.combat")
     let miniboss = string("hades2.worldActions.route.miniboss")
-    let zeus = string("hades2.worldActions.god.ZeusUpgrade") + warn + string("hades2.worldActions.unavailable.god_limit")
+    let zeus = string("hades2.worldActions.god.ZeusUpgrade")
     let mana = string("hades2.reward.MaxManaDrop") + " · " + string("hades2.worldActions.unavailable.reward_eligibility_probe_error") + " [off]"
-    let expectedRewards = [
-        "  " + string("hades2.worldActions.anyReward"),
-        "  # " + string("hades2.worldActions.gods"),
-        "  " + zeus,
-        "  # " + string("hades2.worldActions.rewards"),
-        "  " + string("hades2.reward.WeaponUpgrade"),
-        "  " + mana,
-    ]
-    let expected = ["> " + combat] + expectedRewards
-        + ["> " + miniboss] + expectedRewards
-        + ["> " + string("hades2.worldActions.room.P_MiniBoss01") + warn + string("hades2.worldActions.unavailable.biome_depth_too_low")]
-        + expectedRewards
+    func expectedRewards(_ routeWarning: String? = nil) -> [String] {
+        let suffix = routeWarning.map { warn + string("hades2.worldActions.unavailable.\($0)") } ?? ""
+        return [
+            "  " + anyReward + suffix,
+            "  # " + string("hades2.worldActions.gods"),
+            "  " + zeus + suffix + warn + string("hades2.worldActions.unavailable.god_limit"),
+            "  # " + string("hades2.worldActions.rewards"),
+            "  " + string("hades2.reward.WeaponUpgrade") + suffix,
+            "  " + mana,
+        ]
+    }
+    let expected = ["> " + combat] + expectedRewards()
+        + ["> " + miniboss] + expectedRewards("native_ineligible")
+        + ["> " + string("hades2.worldActions.room.P_MiniBoss01")]
+        + expectedRewards("biome_depth_too_low")
         + [string("hades2.worldActions.route.story"),
            string("hades2.worldActions.route.shop") + warn + string("hades2.worldActions.unavailable.max_creations_this_run")]
     guard structure == expected else {
@@ -827,6 +861,12 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
     }
     nativePickerWait("submenu pick Miniboss > Zeus selects room type and reward together") {
         model.selectedWorldExitTarget == "miniboss>ZeusUpgrade" && applyButton()?.enabled == true
+    }
+    let warnedChoice = miniboss + " · " + zeus
+        + warn + string("hades2.worldActions.unavailable.native_ineligible")
+        + warn + string("hades2.worldActions.unavailable.god_limit")
+    guard targetMenu()?.valueText == warnedChoice else {
+        fail("selected route summary lost routing/reward warnings: \(targetMenu()?.valueText ?? "nil")")
     }
 
     // 3. Apply through the real AXButton: while the blocking request is in
@@ -856,6 +896,9 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
             && applyParams?["room"] as? String == "miniboss"
             && applyParams?["reward"] as? String == "ZeusUpgrade" else {
         fail("apply_world_exit must carry room type and reward: \(String(describing: applyParams))")
+    }
+    guard targetMenu()?.valueText == warnedChoice else {
+        fail("leased route summary lost routing/reward warnings: \(targetMenu()?.valueText ?? "nil")")
     }
 
     // 4. Switching exits updates per-exit lock and repairs the choice without
@@ -947,6 +990,35 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
             && exitPicker()?.enabled == false
             && targetMenu()?.enabled == false
             && applyButton()?.enabled == false
+    }
+
+    // The Fields bridge may report Story or Shop without changing room family.
+    // Keep that observed distinction in both languages instead of hiding it.
+    let bridgeExits: [[String: Any]] = ["Story", "Shop"].enumerated().map { index, reward in
+        ["doorToken": "bridge:\(index)", "objectId": 200 + index, "ordinal": index + 1,
+         "roomName": "H_Bridge01", "roomKind": "", "reward": reward,
+         "targets": baselineExits[0]["targets"]!]
+    }
+    try writeWorldState(exits: bridgeExits, worldActionsEnabled: true)
+    model.refreshFromHost()
+    nativePickerWait("bridge variants mount") {
+        !model.busy && model.worldActionExits.count == 2
+            && model.selectedWorldExitToken == "bridge:0" && exitPicker()?.enabled == true
+    }
+    for language in [TrainerPresentationLanguage.en, .zhCN] {
+        localization.language = language
+        nativePickerPump()
+        revealWorldExitPanel()
+        let labels = selectNativePicker(exitPicker()!, in: window,
+            moving: language == .en ? 1 : -1, opening: .pointer)
+        let expected = ["story", "shop"].enumerated().map { index, reward in
+            localization.string("hades2.worldActions.exitNumber", arguments: [String(index + 1)])
+                + " · " + string("hades2.worldActions.room.H_Bridge01")
+                + " · " + string("hades2.worldActions.route.\(reward)")
+        }
+        guard labels == expected else {
+            fail("bridge exits lost their reported Story/Shop distinction: \(labels), expected \(expected)")
+        }
     }
     print("hades2_world_exit_module_journey_ok")
 }

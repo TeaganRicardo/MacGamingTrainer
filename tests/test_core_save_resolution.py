@@ -99,4 +99,33 @@ except SaveResolutionError:
 else:
     raise AssertionError('provider escaped declared root')
 
+class FailingProvider(DefaultSaveProvider):
+    def __init__(self, failure, deferred):
+        super().__init__(context)
+        self.failure = failure
+        self.deferred = deferred
+
+    def resolve(self, roots, declared):
+        if self.deferred:
+            return self.failed_rows()
+        raise self.failure
+
+    def failed_rows(self):
+        yield from ()
+        raise self.failure
+
+for failure in (RuntimeError('provider read failed'), SaveResolutionError('typed provider failure')):
+    for deferred in (False, True):
+        provider = FailingProvider(failure, deferred)
+        try:
+            resolve_save_files(provider_spec, provider_loader=lambda _target: provider)
+        except SaveResolutionError as error:
+            assert error.code == 'save_unsafe' and error.presentation == 'host.save.error.unsafe'
+            if isinstance(failure, SaveResolutionError):
+                assert error is failure
+            else:
+                assert error.__cause__ is failure
+        else:
+            raise AssertionError('provider failure was not normalized')
+
 print('core_save_resolution_ok')
