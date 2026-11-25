@@ -30,6 +30,10 @@ _LUA_TOKENS = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|[A-Za-z_][A-Za
 _NATIVE_CACHE = OrderedDict()
 
 
+class SourceHashesUnavailable(ValueError):
+    """The packaged reference cannot establish native source authority."""
+
+
 @lru_cache(maxsize=2)
 def _source_hash_declaration(path):
     try:
@@ -60,7 +64,7 @@ def supported_source_hashes(owner):
         declaration = _source_hash_declaration(str(supported_reference_path(_SOURCE_HASHES)))
         return declaration[owner]
     except (LookupError, ValueError) as error:
-        raise ValueError(f"Hades II supported-build source hashes for {owner!r} are unavailable: {error}") from error
+        raise SourceHashesUnavailable(f"Hades II supported-build source hashes for {owner!r} are unavailable: {error}") from error
 
 
 def _masked(text, *, lua):
@@ -520,7 +524,7 @@ class NativeDialogueInvestigation:
         if expected_hash is None:
             story_reset = supported_source_hashes("storyReset")
             if set(story_reset) != {"StoryResetData.lua"}:
-                raise ValueError("Hades II storyReset source hashes must name exactly StoryResetData.lua.")
+                raise SourceHashesUnavailable("Hades II storyReset source hashes must name exactly StoryResetData.lua.")
             expected_hash = story_reset["StoryResetData.lua"]
         self.expected_hash = expected_hash
         self.native = None

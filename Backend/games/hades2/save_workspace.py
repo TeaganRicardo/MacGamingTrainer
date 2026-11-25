@@ -16,7 +16,7 @@ from core.structured_save_edit import StructuredSaveEditSession, StructuredSaveE
 
 from . import save_advanced, save_container, save_equipment, save_history, save_long_term, save_narrative, save_relationships, save_quest_rewards
 from .save_entities import entity_page
-from .save_investigation import NativeDialogueInvestigation
+from .save_investigation import NativeDialogueInvestigation, SourceHashesUnavailable
 from .error_presentation import Hades2ValueError, SaveBatchValidationError
 from .localization import official_display_names
 from .save_native_ids import QUEST_IDS, RESOURCE_IDS
@@ -176,7 +176,7 @@ def _json_scalar(value):
 class Hades2SaveWorkspace(CoreSaveWorkspace):
     """One semantic workspace with independent, explicitly selected source/target."""
 
-    __slots__ = ("_preview_document", "_game_path", "_investigation", "_presentation_language", "profile")
+    __slots__ = ("_preview_document", "_game_path", "_investigation", "_native_evidence_unavailable", "_presentation_language", "profile")
 
     def __init__(self, session, profile, game_path=None):
         super().__init__(
@@ -188,6 +188,7 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
         self._preview_document = None
         self._game_path = game_path
         self._investigation = None
+        self._native_evidence_unavailable = False
         self._presentation_language = "en"
         self.profile = profile
 
@@ -859,9 +860,15 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
         ))
         return rows
 
-    def _narrative_investigation(self):
+    def _narrative_investigation(self, *, required=True):
         if self._investigation is None:
-            self._investigation = NativeDialogueInvestigation(self._game_path)
+            try:
+                self._investigation = NativeDialogueInvestigation(self._game_path)
+            except SourceHashesUnavailable as error:
+                self._native_evidence_unavailable = True
+                if required:
+                    raise Hades2ValueError("hades2.saveEditor.error.evidenceUnavailable", str(error)) from error
+                return None
         return self._investigation
 
     def _dialogue_write_decisions(self):
@@ -935,11 +942,13 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
                         raise
             if search.strip():
                 rows.extend(self._known_absent_quest_rows(language))
-            rows.extend(row for row in self._narrative_investigation().quest_rows(
-                root, language, include_absent=bool(search.strip())
-            ) if row["domain"] != "investigate")
-            rows.extend(save_quest_rewards.rows(root, language, self._narrative_investigation(),
-                self._game_path, include_absent=bool(search.strip())))
+            investigation = self._narrative_investigation(required=False)
+            if investigation is not None:
+                rows.extend(row for row in investigation.quest_rows(
+                    root, language, include_absent=bool(search.strip())
+                ) if row["domain"] != "investigate")
+                rows.extend(save_quest_rewards.rows(root, language, investigation,
+                    self._game_path, include_absent=bool(search.strip())))
         if scope in ("all", "growth", "records"):
             progression = save_long_term.rows(
                 root, "progression", language, game_path=self._game_path,
@@ -978,14 +987,16 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             # Authored context groups the character; actual record fields
             # retain their typed physical owner, independently of source text.
             if scope in ("all", "story"):
-                results = self._narrative_investigation().query(
+                investigation = self._narrative_investigation(required=False)
+                results = investigation.query(
                     self.document.lua_state, search=search, offset=0,
                     limit=100000, language=language,
                     permissions=self._dialogue_write_decisions(),
-                )
-                rows.extend(self._narrative_investigation().spoken_rows(
-                    self.document.lua_state, results["items"], language
-                ))
+                ) if investigation is not None else {"items": []}
+                if investigation is not None:
+                    rows.extend(investigation.spoken_rows(
+                        self.document.lua_state, results["items"], language
+                    ))
                 for scene in results["items"]:
                     # The source-bound narrative index must prove the native
                     # NPC identity before its dialogue can join a person's
@@ -1019,6 +1030,7 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             "relativePath": self.relative_path,
             "domain": "entities",
             "scope": scope,
+            "nativeEvidenceUnavailable": self._native_evidence_unavailable,
             **page,
         }
 
@@ -1057,6 +1069,7 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
         if language not in ("zh-CN", "en"):
             raise Hades2ValueError("hades2.saveEditor.error.invalidQuery", "Save Editor language is unsupported.")
         offset, limit = _page(offset, limit)
+        self._native_evidence_unavailable = False
         if domain == "entities":
             if stateFilter != "all" or path not in (None, []):
                 raise Hades2ValueError(
@@ -1112,8 +1125,10 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
                 self.document.lua_state, owner_domain, language, game_path=self._game_path
             )
             if owner_domain == "progression":
-                rows.extend(save_quest_rewards.rows(self.document.lua_state, language,
-                    self._narrative_investigation(), self._game_path, include_absent=bool(search.strip())))
+                investigation = self._narrative_investigation(required=False)
+                if investigation is not None:
+                    rows.extend(save_quest_rewards.rows(self.document.lua_state, language,
+                        investigation, self._game_path, include_absent=bool(search.strip())))
                 rows.extend(save_long_term.rows(
                     self.document.lua_state, owner_domain, language, game_path=self._game_path,
                     include_absent=bool(search.strip())
@@ -1156,6 +1171,7 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             "limit": limit,
             "total": total,
             "items": rows[offset:offset + limit],
+            "nativeEvidenceUnavailable": self._native_evidence_unavailable,
         }
 
     def summary(self):

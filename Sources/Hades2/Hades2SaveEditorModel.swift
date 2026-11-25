@@ -793,7 +793,9 @@ final class Hades2SaveEditorModel: ObservableObject {
             for entry in decoded {
                 self.knownDisplayNames[entry.id] = entry.displayName
             }
-            self.queryFailure = nil
+            self.queryFailure = result["nativeEvidenceUnavailable"] as? Bool == true
+                ? TrainerTextToken(key: "hades2.saveEditor.error.evidenceUnavailable")
+                : nil
         }
     }
 
