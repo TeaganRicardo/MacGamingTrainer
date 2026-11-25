@@ -179,7 +179,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-speed-observation-") as temporary:
                 raise AssertionError('lost connection did not fail: ' + loss)
         assert not disconnected.state['connected'], loss
         assert not disconnected.state['activeFeatures']['gameSpeed'], loss
-        assert disconnected.state['runtimeDiagnostics']['gameSpeedAppliedValue'] is None, loss
+        if loss == 'scan':
+            # A confirmed dead attachment retires the entire old process's
+            # diagnostics, even when its numeric PID has already been reused.
+            assert disconnected.state['runtimeDiagnostics'] is None, loss
+        else:
+            assert disconnected.state['runtimeDiagnostics']['gameSpeedAppliedValue'] is None, loss
         assert disconnected.preferences == desired, loss
         assert disconnected_driver.speed == 2.0 and disconnected_driver.writes == [], loss
 
