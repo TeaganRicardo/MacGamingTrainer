@@ -160,6 +160,8 @@ private struct ManagementProbeView: View {
 
 enum HostSaveProbeBridge {
     nonisolated(unsafe) static var captured: [TrainerManagementGroup]?
+    nonisolated(unsafe) static var supplySaveOverride = false
+    nonisolated(unsafe) static var moduleSaveActionCalls = 0
 }
 
 struct HostUnsupportedSaveModule: TrainerGameModule {
@@ -176,7 +178,10 @@ struct HostUnsupportedSaveModule: TrainerGameModule {
         localization: TrainerLocalizationStore,
         toolWindows: TrainerToolWindowActions
     ) -> TrainerManagementCatalog? {
-        TrainerManagementCatalog()
+        TrainerManagementCatalog(saveManagement: TrainerManagementAction(
+            id: "module-save", title: "Module bypass", icon: "",
+            action: { HostSaveProbeBridge.moduleSaveActionCalls += 1 }
+        ))
     }
     static func makeContent(model: HostSaveStubModel) -> some View {
         ManagementProbeView { HostSaveProbeBridge.captured = $0 }
@@ -199,7 +204,11 @@ struct HostSupportedSaveModule: TrainerGameModule {
         localization: TrainerLocalizationStore,
         toolWindows: TrainerToolWindowActions
     ) -> TrainerManagementCatalog? {
-        TrainerManagementCatalog()
+        guard HostSaveProbeBridge.supplySaveOverride else { return nil }
+        return TrainerManagementCatalog(saveManagement: TrainerManagementAction(
+            id: "module-save", title: "Module bypass", icon: "",
+            action: { HostSaveProbeBridge.moduleSaveActionCalls += 1 }
+        ))
     }
     static func makeContent(model: HostSaveStubModel) -> some View {
         ManagementProbeView { HostSaveProbeBridge.captured = $0 }
@@ -502,6 +511,8 @@ struct Main {
         HostSaveProbeBridge.captured = nil
         let unsupportedContext = TrainerGameContext<HostUnsupportedSaveModule>(session: session,
             logSink: TrainerLogSink(gameID: HostUnsupportedSaveModule.descriptor.id, homeDirectory: fixtureHome))
+        check(unsupportedContext.resolvedManagementCatalog(localization: localization)?.saveManagement == nil,
+              "module override exposed the unsupported Host Save slot")
         let unsupportedWindow = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 820, height: 780),
             styleMask: [.titled], backing: .buffered, defer: false
@@ -524,6 +535,15 @@ struct Main {
         HostSaveProbeBridge.captured = nil
         let supportedContext = TrainerGameContext<HostSupportedSaveModule>(session: session,
             logSink: TrainerLogSink(gameID: HostSupportedSaveModule.descriptor.id, homeDirectory: fixtureHome))
+        let defaultCatalog = supportedContext.resolvedManagementCatalog(localization: localization)
+        check(defaultCatalog?.saveManagement != nil && defaultCatalog?.log != nil &&
+                defaultCatalog?.logHistory != nil && defaultCatalog?.clearLogs != nil,
+              "nil module catalog omitted Host management capabilities")
+        HostSaveProbeBridge.supplySaveOverride = true
+        let reservedSaveAction = supportedContext.resolvedManagementCatalog(localization: localization)?.saveManagement
+        check(reservedSaveAction?.id == "saveManagement",
+              "module override replaced the Host Save action")
+        HostSaveProbeBridge.supplySaveOverride = false
         let hostWindow = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 820, height: 780),
             styleMask: [.titled], backing: .buffered, defer: false
@@ -574,6 +594,14 @@ struct Main {
         }
         supportedContext.toolWindows.closeAll()
         pump()
+        supportedContext.beginTermination()
+        let listsBeforeTermination = requests("core.save.list", log: log).count
+        check(reservedSaveAction?.isEnabled == false, "captured Host Save action ignored shutdown")
+        reservedSaveAction?.perform()
+        pump()
+        check(requests("core.save.list", log: log).count == listsBeforeTermination &&
+                HostSaveProbeBridge.moduleSaveActionCalls == 0,
+              "captured reserved action bypassed Host shutdown")
         sidebarWindow.close()
         hostWindow.close()
         print("core_save_retention_controls_ok")
