@@ -312,6 +312,54 @@ struct Runner {
             }
         }
 
+        // A known conflicting bundle identity cannot fall back to an otherwise
+        // matching executable suffix, for either workspace or kernel events.
+        do {
+            let monitor = TrainerTargetProcessMonitor(
+                processName: LifecycleModuleSpec.processName, bundleIdentifier: LifecycleModuleSpec.bundleID,
+                executablePathSuffix: LifecycleModuleSpec.suffix
+            )
+            let imposter = FakeRunningApp(pid: 41011, bundle: "test.other.fixture",
+                url: LifecycleModuleSpec.fakeAppURL, name: LifecycleModuleSpec.processName)
+            for notification in [NSWorkspace.didLaunchApplicationNotification, NSWorkspace.didActivateApplicationNotification] {
+                NSWorkspace.shared.notificationCenter.post(name: notification, object: NSWorkspace.shared,
+                    userInfo: [NSWorkspace.applicationUserInfoKey: imposter])
+                pump(0.01)
+            }
+            check(!monitor.isRunning && monitor.launchGeneration == 0 && monitor.activationGeneration == 0,
+                  "conflicting bundle identity fell back to a matching executable name")
+            let bundleless = FakeRunningApp(pid: 41012, bundle: nil,
+                url: LifecycleModuleSpec.fakeAppURL, name: LifecycleModuleSpec.processName)
+            NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didLaunchApplicationNotification,
+                object: NSWorkspace.shared, userInfo: [NSWorkspace.applicationUserInfoKey: bundleless])
+            pump(0.01)
+            check(monitor.isRunning && monitor.launchGeneration == 1,
+                  "missing bundle identity lost the declared executable fallback")
+
+            let bundle = workerURL.deletingLastPathComponent().appendingPathComponent("Imposter.app")
+            let contents = bundle.appendingPathComponent("Contents")
+            let executable = contents.appendingPathComponent("MacOS").appendingPathComponent(LifecycleModuleSpec.processName)
+            try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: targetURL, to: executable)
+            func writeIdentity(_ identifier: String) throws {
+                let info = ["CFBundleIdentifier": identifier, "CFBundleExecutable": LifecycleModuleSpec.processName]
+                try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+                    .write(to: contents.appendingPathComponent("Info.plist"))
+            }
+            try writeIdentity("test.other.fixture")
+            let candidate = try spawnTargetProcess(at: executable)
+            defer { terminateTarget(candidate) }
+            let kernelMonitor = TrainerTargetProcessMonitor(
+                processName: LifecycleModuleSpec.processName, bundleIdentifier: LifecycleModuleSpec.bundleID,
+                executablePathSuffix: "Imposter.app/Contents/MacOS/\(LifecycleModuleSpec.processName)"
+            )
+            check(!kernelMonitor.isRunning, "kernel path fallback ignored a conflicting Info.plist identity")
+            try writeIdentity(LifecycleModuleSpec.bundleID)
+            kernelMonitor.refresh()
+            check(kernelMonitor.isRunning && kernelMonitor.targetObservation.processIdentifier == candidate.processIdentifier,
+                  "matching kernel-path identity was rejected")
+        }
+
         // 1. Atomic launch observation and explicit automatic connect.
         do {
             let model = LifecycleStubModel()
