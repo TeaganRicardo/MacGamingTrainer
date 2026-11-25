@@ -991,6 +991,35 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
             && targetMenu()?.enabled == false
             && applyButton()?.enabled == false
     }
+
+    // The Fields bridge may report Story or Shop without changing room family.
+    // Keep that observed distinction in both languages instead of hiding it.
+    let bridgeExits: [[String: Any]] = ["Story", "Shop"].enumerated().map { index, reward in
+        ["doorToken": "bridge:\(index)", "objectId": 200 + index, "ordinal": index + 1,
+         "roomName": "H_Bridge01", "roomKind": "", "reward": reward,
+         "targets": baselineExits[0]["targets"]!]
+    }
+    try writeWorldState(exits: bridgeExits, worldActionsEnabled: true)
+    model.refreshFromHost()
+    nativePickerWait("bridge variants mount") {
+        !model.busy && model.worldActionExits.count == 2
+            && model.selectedWorldExitToken == "bridge:0" && exitPicker()?.enabled == true
+    }
+    for language in [TrainerPresentationLanguage.en, .zhCN] {
+        localization.language = language
+        nativePickerPump()
+        revealWorldExitPanel()
+        let labels = selectNativePicker(exitPicker()!, in: window,
+            moving: language == .en ? 1 : -1, opening: .pointer)
+        let expected = ["story", "shop"].enumerated().map { index, reward in
+            localization.string("hades2.worldActions.exitNumber", arguments: [String(index + 1)])
+                + " · " + string("hades2.worldActions.room.H_Bridge01")
+                + " · " + string("hades2.worldActions.route.\(reward)")
+        }
+        guard labels == expected else {
+            fail("bridge exits lost their reported Story/Shop distinction: \(labels), expected \(expected)")
+        }
+    }
     print("hades2_world_exit_module_journey_ok")
 }
 '''

@@ -1271,6 +1271,8 @@ struct Hades2TrainerView: View {
             return "\(text("hades2.worldActions.route.miniboss")) · \(id)"
         }
         switch id {
+        case "H_Bridge01":
+            return text("hades2.worldActions.room.H_Bridge01")
         case "combat", "miniboss", "story", "shop", "reprieve":
             return text("hades2.worldActions.route.\(id)")
         default:
@@ -1286,6 +1288,8 @@ struct Hades2TrainerView: View {
         }
         let localized: String?
         switch id {
+        case "Story": localized = text("hades2.worldActions.route.story")
+        case "Shop": localized = text("hades2.worldActions.route.shop")
         case "RoomMoneyDrop": localized = rewardLabel("RoomMoneyDrop")
         case "MetaCardPointsCommonDrop": localized = rewardLabel("MetaCardPointsCommonDrop")
         case "MemPointsCommonDrop": localized = rewardLabel("MemPointsCommonDrop")
@@ -1321,11 +1325,13 @@ struct Hades2TrainerView: View {
         if !exit.roomKind.isEmpty {
             parts.append(worldActionRoomLabel(exit.roomKind))
         } else {
-            parts.append(exit.roomName.isEmpty ? text("hades2.worldActions.unknownTarget") : exit.roomName)
+            parts.append(exit.roomName.isEmpty ? text("hades2.worldActions.unknownTarget") : worldActionRoomLabel(exit.roomName))
         }
         if exit.reward.isEmpty {
             parts.append(text("hades2.worldActions.noReward"))
-        } else if !["Story", "Shop", "Empty"].contains(exit.reward) {
+        } else if exit.reward != "Empty",
+                  !(exit.reward == "Story" && exit.roomKind == "story"),
+                  !(exit.reward == "Shop" && exit.roomKind == "shop") {
             parts.append(worldActionRewardLabel(exit.reward))
         }
         return parts.joined(separator: " · ")
