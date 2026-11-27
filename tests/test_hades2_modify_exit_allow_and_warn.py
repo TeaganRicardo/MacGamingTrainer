@@ -292,8 +292,274 @@ assert(not pcall(function()
   })
 end), "a missing door was applied")
 
--- 7. Unknown outcome: a native failure after the edit began is never
+-- 7. Biome H (Fields of Mourning): NoReward doors carrying CageRewards expose
+-- each cage slot with its own reward and no room_no_reward warning.
+RoomData.H_Combat01 = {
+  Name = "H_Combat01", RoomSetName = "H", NoReward = true, MaxCageRewards = 3,
+}
+RoomData.H_MiniBoss01 = { Name = "H_MiniBoss01", RoomSetName = "H", MaxCageRewards = 2 }
+RoomData.H_Shop01 = { Name = "H_Shop01", RoomSetName = "H" }
+RoomSets.H = { "H_Combat01", "H_MiniBoss01", "H_Shop01" }
+setRoomSet("H")
+CurrentRun.CurrentRoom.NumDoorCageRewards = 2
+local hDoor = {
+  ObjectId = 10,
+  ChooseRoomArgs = {},
+  ReadyToUse = true,
+  RewardPreviewIconIds = {},
+  RewardPreviewBackingIds = {},
+  Room = {
+    Name = "H_Combat01",
+    RoomSetName = "H",
+    NoReward = true,
+    RewardStoreName = "RunProgress",
+    CageRewards = {
+      { RewardType = "MaxHealthDrop", ForceLootName = nil },
+      { RewardType = "Boon", ForceLootName = "ZeusUpgrade" },
+    },
+  },
+}
+MapState.OfferedExitDoors = { [10] = hDoor }
+local prevPreviewFn = CreateDoorRewardPreview
+local previewCalls = {}
+CreateDoorRewardPreview = function(door, chosenRewardType, chosenLootName, index, args)
+  previewCalls[#previewCalls + 1] = {
+    door = door, rewardType = chosenRewardType, lootName = chosenLootName, index = index,
+  }
+  if type(door.RewardPreviewIconIds) == "table" and index ~= nil then
+    door.RewardPreviewIconIds[index] = 900 + index
+    door.RewardPreviewBackingIds[index] = 800 + index
+  end
+  return prevPreviewFn(door, chosenRewardType, chosenLootName, index, args)
+end
+local hStatus = M.dispatch("status", { includeCatalogs = true })
+assert(#hStatus.worldActions.exits == 2, "Fields door with 2 cages must emit 2 slot rows")
+local slot1, slot2 = hStatus.worldActions.exits[1], hStatus.worldActions.exits[2]
+assert(slot1.exitKind == "cageReward" and slot1.doorOrdinal == 1 and slot1.slotIndex == 1
+    and slot1.reward == "MaxHealthDrop" and slot1.rewardWarning == nil,
+  "cage slot 1 lost its native reward or kept room_no_reward")
+assert(slot2.exitKind == "cageReward" and slot2.doorOrdinal == 1 and slot2.slotIndex == 2
+    and slot2.reward == "ZeusUpgrade" and slot2.rewardWarning == nil,
+  "cage slot 2 lost its native reward or kept room_no_reward")
+
+-- Apply reward edits on slot 1 and slot 2 simultaneously and independently.
+local hApplied1 = M.dispatch("apply_world_exit", {
+  doorToken = slot1.doorToken, room = "combat", reward = "ApolloUpgrade",
+  requestId = "h-slot1-apollo", includeCatalogs = true,
+})
+local hRow1 = hApplied1.worldActions.exits[1]
+assert(hRow1.reward == "ApolloUpgrade" and hRow1.activeLease ~= nil
+    and hDoor.Room.CageRewards[1].RewardType == "Boon"
+    and hDoor.Room.CageRewards[1].ForceLootName == "ApolloUpgrade"
+    and hDoor.Room.CageRewards[2].ForceLootName == "ZeusUpgrade",
+  "cage slot 1 edit did not update only slot 1")
+assert(previewCalls[#previewCalls].index == 1 and previewCalls[#previewCalls].lootName == "ApolloUpgrade",
+  "cage slot 1 preview was not refreshed in place")
+
+local hApplied2 = M.dispatch("apply_world_exit", {
+  doorToken = hApplied1.worldActions.exits[2].doorToken, room = "combat", reward = "MaxManaDrop",
+  requestId = "h-slot2-mana", includeCatalogs = true,
+})
+local hRow2 = hApplied2.worldActions.exits[2]
+assert(hApplied2.worldActions.exits[1].activeLease ~= nil and hRow2.activeLease ~= nil
+    and hDoor.Room.CageRewards[2].RewardType == "MaxManaDrop",
+  "editing slot 2 invalidated slot 1 or did not update slot 2")
+M.dispatch("cancel_world_exit", {
+  doorToken = hRow2.doorToken, leaseToken = hRow2.activeLease.leaseToken,
+  requestId = "h-slot2-cancel", includeCatalogs = true,
+})
+assert(hDoor.Room.CageRewards[2].ForceLootName == "ZeusUpgrade"
+    and hDoor.Room.CageRewards[1].ForceLootName == "ApolloUpgrade",
+  "cancelling slot 2 did not preserve slot 1")
+
+-- Reroll externally on slot 2 invalidates slot 2's stale token while slot 1 stays leased.
+hDoor.Room.CageRewards[2] = { RewardType = "RoomMoneyDrop", ForceLootName = nil }
+assert(not pcall(function()
+  M.dispatch("apply_world_exit", {
+    doorToken = slot2.doorToken, room = "combat", reward = "MaxHealthDrop",
+    requestId = "h-slot2-stale", includeCatalogs = true,
+  })
+end), "rerolled cage slot accepted a stale token")
+local hAfterReroll = M.dispatch("status", { includeCatalogs = true })
+assert(hAfterReroll.worldActions.exits[1].activeLease ~= nil,
+  "external reroll on slot 2 dropped slot 1's active lease")
+
+-- Cancel slot 1 restores original slot 1 reward.
+local hRow1After = hAfterReroll.worldActions.exits[1]
+M.dispatch("cancel_world_exit", {
+  doorToken = hRow1After.doorToken, leaseToken = hRow1After.activeLease.leaseToken,
+  requestId = "h-slot1-cancel", includeCatalogs = true,
+})
+assert(hDoor.Room.CageRewards[1].RewardType == "MaxHealthDrop"
+    and hDoor.Room.CageRewards[1].ForceLootName == nil,
+  "cancel did not restore cage slot 1")
+
+-- Room category reservation on a Fields door previews the reserved reward and
+-- materializes CageRewards with chosen reward at slot 1.
+local hFresh = M.dispatch("status", { includeCatalogs = true }).worldActions.exits[1]
+local hRouteReply = M.dispatch("apply_world_exit", {
+  doorToken = hFresh.doorToken, room = "miniboss", reward = "ApolloUpgrade",
+  requestId = "h-miniboss-apollo", includeCatalogs = true,
+})
+assert(hRouteReply.worldActions.exits[1].activeLease.room == "miniboss"
+    and hRouteReply.worldActions.exits[1].activeLease.reward == "ApolloUpgrade")
+assert(hDoor.PreviewReward == "ApolloUpgrade",
+  "room-type reservation on a Fields door did not preview the reserved reward")
+local hEntered = AttemptUseDoor(hDoor)
+assert(hEntered.Name == "H_MiniBoss01" and type(hEntered.CageRewards) == "table"
+    and #hEntered.CageRewards == 2
+    and hEntered.CageRewards[1].RewardType == "Boon"
+    and hEntered.CageRewards[1].ForceLootName == "ApolloUpgrade",
+  "materialized Fields miniboss did not preserve CageRewards with chosen reward")
+
+-- 8. Biome O (Rift of Thessaly): MapState.ShipWheels observed even when
+-- MapState.OfferedExitDoors is empty, editable in place and cleaned up on use.
+setRoomSet("O")
+CurrentRun.CurrentRoom.NoReward = true
+MapState.OfferedExitDoors = {}
+local wheelLeft = {
+  ObjectId = 501, Name = "ShipsSteeringWheelLeft", ReadyToUse = true,
+  Room = CurrentRun.CurrentRoom, RewardStoreName = "RunProgress",
+  ChosenRewardType = "MaxHealthDrop", ForceLootName = nil,
+}
+local wheelRight = {
+  ObjectId = 502, Name = "ShipsSteeringWheelRight", ReadyToUse = true,
+  Room = CurrentRun.CurrentRoom, RewardStoreName = "RunProgress",
+  ChosenRewardType = "Boon", ForceLootName = "ZeusUpgrade",
+}
+MapState.ShipWheels = { [501] = wheelLeft, [502] = wheelRight }
+local prevIsUseable, prevIsAlive = IsUseable, IsAlive
+IsUseable = function(args)
+  local w = MapState.ShipWheels and MapState.ShipWheels[args.Id]
+  return w ~= nil and w.ReadyToUse == true
+end
+IsAlive = function(args)
+  return MapState.ShipWheels and MapState.ShipWheels[args.Id] ~= nil
+end
+
+local oStatus = M.dispatch("status", { includeCatalogs = true })
+assert(#oStatus.worldActions.exits == 2, "ShipWheels were not observed when OfferedExitDoors is empty")
+local leftRow, rightRow = oStatus.worldActions.exits[1], oStatus.worldActions.exits[2]
+assert(leftRow.exitKind == "shipWheel" and leftRow.wheelSide == "left"
+    and leftRow.reward == "MaxHealthDrop" and leftRow.rewardWarning == nil)
+assert(rightRow.exitKind == "shipWheel" and rightRow.wheelSide == "right"
+    and rightRow.reward == "ZeusUpgrade" and rightRow.rewardWarning == nil)
+
+local oApplied = M.dispatch("apply_world_exit", {
+  doorToken = leftRow.doorToken, room = "current", reward = "ApolloUpgrade",
+  requestId = "o-left-apollo", includeCatalogs = true,
+})
+local oLeftAfter = oApplied.worldActions.exits[1]
+assert(oLeftAfter.reward == "ApolloUpgrade" and oLeftAfter.activeLease ~= nil
+    and wheelLeft.ChosenRewardType == "Boon" and wheelLeft.ForceLootName == "ApolloUpgrade",
+  "left ship wheel reward was not updated")
+assert(previewCalls[#previewCalls].door == wheelLeft and previewCalls[#previewCalls].lootName == "ApolloUpgrade",
+  "left ship wheel preview was not updated")
+
+M.dispatch("cancel_world_exit", {
+  doorToken = oLeftAfter.doorToken, leaseToken = oLeftAfter.activeLease.leaseToken,
+  requestId = "o-left-cancel", includeCatalogs = true,
+})
+assert(wheelLeft.ChosenRewardType == "MaxHealthDrop" and wheelLeft.ForceLootName == nil,
+  "cancel did not restore left ship wheel")
+
+-- Once wheels are used (ReadyToUse = false), they vanish and stale tokens are refused.
+wheelLeft.ReadyToUse = false
+wheelRight.ReadyToUse = false
+local oAfterUse = M.dispatch("status", { includeCatalogs = true })
+assert(#oAfterUse.worldActions.exits == 0, "consumed ShipWheels remained editable")
+assert(not pcall(function()
+  M.dispatch("apply_world_exit", {
+    doorToken = leftRow.doorToken, room = "current", reward = "ApolloUpgrade",
+    requestId = "o-left-stale", includeCatalogs = true,
+  })
+end), "consumed ShipWheel accepted a stale token")
+MapState.ShipWheels = {}
+IsUseable, IsAlive = prevIsUseable, prevIsAlive
+CreateDoorRewardPreview = prevPreviewFn
+
+-- Yielding RefreshUseButton calls must run inside `thread(...)` so apply/cancel
+-- on Fields CageRewards and Thessaly ShipWheels do not yield across dispatch.
+local prevRefreshUseButton, prevThread = RefreshUseButton, thread
+local refreshedTargets = {}
+RefreshUseButton = function(id, target)
+  coroutine.yield(0)
+  refreshedTargets[#refreshedTargets + 1] = { id = id, target = target }
+end
+thread = function(fn, ...)
+  local co = coroutine.create(fn)
+  local ok, err = coroutine.resume(co, ...)
+  assert(ok, err)
+  if coroutine.status(co) == "suspended" then
+    local ok2, err2 = coroutine.resume(co)
+    assert(ok2, err2)
+  end
+end
+
+setRoomSet("H")
+local yieldDoor = {
+  ObjectId = 11,
+  ChooseRoomArgs = {},
+  ReadyToUse = true,
+  RewardPreviewIconIds = {},
+  RewardPreviewBackingIds = {},
+  Room = {
+    Name = "H_Combat01",
+    RoomSetName = "H",
+    NoReward = true,
+    RewardStoreName = "RunProgress",
+    CageRewards = {
+      { RewardType = "MaxHealthDrop", ForceLootName = nil },
+    },
+  },
+}
+MapState.OfferedExitDoors = { [11] = yieldDoor }
+local yieldCageRow = M.dispatch("status", { includeCatalogs = true }).worldActions.exits[1]
+local yieldApplied = M.dispatch("apply_world_exit", {
+  doorToken = yieldCageRow.doorToken, room = "current", reward = "ZeusUpgrade",
+  requestId = "h-yield-apply", includeCatalogs = true,
+})
+assert(#refreshedTargets >= 1 and refreshedTargets[#refreshedTargets].id == yieldDoor.ObjectId,
+  "yielding RefreshUseButton did not refresh cage door via thread")
+M.dispatch("cancel_world_exit", {
+  doorToken = yieldApplied.worldActions.exits[1].doorToken,
+  leaseToken = yieldApplied.worldActions.exits[1].activeLease.leaseToken,
+  requestId = "h-yield-cancel", includeCatalogs = true,
+})
+
+setRoomSet("O")
+CurrentRun.CurrentRoom.NoReward = true
+MapState.OfferedExitDoors = {}
+local yieldWheel = {
+  ObjectId = 503, Name = "ShipsSteeringWheelForward", ReadyToUse = true,
+  Room = CurrentRun.CurrentRoom, RewardStoreName = "RunProgress",
+  ChosenRewardType = "MaxHealthDrop", ForceLootName = nil,
+}
+MapState.ShipWheels = { [503] = yieldWheel }
+local prevYieldUseable, prevYieldAlive = IsUseable, IsAlive
+IsUseable = function(args) return MapState.ShipWheels and MapState.ShipWheels[args.Id] and MapState.ShipWheels[args.Id].ReadyToUse == true end
+IsAlive = function(args) return MapState.ShipWheels and MapState.ShipWheels[args.Id] ~= nil end
+local yieldWheelRow = M.dispatch("status", { includeCatalogs = true }).worldActions.exits[1]
+assert(yieldWheelRow.wheelSide == "forward")
+local yieldWheelApplied = M.dispatch("apply_world_exit", {
+  doorToken = yieldWheelRow.doorToken, room = "current", reward = "ApolloUpgrade",
+  requestId = "o-yield-apply", includeCatalogs = true,
+})
+assert(refreshedTargets[#refreshedTargets].id == yieldWheel.ObjectId,
+  "yielding RefreshUseButton did not refresh ship wheel via thread")
+M.dispatch("cancel_world_exit", {
+  doorToken = yieldWheelApplied.worldActions.exits[1].doorToken,
+  leaseToken = yieldWheelApplied.worldActions.exits[1].activeLease.leaseToken,
+  requestId = "o-yield-cancel", includeCatalogs = true,
+})
+MapState.ShipWheels = {}
+IsUseable, IsAlive = prevYieldUseable, prevYieldAlive
+RefreshUseButton, thread = prevRefreshUseButton, prevThread
+
+-- 9. Unknown outcome: a native failure after the edit began is never
 -- replayed, and the same request cannot run again.
+setRoomSet("F")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
 row = exitRow()
 local nativeAssign = AssignRoomToExitDoor
 local assignCalls = 0

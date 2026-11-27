@@ -104,6 +104,10 @@ struct Hades2WorldExit: Identifiable, Equatable {
     let doorToken: String
     let objectID: Int
     let ordinal: Int
+    let exitKind: String
+    let doorOrdinal: Int?
+    let slotIndex: Int?
+    let wheelSide: String?
     let roomName: String
     /// The door's current room type ("combat", "story", ...), or empty when
     /// the region does not build that type (an intro, a boss).
@@ -115,12 +119,18 @@ struct Hades2WorldExit: Identifiable, Equatable {
     let targets: [Hades2WorldActionTarget]
     let activeLease: Hades2WorldActionLease?
 
-    init(doorToken: String, objectID: Int, ordinal: Int, roomName: String, roomKind: String = "",
+    init(doorToken: String, objectID: Int, ordinal: Int, exitKind: String = "door",
+         doorOrdinal: Int? = nil, slotIndex: Int? = nil, wheelSide: String? = nil,
+         roomName: String, roomKind: String = "",
          reward: String, rewardWarning: String? = nil, targets: [Hades2WorldActionTarget],
          activeLease: Hades2WorldActionLease?) {
         self.doorToken = doorToken
         self.objectID = objectID
         self.ordinal = ordinal
+        self.exitKind = exitKind
+        self.doorOrdinal = doorOrdinal
+        self.slotIndex = slotIndex
+        self.wheelSide = wheelSide
         self.roomName = roomName
         self.roomKind = roomKind
         self.reward = reward
@@ -530,6 +540,10 @@ struct Hades2StatePatch {
                 doorToken: doorToken,
                 objectID: objectID,
                 ordinal: ordinal,
+                exitKind: exit["exitKind"] as? String ?? "door",
+                doorOrdinal: number(exit["doorOrdinal"]).map(Int.init),
+                slotIndex: number(exit["slotIndex"]).map(Int.init),
+                wheelSide: exit["wheelSide"] as? String,
                 roomName: exit["roomName"] as? String ?? "",
                 roomKind: exit["roomKind"] as? String ?? "",
                 reward: exit["reward"] as? String ?? "",

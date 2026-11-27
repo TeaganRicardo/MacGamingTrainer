@@ -9714,12 +9714,18 @@ if __MacGamingTrainerV1 == nil then
 
   worldActions = (function()
     local leases = setmetatable({}, { __mode = "k" })
+    local cageLeases = setmetatable({}, { __mode = "k" })
+    local wheelLeases = setmetatable({}, { __mode = "k" })
     local identities = setmetatable({}, { __mode = "k" })
     local doorObservations = setmetatable({}, { __mode = "k" })
+    local cageObservations = setmetatable({}, { __mode = "k" })
+    local wheelObservations = setmetatable({}, { __mode = "k" })
     -- Target catalogs are expensive native eligibility observations. Retain
     -- them per physical door/token when a sparse status omits full catalogs;
     -- a changed token always forces a fresh, read-only probe.
     local targetCatalogs = setmetatable({}, { __mode = "k" })
+    local cageCatalogs = setmetatable({}, { __mode = "k" })
+    local wheelCatalogs = setmetatable({}, { __mode = "k" })
     local nextIdentity, nextLease = 0, 0
     local routeOrder = { "combat", "miniboss", "story", "shop", "reprieve" }
     local rewardFields = {
@@ -9749,7 +9755,27 @@ if __MacGamingTrainerV1 == nil then
         and CurrentRun.Hero or nil
     end
 
-    local function routeSignature(door)
+    local function doorCageRewards(door)
+      local room = type(door) == "table" and door.Room or nil
+      if type(room) == "table" and type(room.CageRewards) == "table" and #room.CageRewards > 0 then
+        return room.CageRewards
+      end
+      return nil
+    end
+
+    local function cageRewardsSignature(cageRewards)
+      if type(cageRewards) ~= "table" or #cageRewards == 0 then return "" end
+      local parts = {}
+      for index, entry in ipairs(cageRewards) do
+        if type(entry) == "table" then
+          parts[#parts + 1] = tostring(index) .. ":" .. tostring(entry.RewardType)
+            .. ":" .. tostring(entry.ForceLootName)
+        end
+      end
+      return table.concat(parts, ",")
+    end
+
+    local function routeBaseSignature(door)
       local room = type(door) == "table" and door.Room or nil
       if type(room) ~= "table" then return "" end
       return table.concat({
@@ -9757,6 +9783,12 @@ if __MacGamingTrainerV1 == nil then
         tostring(room.ForceLootName), identity(room.RewardOverrides),
         identity(room.Reward), identity(room.Encounter),
       }, ":")
+    end
+
+    local function routeSignature(door)
+      local room = type(door) == "table" and door.Room or nil
+      if type(room) ~= "table" then return "" end
+      return routeBaseSignature(door) .. ":" .. cageRewardsSignature(room.CageRewards)
     end
 
     local function physicalTokenFor(door)
@@ -9769,23 +9801,15 @@ if __MacGamingTrainerV1 == nil then
       }, ":")
     end
 
-    local function tokenFor(door)
-      local physical = physicalTokenFor(door)
-      if physical == nil then return nil end
-      local signature = routeSignature(door)
-      local observation = doorObservations[door]
-      local lease = leases[door]
-      local locallyApplied = type(lease) == "table" and lease.kind == "reward"
-        and lease.run == CurrentRun and lease.hero == currentHero()
-        and lease.sourceRoom == currentSource()
-        and lease.appliedSignature == signature
+    local function nextObservedToken(observationTable, owner, physical, signature, locallyApplied)
+      local observation = observationTable[owner]
       if not observation then
         observation = { physical = physical, signature = signature, epoch = 0 }
-        doorObservations[door] = observation
+        observationTable[owner] = observation
       elseif observation.physical ~= physical or observation.signature ~= signature then
-        -- The native room/door can return to exactly the old reward after a
-        -- reroll (ABA). A monotonic observed epoch prevents stale Apply and
-        -- Cancel tokens from becoming authoritative again.
+        -- The native target can return to the old reward after a reroll (ABA).
+        -- A monotonic observed epoch prevents stale Apply/Cancel tokens from
+        -- becoming authoritative again.
         if observation.physical ~= physical or not locallyApplied then
           observation.epoch = observation.epoch + 1
         end
@@ -9793,6 +9817,93 @@ if __MacGamingTrainerV1 == nil then
         observation.signature = signature
       end
       return physical .. ":" .. tostring(observation.epoch)
+    end
+
+    local function tokenFor(door)
+      local physical = physicalTokenFor(door)
+      if physical == nil then return nil end
+      local signature = routeSignature(door)
+      local lease = leases[door]
+      local locallyApplied = type(lease) == "table" and lease.kind == "reward"
+        and lease.run == CurrentRun and lease.hero == currentHero()
+        and lease.sourceRoom == currentSource()
+        and lease.appliedSignature == signature
+      return nextObservedToken(doorObservations, door, physical, signature, locallyApplied)
+    end
+
+    local function cageSlotSignature(door, slotIndex)
+      local cageRewards = doorCageRewards(door)
+      local entry = cageRewards and cageRewards[slotIndex] or nil
+      return routeBaseSignature(door) .. ":cage:" .. tostring(slotIndex)
+        .. ":" .. tostring(type(entry) == "table" and entry.RewardType or nil)
+        .. ":" .. tostring(type(entry) == "table" and entry.ForceLootName or nil)
+    end
+
+    local function tokenForCageSlot(door, slotIndex)
+      local physicalDoor = physicalTokenFor(door)
+      if physicalDoor == nil then return nil end
+      local physical = physicalDoor .. ":cage:" .. tostring(slotIndex)
+      local signature = cageSlotSignature(door, slotIndex)
+      local slotObservations = cageObservations[door]
+      if type(slotObservations) ~= "table" then
+        slotObservations = {}
+        cageObservations[door] = slotObservations
+      end
+      local doorSlots = cageLeases[door]
+      local lease = type(doorSlots) == "table" and doorSlots[slotIndex] or nil
+      local locallyApplied = type(lease) == "table" and lease.kind == "cageReward"
+        and lease.run == CurrentRun and lease.hero == currentHero()
+        and lease.sourceRoom == currentSource()
+        and lease.appliedSignature == signature
+      return nextObservedToken(slotObservations, slotIndex, physical, signature, locallyApplied)
+    end
+
+    local function editableShipWheel(wheel)
+      local source = currentSource()
+      if type(wheel) ~= "table" or source == nil or wheel.ObjectId == nil
+          or wheel.ReadyToUse ~= true or wheel.Room ~= source then return false end
+      if type(wheel.ChosenRewardType) ~= "string" or wheel.ChosenRewardType == "" then return false end
+      if type(MapState) ~= "table" or type(MapState.ShipWheels) ~= "table"
+          or MapState.ShipWheels[wheel.ObjectId] ~= wheel then return false end
+      if type(IsUseable) == "function" and not IsUseable({ Id = wheel.ObjectId }) then return false end
+      if type(IsAlive) == "function" and not IsAlive({ Id = wheel.ObjectId }) then return false end
+      return true
+    end
+
+    local function wheelSide(wheel)
+      if type(wheel) ~= "table" then return "forward" end
+      if wheel.Name == "ShipsSteeringWheelLeft" then return "left" end
+      if wheel.Name == "ShipsSteeringWheelRight" then return "right" end
+      return "forward"
+    end
+
+    local function wheelSignature(wheel)
+      if type(wheel) ~= "table" then return "" end
+      return table.concat({
+        identity(wheel), tostring(wheel.Name), tostring(wheel.ChosenRewardType),
+        tostring(wheel.ForceLootName), tostring(wheel.RewardStoreName),
+      }, ":")
+    end
+
+    local function physicalTokenForWheel(wheel)
+      local source = currentSource()
+      if type(wheel) ~= "table" or type(source) ~= "table" or type(CurrentRun) ~= "table" then return nil end
+      return table.concat({
+        "wheel", identity(CurrentRun), identity(currentHero()), identity(source),
+        identity(wheel), tostring(wheel.ObjectId),
+      }, ":")
+    end
+
+    local function tokenForWheel(wheel)
+      local physical = physicalTokenForWheel(wheel)
+      if physical == nil then return nil end
+      local signature = wheelSignature(wheel)
+      local lease = wheelLeases[wheel]
+      local locallyApplied = type(lease) == "table" and lease.kind == "shipWheel"
+        and lease.run == CurrentRun and lease.hero == currentHero()
+        and lease.sourceRoom == currentSource()
+        and lease.appliedSignature == signature
+      return nextObservedToken(wheelObservations, wheel, physical, signature, locallyApplied)
     end
 
     local function nativeOfferedExitDoorArray()
@@ -9843,8 +9954,9 @@ if __MacGamingTrainerV1 == nil then
     local function activeLease(door)
       local lease = leases[door]
       if type(lease) ~= "table" then return nil end
+      local expectedDoorToken = lease.physicalDoorToken or lease.doorToken
       if lease.run ~= CurrentRun or lease.hero ~= currentHero()
-          or lease.sourceRoom ~= currentSource() or lease.doorToken ~= tokenFor(door) then
+          or lease.sourceRoom ~= currentSource() or expectedDoorToken ~= tokenFor(door) then
         leases[door] = nil
         return nil
       end
@@ -9866,12 +9978,70 @@ if __MacGamingTrainerV1 == nil then
       return lease
     end
 
-    local function findDoor(doorToken)
-      if type(doorToken) ~= "string" or doorToken == "" then
+    local function activeCageLease(door, slotIndex)
+      local doorSlots = cageLeases[door]
+      if type(doorSlots) ~= "table" then return nil end
+      local lease = doorSlots[slotIndex]
+      if type(lease) ~= "table" then return nil end
+      local cageRewards = doorCageRewards(door)
+      local entry = cageRewards and cageRewards[slotIndex] or nil
+      if type(entry) ~= "table" or lease.run ~= CurrentRun or lease.hero ~= currentHero()
+          or lease.sourceRoom ~= currentSource()
+          or lease.doorToken ~= tokenForCageSlot(door, slotIndex)
+          or entry.RewardType ~= lease.appliedRewardType
+          or entry.ForceLootName ~= lease.appliedForceLoot
+          or cageSlotSignature(door, slotIndex) ~= lease.appliedSignature then
+        doorSlots[slotIndex] = nil
+        return nil
+      end
+      return lease
+    end
+
+    local function hasAnyCageLease(door)
+      local cageRewards = doorCageRewards(door)
+      if cageRewards == nil then return false end
+      for slotIndex = 1, #cageRewards do
+        if activeCageLease(door, slotIndex) ~= nil then return true end
+      end
+      return false
+    end
+
+    local function activeWheelLease(wheel)
+      local lease = wheelLeases[wheel]
+      if type(lease) ~= "table" then return nil end
+      if not editableShipWheel(wheel) or lease.run ~= CurrentRun or lease.hero ~= currentHero()
+          or lease.sourceRoom ~= currentSource() or lease.doorToken ~= tokenForWheel(wheel)
+          or wheel.ChosenRewardType ~= lease.appliedRewardType
+          or wheel.ForceLootName ~= lease.appliedForceLoot
+          or wheelSignature(wheel) ~= lease.appliedSignature then
+        wheelLeases[wheel] = nil
+        return nil
+      end
+      return lease
+    end
+
+    local function findTarget(targetToken)
+      if type(targetToken) ~= "string" or targetToken == "" then
         error("World exit token is invalid or stale")
       end
       for _, door in pairs(type(MapState) == "table" and MapState.OfferedExitDoors or {}) do
-        if editableDoor(door) and tokenFor(door) == doorToken then return door end
+        if editableDoor(door) then
+          local cageRewards = doorCageRewards(door)
+          if cageRewards ~= nil then
+            for slotIndex = 1, #cageRewards do
+              if tokenForCageSlot(door, slotIndex) == targetToken then
+                return { kind = "cageSlot", door = door, slotIndex = slotIndex }
+              end
+            end
+          elseif tokenFor(door) == targetToken then
+            return { kind = "door", door = door }
+          end
+        end
+      end
+      for _, wheel in pairs(type(MapState) == "table" and MapState.ShipWheels or {}) do
+        if editableShipWheel(wheel) and tokenForWheel(wheel) == targetToken then
+          return { kind = "shipWheel", wheel = wheel }
+        end
       end
       error("World exit token is invalid or stale")
     end
@@ -9907,11 +10077,72 @@ if __MacGamingTrainerV1 == nil then
       if not snapshot.existed and next(collection) == nil then source[field] = nil end
     end
 
+    local function refreshUsePrompt(target)
+      if type(RefreshUseButton) ~= "function" or type(target) ~= "table" or target.ObjectId == nil then
+        return
+      end
+      if type(thread) == "function" then
+        thread(RefreshUseButton, target.ObjectId, target)
+      else
+        RefreshUseButton(target.ObjectId, target)
+      end
+    end
+
+    local function refreshCageSlotPreview(door, slotIndex)
+      local cageRewards = doorCageRewards(door)
+      local entry = cageRewards and cageRewards[slotIndex] or nil
+      if type(CreateDoorRewardPreview) == "function" and type(entry) == "table" then
+        local reuse = type(door.RewardPreviewIconIds) == "table"
+          and door.RewardPreviewIconIds[slotIndex] ~= nil
+        local args = {
+          SkipCageRewards = true,
+          SkipRoomSubIcons = slotIndex < #cageRewards,
+          ReUseIds = reuse and true or nil,
+        }
+        CreateDoorRewardPreview(door, entry.RewardType, entry.ForceLootName, slotIndex, args)
+      end
+      refreshUsePrompt(door)
+    end
+
+    local function setExtraCagePreviewAlpha(door, alpha)
+      if type(SetAlpha) ~= "function" then return end
+      for _, field in ipairs({ "RewardPreviewIconIds", "RewardPreviewBackingIds" }) do
+        local ids = type(door) == "table" and door[field] or nil
+        if type(ids) == "table" then
+          for index = 2, #ids do
+            if ids[index] ~= nil then
+              pcall(SetAlpha, { Id = ids[index], Fraction = alpha, Duration = 0.0 })
+            end
+          end
+        end
+      end
+    end
+
     local function refreshPreview(door)
+      local cageRewards = doorCageRewards(door)
+      local doorLease = activeLease(door)
+      if cageRewards ~= nil and not (type(doorLease) == "table" and doorLease.kind == "roomCategory") then
+        for slotIndex = 1, #cageRewards do
+          refreshCageSlotPreview(door, slotIndex)
+        end
+        return
+      end
       if type(CreateDoorRewardPreview) ~= "function" then return end
       local reuse = type(door.RewardPreviewIconIds) == "table" and next(door.RewardPreviewIconIds) ~= nil
       if reuse then CreateDoorRewardPreview(door, nil, nil, nil, { ReUseIds = true })
       else CreateDoorRewardPreview(door) end
+    end
+
+    local function refreshWheelPreview(wheel)
+      if type(CreateDoorRewardPreview) == "function" then
+        local reuse = type(wheel.RewardPreviewIconIds) == "table" and next(wheel.RewardPreviewIconIds) ~= nil
+        if reuse then
+          CreateDoorRewardPreview(wheel, wheel.ChosenRewardType, wheel.ForceLootName, nil, { ReUseIds = true })
+        else
+          CreateDoorRewardPreview(wheel, wheel.ChosenRewardType, wheel.ForceLootName)
+        end
+      end
+      refreshUsePrompt(wheel)
     end
 
     local function routeKind(name)
@@ -10187,60 +10418,24 @@ if __MacGamingTrainerV1 == nil then
     -- native probe that throws refuses a reward. Room-level rules of the
     -- door's current room (NoReward, deferred, forced or fixed rewards) are
     -- returned separately: they apply only to an in-place reward edit.
-    local function rewardCandidatesWithDiagnostics(door, diagnostics)
-      diagnostics = diagnostics or {}
-      local room = editableDoor(door) and door.Room or nil
-      if type(room) ~= "table" then
-        diagnostics.reason = "exit_room_unavailable"
-        diagnostics.candidateCount = 0
-        return {}
+    local function referenceStore(name)
+      if type(name) ~= "string" or name == "" then return nil end
+      if type(GetRewardStoreData) == "function" then
+        local ok, value = pcall(GetRewardStoreData, name)
+        if ok and type(value) == "table" then return value end
       end
-      diagnostics.roomName = tostring(room.Name or "")
-      local locked = room.NoReward and "room_no_reward"
-        or (room.DeferReward and "room_reward_deferred")
-        or ((room.ForcedReward ~= nil or room.ForcedFirstReward ~= nil)
-          and "room_has_forced_reward")
-        or ((room.ChosenRewardType == "Story" or room.ChosenRewardType == "Shop"
-          or room.ChosenRewardType == "Empty" or room.ChosenRewardType == "Devotion")
-          and "room_has_fixed_reward_category") or nil
+      return type(RewardStoreData) == "table" and RewardStoreData[name] or nil
+    end
 
-      local storeName = room.RewardStoreName
-      diagnostics.storeName = type(storeName) == "string" and storeName or ""
-      local stores = type(CurrentRun) == "table" and CurrentRun.RewardStores or nil
-      local currentStore = type(stores) == "table" and stores[storeName] or nil
-      diagnostics.storeCount = type(currentStore) == "table" and #currentStore or 0
-      if locked == nil and (type(storeName) ~= "string" or storeName == "") then
-        locked = "reward_store_name_missing"
-      end
-      if locked == nil and type(currentStore) ~= "table" then
-        locked = "reward_store_unavailable"
-      end
-      diagnostics.roomWarning = locked
-      local function referenceStore(name)
-        if type(name) ~= "string" or name == "" then return nil end
-        if type(GetRewardStoreData) == "function" then
-          local ok, value = pcall(GetRewardStoreData, name)
-          if ok and type(value) == "table" then return value end
-        end
-        return type(RewardStoreData) == "table" and RewardStoreData[name] or nil
-      end
-
-      local previously, excludedGods, siblingGods = {}, {}, {}
-      local source = currentSource()
-      if type(source) == "table" and type(source.OfferedRewards) == "table" then
-        for objectId, offered in pairs(source.OfferedRewards) do
-          if objectId ~= door.ObjectId and type(offered) == "table"
-              and type(offered.Type) == "string" then
-            previously[#previously + 1] = {
-              RewardType = offered.Type, ForceLootName = offered.ForceLootName,
-            }
-            if offered.Type == "Boon" and type(offered.ForceLootName) == "string" then
-              excludedGods[#excludedGods + 1] = offered.ForceLootName
-              siblingGods[offered.ForceLootName] = true
-            end
-          end
-        end
-      end
+    local function evaluateRewardStoreCandidates(opts)
+      local diagnostics = opts.diagnostics or {}
+      local probeRoom = opts.probeRoom
+      local storeName = opts.storeName
+      local currentStore = opts.currentStore
+      local previously = opts.previously or {}
+      local excludedGods = opts.excludedGods or {}
+      local siblingGods = opts.siblingGods or {}
+      local eligibilityArgs = opts.eligibilityArgs or {}
 
       local gods, eligibleGods, godEligibilityKnown = {}, {}, false
       local godEligibilityReason = "god_eligibility_unavailable"
@@ -10290,7 +10485,7 @@ if __MacGamingTrainerV1 == nil then
           for key, value in pairs(reward) do probe[key] = value end
           local ok, eligible, random = pcall(
             nativeProbeWithoutRNG,
-            IsRoomRewardEligible, CurrentRun, room, probe, previously, { Door = door }
+            IsRoomRewardEligible, CurrentRun, probeRoom, probe, previously, eligibilityArgs
           )
           if not ok then
             refused = "reward_eligibility_probe_error"
@@ -10379,8 +10574,152 @@ if __MacGamingTrainerV1 == nil then
       return result
     end
 
-    local function rewardCandidates(door)
-      return rewardCandidatesWithDiagnostics(door)
+    local function rewardCandidatesWithDiagnostics(door, diagnostics, slotIndex)
+      diagnostics = diagnostics or {}
+      local room = editableDoor(door) and door.Room or nil
+      if type(room) ~= "table" then
+        diagnostics.reason = "exit_room_unavailable"
+        diagnostics.candidateCount = 0
+        return {}
+      end
+      diagnostics.roomName = tostring(room.Name or "")
+      local isCageSlot = slotIndex ~= nil
+      local locked = nil
+      if not isCageSlot then
+        locked = room.NoReward and "room_no_reward"
+          or (room.DeferReward and "room_reward_deferred")
+          or ((room.ForcedReward ~= nil or room.ForcedFirstReward ~= nil)
+            and "room_has_forced_reward")
+          or ((room.ChosenRewardType == "Story" or room.ChosenRewardType == "Shop"
+            or room.ChosenRewardType == "Empty" or room.ChosenRewardType == "Devotion")
+            and "room_has_fixed_reward_category") or nil
+      end
+
+      local storeName = room.RewardStoreName
+      diagnostics.storeName = type(storeName) == "string" and storeName or ""
+      local stores = type(CurrentRun) == "table" and CurrentRun.RewardStores or nil
+      local currentStore = type(stores) == "table" and stores[storeName] or nil
+      diagnostics.storeCount = type(currentStore) == "table" and #currentStore or 0
+      if locked == nil and (type(storeName) ~= "string" or storeName == "") then
+        locked = "reward_store_name_missing"
+      end
+      if locked == nil and type(currentStore) ~= "table" then
+        locked = "reward_store_unavailable"
+      end
+      diagnostics.roomWarning = locked
+
+      local previously, excludedGods, siblingGods = {}, {}, {}
+      local function addPrevious(rewardType, forceLootName)
+        if type(rewardType) ~= "string" or rewardType == "" then return end
+        previously[#previously + 1] = {
+          RewardType = rewardType, ForceLootName = forceLootName,
+        }
+        if rewardType == "Boon" and type(forceLootName) == "string" and forceLootName ~= "" then
+          if not siblingGods[forceLootName] then
+            excludedGods[#excludedGods + 1] = forceLootName
+            siblingGods[forceLootName] = true
+          end
+        end
+      end
+      local source = currentSource()
+      if type(source) == "table" and type(source.OfferedRewards) == "table" then
+        for objectId, offered in pairs(source.OfferedRewards) do
+          if objectId ~= door.ObjectId and type(offered) == "table" then
+            addPrevious(offered.Type, offered.ForceLootName)
+          end
+        end
+      end
+      if isCageSlot then
+        for _, otherDoor in ipairs(nativeOfferedExitDoorArray()) do
+          local otherCages = doorCageRewards(otherDoor)
+          if otherCages ~= nil then
+            for index, entry in ipairs(otherCages) do
+              if (otherDoor ~= door or index ~= slotIndex) and type(entry) == "table" then
+                addPrevious(entry.RewardType, entry.ForceLootName)
+              end
+            end
+          end
+        end
+      end
+
+      local probeRoom = room
+      if isCageSlot then
+        probeRoom = {}
+        for key, value in pairs(room) do probeRoom[key] = value end
+        probeRoom.NoReward = false
+      end
+
+      return evaluateRewardStoreCandidates({
+        diagnostics = diagnostics,
+        probeRoom = probeRoom,
+        storeName = storeName,
+        currentStore = currentStore,
+        previously = previously,
+        excludedGods = excludedGods,
+        siblingGods = siblingGods,
+        eligibilityArgs = { Door = door },
+      })
+    end
+
+    local function rewardCandidates(door, slotIndex)
+      return rewardCandidatesWithDiagnostics(door, nil, slotIndex)
+    end
+
+    local function rewardCandidatesForWheelWithDiagnostics(wheel, diagnostics)
+      diagnostics = diagnostics or {}
+      if not editableShipWheel(wheel) then
+        diagnostics.reason = "exit_room_unavailable"
+        diagnostics.candidateCount = 0
+        return {}
+      end
+      local room = wheel.Room
+      diagnostics.roomName = tostring(room.Name or "")
+      local storeName = wheel.RewardStoreName
+        or (type(CurrentRun) == "table" and CurrentRun.NextRewardStoreName) or "RunProgress"
+      diagnostics.storeName = type(storeName) == "string" and storeName or ""
+      local stores = type(CurrentRun) == "table" and CurrentRun.RewardStores or nil
+      local currentStore = type(stores) == "table" and stores[storeName] or nil
+      diagnostics.storeCount = type(currentStore) == "table" and #currentStore or 0
+      local locked = nil
+      if type(storeName) ~= "string" or storeName == "" then
+        locked = "reward_store_name_missing"
+      elseif type(currentStore) ~= "table" then
+        locked = "reward_store_unavailable"
+      end
+      diagnostics.roomWarning = locked
+
+      local previously, excludedGods, siblingGods = {}, {}, {}
+      for _, otherWheel in pairs(type(MapState) == "table" and MapState.ShipWheels or {}) do
+        if otherWheel ~= wheel and editableShipWheel(otherWheel)
+            and type(otherWheel.ChosenRewardType) == "string" then
+          previously[#previously + 1] = {
+            RewardType = otherWheel.ChosenRewardType,
+            ForceLootName = otherWheel.ForceLootName,
+          }
+          if otherWheel.ChosenRewardType == "Boon"
+              and type(otherWheel.ForceLootName) == "string"
+              and otherWheel.ForceLootName ~= ""
+              and not siblingGods[otherWheel.ForceLootName] then
+            excludedGods[#excludedGods + 1] = otherWheel.ForceLootName
+            siblingGods[otherWheel.ForceLootName] = true
+          end
+        end
+      end
+
+      local probeRoom = {}
+      for key, value in pairs(room) do probeRoom[key] = value end
+      probeRoom.NoReward = false
+
+      return evaluateRewardStoreCandidates({
+        diagnostics = diagnostics,
+        probeRoom = probeRoom,
+        storeName = storeName,
+        currentStore = currentStore,
+        previously = previously,
+        excludedGods = excludedGods,
+        siblingGods = siblingGods,
+        eligibilityArgs = { IgnoreForcedReward = true },
+      })
     end
 
     -- Why native routing would not pick this room. A warning only (#832).
@@ -10544,6 +10883,22 @@ if __MacGamingTrainerV1 == nil then
         local store = type(run.RewardStores) == "table" and run.RewardStores[storeName] or nil
         parts[#parts + 1] = tostring(storeName) .. ":" .. stableValueSignature(store, 2)
       end
+      local wheels = type(MapState) == "table" and type(MapState.ShipWheels) == "table"
+        and MapState.ShipWheels or nil
+      if wheels ~= nil then
+        local wheelKeys = {}
+        for id, wheel in pairs(wheels) do
+          if editableShipWheel(wheel) then wheelKeys[#wheelKeys + 1] = id end
+        end
+        table.sort(wheelKeys, function(a, b) return number(a) < number(b) end)
+        for _, id in ipairs(wheelKeys) do
+          local wheel = wheels[id]
+          parts[#parts + 1] = "wheel:" .. tostring(id) .. ":" .. wheelSignature(wheel)
+          local storeName = wheel.RewardStoreName or run.NextRewardStoreName or "RunProgress"
+          local store = type(run.RewardStores) == "table" and run.RewardStores[storeName] or nil
+          parts[#parts + 1] = tostring(storeName) .. ":" .. stableValueSignature(store, 2)
+        end
+      end
       return table.concat(parts, "|")
     end
 
@@ -10565,12 +10920,7 @@ if __MacGamingTrainerV1 == nil then
       return nil
     end
 
-    local function targetCatalogForDoor(door, doorToken, refresh, contextSignature)
-      local cached = targetCatalogs[door]
-      if not refresh and type(cached) == "table" and cached.doorToken == doorToken
-          and cached.contextSignature == contextSignature then
-        return cached.targets, cached.diagnostics
-      end
+    local function buildDoorTargetCatalog(door, slotIndex)
       local targets = setmetatable({}, arrayMeta)
       local diagnostics = {
         roomName = tostring(door.Room and door.Room.Name or ""),
@@ -10578,7 +10928,7 @@ if __MacGamingTrainerV1 == nil then
         routes = {},
       }
       local enabledCount = 0
-      for _, candidate in ipairs(rewardCandidatesWithDiagnostics(door, diagnostics.reward)) do
+      for _, candidate in ipairs(rewardCandidatesWithDiagnostics(door, diagnostics.reward, slotIndex)) do
         targets[#targets + 1] = {
           kind = "reward", id = candidate.id, enabled = candidate.enabled,
           reason = candidate.reason, warning = candidate.warning,
@@ -10629,6 +10979,16 @@ if __MacGamingTrainerV1 == nil then
       diagnostics.enabledTargetCount = enabledCount
       diagnostics.disabledTargetCount = #targets - enabledCount
       diagnostics.reason = enabledCount > 0 and "available" or "no_legal_target"
+      return targets, diagnostics
+    end
+
+    local function targetCatalogForDoor(door, doorToken, refresh, contextSignature)
+      local cached = targetCatalogs[door]
+      if not refresh and type(cached) == "table" and cached.doorToken == doorToken
+          and cached.contextSignature == contextSignature then
+        return cached.targets, cached.diagnostics
+      end
+      local targets, diagnostics = buildDoorTargetCatalog(door, nil)
       targetCatalogs[door] = {
         doorToken = doorToken,
         contextSignature = contextSignature,
@@ -10638,8 +10998,73 @@ if __MacGamingTrainerV1 == nil then
       return targets, diagnostics
     end
 
-    local function rewardCandidate(door, target)
-      for _, candidate in ipairs(rewardCandidates(door)) do
+    local function targetCatalogForDoorSlot(door, slotIndex, doorToken, refresh, contextSignature)
+      local slotCache = cageCatalogs[door]
+      if type(slotCache) ~= "table" then
+        slotCache = {}
+        cageCatalogs[door] = slotCache
+      end
+      local cached = slotCache[slotIndex]
+      if not refresh and type(cached) == "table" and cached.doorToken == doorToken
+          and cached.contextSignature == contextSignature then
+        return cached.targets, cached.diagnostics
+      end
+      local targets, diagnostics = buildDoorTargetCatalog(door, slotIndex)
+      slotCache[slotIndex] = {
+        doorToken = doorToken,
+        contextSignature = contextSignature,
+        targets = targets,
+        diagnostics = diagnostics,
+      }
+      return targets, diagnostics
+    end
+
+    local function targetCatalogForWheel(wheel, wheelToken, refresh, contextSignature)
+      local cached = wheelCatalogs[wheel]
+      if not refresh and type(cached) == "table" and cached.doorToken == wheelToken
+          and cached.contextSignature == contextSignature then
+        return cached.targets, cached.diagnostics
+      end
+      local targets = setmetatable({}, arrayMeta)
+      local diagnostics = {
+        roomName = tostring(wheel.Room and wheel.Room.Name or ""),
+        reward = {},
+        routes = { reason = "ship_wheel_reward_only" },
+      }
+      local enabledCount = 0
+      for _, candidate in ipairs(rewardCandidatesForWheelWithDiagnostics(wheel, diagnostics.reward)) do
+        targets[#targets + 1] = {
+          kind = "reward", id = candidate.id, enabled = candidate.enabled,
+          reason = candidate.reason, warning = candidate.warning,
+        }
+        if candidate.enabled then enabledCount = enabledCount + 1 end
+      end
+      targets[#targets + 1] = {
+        kind = "roomCategory", id = "current", enabled = true, acceptsReward = true,
+      }
+      enabledCount = enabledCount + 1
+      diagnostics.targetCount = #targets
+      diagnostics.enabledTargetCount = enabledCount
+      diagnostics.disabledTargetCount = #targets - enabledCount
+      diagnostics.reason = enabledCount > 0 and "available" or "no_legal_target"
+      wheelCatalogs[wheel] = {
+        doorToken = wheelToken,
+        contextSignature = contextSignature,
+        targets = targets,
+        diagnostics = diagnostics,
+      }
+      return targets, diagnostics
+    end
+
+    local function rewardCandidate(door, target, slotIndex)
+      for _, candidate in ipairs(rewardCandidates(door, slotIndex)) do
+        if candidate.id == target and candidate.enabled then return candidate end
+      end
+      return nil
+    end
+
+    local function rewardCandidateForWheel(wheel, target)
+      for _, candidate in ipairs(rewardCandidatesForWheelWithDiagnostics(wheel)) do
         if candidate.id == target and candidate.enabled then return candidate end
       end
       return nil
@@ -10692,7 +11117,7 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
-    local restoreReward
+    local restoreReward, restoreCageReward, restoreShipWheelReward
     local function clearSource(source, committedDoor)
       local cleanupFailed = false
       for door, lease in pairs(leases) do
@@ -10706,10 +11131,35 @@ if __MacGamingTrainerV1 == nil then
             if lease.kind == "reward" then
               ok = pcall(restoreReward, door, lease)
             elseif lease.kind == "roomCategory" then
+              if doorCageRewards(door) ~= nil then setExtraCagePreviewAlpha(door, 1) end
               ok = pcall(refreshPreview, door)
             else
               ok = false
             end
+            if not ok then cleanupFailed = true end
+          end
+        end
+      end
+      for door, doorSlots in pairs(cageLeases) do
+        if type(doorSlots) == "table" then
+          for slotIndex, lease in pairs(doorSlots) do
+            if type(lease) == "table" and lease.sourceRoom == source then
+              local restore = door ~= committedDoor and activeCageLease(door, slotIndex) == lease
+              doorSlots[slotIndex] = nil
+              if restore then
+                local ok = pcall(restoreCageReward, door, slotIndex, lease)
+                if not ok then cleanupFailed = true end
+              end
+            end
+          end
+        end
+      end
+      for wheel, lease in pairs(wheelLeases) do
+        if type(lease) == "table" and lease.sourceRoom == source then
+          local restore = activeWheelLease(wheel) == lease
+          wheelLeases[wheel] = nil
+          if restore then
+            local ok = pcall(restoreShipWheelReward, wheel, lease)
             if not ok then cleanupFailed = true end
           end
         end
@@ -10785,6 +11235,44 @@ if __MacGamingTrainerV1 == nil then
         end
       end
       target.NeedsReward = false
+      if target.MaxCageRewards ~= nil then
+        target.CageRewards = {}
+        local count = (type(source) == "table" and tonumber(source.NumDoorCageRewards)) or 2
+        if count > target.MaxCageRewards then count = target.MaxCageRewards end
+        if count < 1 then count = 1 end
+        local startSlot = 1
+        if type(chosen) == "table" then
+          local entry = { RewardType = chosen.rewardType, ForceLootName = chosen.forceLoot }
+          target.CageRewards[1] = entry
+          previously[#previously + 1] = entry
+          startSlot = 2
+        end
+        for slotIndex = startSlot, count do
+          if type(ChooseRoomReward) == "function" then
+            local cageRoom = {}
+            for key, value in pairs(target) do cageRoom[key] = value end
+            cageRoom.NeedsReward = true
+            cageRoom.NoReward = false
+            cageRoom.ForceLootName = nil
+            cageRoom.Reward = nil
+            cageRoom.RewardOverrides = nil
+            cageRoom.ChosenRewardType = ChooseRoomReward(
+              run, cageRoom, cageRoom.RewardStoreName, previously
+            )
+            if cageRoom.ChosenRewardType ~= nil and type(SetupRoomReward) == "function" then
+              SetupRoomReward(run, cageRoom, previously, {
+                Door = door, IgnoreForceLootName = cageRoom.IgnoreForceLootName,
+              })
+            end
+            local entry = {
+              RewardType = cageRoom.ChosenRewardType,
+              ForceLootName = cageRoom.ForceLootName,
+            }
+            target.CageRewards[#target.CageRewards + 1] = entry
+            previously[#previously + 1] = entry
+          end
+        end
+      end
       if target.UseOptionalOverrides and type(target.OptionalOverrides) == "table" then
         for key, value in pairs(target.OptionalOverrides) do target[key] = value end
       end
@@ -10881,7 +11369,7 @@ if __MacGamingTrainerV1 == nil then
       restoreField(door, "CanBeRerolled", lease.snapshot.door.CanBeRerolled)
       restoreDoorMap(source, "OfferedRewards", door.ObjectId, lease.snapshot.offered)
       restoreDoorMap(source, "ExitDoorRooms", door.ObjectId, lease.snapshot.exitRoom)
-      if type(RefreshUseButton) == "function" then RefreshUseButton(door.ObjectId, door) end
+      refreshUsePrompt(door)
       -- Explicit Trainer Cancel/unused-sibling cleanup restores the native
       -- snapshot; it is not an external reroll of this physical exit.
       local observed = doorObservations[door]
@@ -10894,7 +11382,7 @@ if __MacGamingTrainerV1 == nil then
     local function applyReward(door, candidate, doorToken, roomID)
       local lease = {
         kind = "reward", target = candidate.id, room = roomID, rewardID = candidate.id,
-        doorToken = doorToken,
+        doorToken = doorToken, physicalDoorToken = doorToken,
         run = CurrentRun, hero = currentHero(), sourceRoom = currentSource(),
         snapshot = snapshotReward(door),
       }
@@ -10926,23 +11414,123 @@ if __MacGamingTrainerV1 == nil then
       return lease
     end
 
-    local function applyRoute(door, roomID, reward, doorToken)
+    restoreCageReward = function(door, slotIndex, lease)
+      local cageRewards = doorCageRewards(door)
+      if type(cageRewards) == "table" and type(lease.snapshot) == "table" then
+        cageRewards[slotIndex] = lease.snapshot.entry
+        restoreField(door, "AllowReroll", lease.snapshot.door.AllowReroll)
+        restoreField(door, "CanBeRerolled", lease.snapshot.door.CanBeRerolled)
+      end
+      local slotObservations = cageObservations[door]
+      local observed = type(slotObservations) == "table" and slotObservations[slotIndex] or nil
+      local physicalDoor = physicalTokenFor(door)
+      if observed and physicalDoor and observed.physical == physicalDoor .. ":cage:" .. tostring(slotIndex) then
+        observed.signature = cageSlotSignature(door, slotIndex)
+      end
+      refreshCageSlotPreview(door, slotIndex)
+    end
+
+    local function applyCageReward(door, slotIndex, candidate, slotToken, roomID)
+      local cageRewards = doorCageRewards(door)
+      local existing = type(cageRewards) == "table" and cageRewards[slotIndex] or nil
+      if type(existing) ~= "table" then error("World exit reward slot is unavailable") end
+      local snapshotEntry = {}
+      for key, value in pairs(existing) do snapshotEntry[key] = value end
+      local lease = {
+        kind = "cageReward", slotIndex = slotIndex,
+        target = candidate.id, room = roomID, rewardID = candidate.id,
+        doorToken = slotToken,
+        run = CurrentRun, hero = currentHero(), sourceRoom = currentSource(),
+        snapshot = {
+          entry = snapshotEntry,
+          door = {
+            AllowReroll = snapshotField(door, "AllowReroll"),
+            CanBeRerolled = snapshotField(door, "CanBeRerolled"),
+          },
+        },
+      }
+      lease.leaseToken = leaseToken(slotToken, roomID, candidate.id)
+      local updated = {}
+      for key, value in pairs(existing) do updated[key] = value end
+      updated.RewardType = candidate.rewardType
+      updated.ForceLootName = candidate.forceLoot
+      cageRewards[slotIndex] = updated
+      if type(MapState) == "table" and type(MapState.OfferedRewards) == "table"
+          and type(candidate.rewardType) == "string" then
+        MapState.OfferedRewards[candidate.rewardType] = true
+      end
+      lease.appliedRewardType = updated.RewardType
+      lease.appliedForceLoot = updated.ForceLootName
+      lease.appliedSignature = cageSlotSignature(door, slotIndex)
+      local doorSlots = cageLeases[door]
+      if type(doorSlots) ~= "table" then
+        doorSlots = {}
+        cageLeases[door] = doorSlots
+      end
+      doorSlots[slotIndex] = lease
+      refreshCageSlotPreview(door, slotIndex)
+      return lease
+    end
+
+    restoreShipWheelReward = function(wheel, lease)
+      if type(wheel) ~= "table" or type(lease.snapshot) ~= "table" then return end
+      restoreField(wheel, "ChosenRewardType", lease.snapshot.ChosenRewardType)
+      restoreField(wheel, "ForceLootName", lease.snapshot.ForceLootName)
+      restoreField(wheel, "AllowReroll", lease.snapshot.AllowReroll)
+      restoreField(wheel, "CanBeRerolled", lease.snapshot.CanBeRerolled)
+      local observed = wheelObservations[wheel]
+      if observed and observed.physical == physicalTokenForWheel(wheel) then
+        observed.signature = wheelSignature(wheel)
+      end
+      if editableShipWheel(wheel) then
+        refreshWheelPreview(wheel)
+      end
+    end
+
+    local function applyShipWheelReward(wheel, candidate, wheelToken, roomID)
+      local lease = {
+        kind = "shipWheel",
+        target = candidate.id, room = roomID, rewardID = candidate.id,
+        doorToken = wheelToken,
+        run = CurrentRun, hero = currentHero(), sourceRoom = currentSource(),
+        snapshot = {
+          ChosenRewardType = snapshotField(wheel, "ChosenRewardType"),
+          ForceLootName = snapshotField(wheel, "ForceLootName"),
+          AllowReroll = snapshotField(wheel, "AllowReroll"),
+          CanBeRerolled = snapshotField(wheel, "CanBeRerolled"),
+        },
+      }
+      lease.leaseToken = leaseToken(wheelToken, roomID, candidate.id)
+      wheel.ChosenRewardType = candidate.rewardType
+      wheel.ForceLootName = candidate.forceLoot
+      lease.appliedRewardType = wheel.ChosenRewardType
+      lease.appliedForceLoot = wheel.ForceLootName
+      lease.appliedSignature = wheelSignature(wheel)
+      wheelLeases[wheel] = lease
+      refreshWheelPreview(wheel)
+      return lease
+    end
+
+    local function applyRoute(door, roomID, reward, callerToken)
       installRouteHooks()
+      local physicalDoorToken = tokenFor(door)
       local lease = {
         kind = "roomCategory", target = roomID, room = roomID,
         reward = reward, rewardID = reward and reward.id or nil,
-        doorToken = doorToken,
+        doorToken = callerToken, physicalDoorToken = physicalDoorToken,
         run = CurrentRun, hero = currentHero(), sourceRoom = currentSource(),
         originalRoom = door.Room, signature = routeSignature(door),
       }
-      lease.leaseToken = leaseToken(doorToken, roomID, lease.rewardID)
+      lease.leaseToken = leaseToken(callerToken, roomID, lease.rewardID)
       leases[door] = lease
       local ok, failure = pcall(refreshPreview, door)
       if not ok then
         leases[door] = nil
+        if doorCageRewards(door) ~= nil then setExtraCagePreviewAlpha(door, 1) end
         releaseRouteHooksIfUnused()
         error(failure, 0)
       end
+      if doorCageRewards(door) ~= nil then setExtraCagePreviewAlpha(door, 0) end
       return lease
     end
 
@@ -10951,48 +11539,109 @@ if __MacGamingTrainerV1 == nil then
     -- any other room type is a reservation built when the player walks
     -- through. Only what cannot be built is refused.
     local function preflightApply(params)
-      local door = findDoor(params.doorToken)
-      if activeLease(door) ~= nil then error("World exit already has an active lease") end
+      local target = findTarget(params.doorToken)
       local roomID, rewardID = params.room, params.reward
       if type(roomID) ~= "string" or roomID == "" then error("World exit target is invalid") end
+      if target.kind == "shipWheel" then
+        local wheel = target.wheel
+        if activeWheelLease(wheel) ~= nil then error("World exit already has an active lease") end
+        if roomID ~= "current" or type(rewardID) ~= "string" or rewardID == "" then
+          error("World exit target is invalid")
+        end
+        local reward = rewardCandidateForWheel(wheel, rewardID)
+        if reward == nil then error("World exit reward is unavailable") end
+        return target, "shipWheel", reward
+      end
+      local door = target.door
+      if activeLease(door) ~= nil then error("World exit already has an active lease") end
+      if target.kind == "cageSlot" and activeCageLease(door, target.slotIndex) ~= nil then
+        error("World exit already has an active lease")
+      end
       local reward = nil
       if rewardID ~= nil then
-        reward = type(rewardID) == "string" and rewardCandidate(door, rewardID) or nil
+        reward = type(rewardID) == "string" and rewardCandidate(door, rewardID, target.slotIndex) or nil
         if reward == nil then error("World exit reward is unavailable") end
       end
       if reward ~= nil and (roomID == "current" or roomID == door.Room.Name
           or roomID == routeKind(door.Room.Name)) then
-        return door, "reward", reward
+        if target.kind == "cageSlot" then return target, "cageReward", reward end
+        return target, "reward", reward
       end
       if roomID == "current" then error("World exit target is invalid") end
+      if target.kind == "cageSlot" and hasAnyCageLease(door) then
+        error("World exit already has an active lease")
+      end
       local routes = routeCandidates(door)
       local rooms = routeRooms(type(routes) == "table" and routes[roomID] or nil)
       if type(rooms) ~= "table" or #rooms == 0 then error("World exit room type is unavailable") end
-      return door, "roomCategory", reward
+      return target, "roomCategory", reward
     end
 
     local function apply(params)
-      local door, mode, reward = preflightApply(params)
-      local doorToken = tokenFor(door)
-      if mode == "reward" then applyReward(door, reward, doorToken, params.room)
-      else applyRoute(door, params.room, reward, doorToken) end
+      local target, mode, reward = preflightApply(params)
+      if mode == "shipWheel" then
+        local wheel = target.wheel
+        applyShipWheelReward(wheel, reward, tokenForWheel(wheel), params.room)
+      elseif mode == "cageReward" then
+        local door = target.door
+        applyCageReward(door, target.slotIndex, reward, tokenForCageSlot(door, target.slotIndex), params.room)
+      elseif mode == "reward" then
+        local door = target.door
+        applyReward(door, reward, tokenFor(door), params.room)
+      else
+        local door = target.door
+        local callerToken = target.kind == "cageSlot"
+          and tokenForCageSlot(door, target.slotIndex) or tokenFor(door)
+        applyRoute(door, params.room, reward, callerToken)
+      end
     end
 
     local function preflightCancel(params)
-      local door = findDoor(params.doorToken)
-      local lease = activeLease(door)
-      if type(lease) ~= "table" or type(params.leaseToken) ~= "string"
-          or lease.leaseToken ~= params.leaseToken then
+      local target = findTarget(params.doorToken)
+      if type(params.leaseToken) ~= "string" then
         error("World exit lease is invalid or stale")
       end
-      return door, lease
+      if target.kind == "shipWheel" then
+        local lease = activeWheelLease(target.wheel)
+        if type(lease) ~= "table" or lease.leaseToken ~= params.leaseToken then
+          error("World exit lease is invalid or stale")
+        end
+        return target, lease
+      end
+      if target.kind == "cageSlot" then
+        local slotLease = activeCageLease(target.door, target.slotIndex)
+        if type(slotLease) == "table" and slotLease.leaseToken == params.leaseToken then
+          return target, slotLease
+        end
+      end
+      local lease = activeLease(target.door)
+      if type(lease) ~= "table" or lease.leaseToken ~= params.leaseToken then
+        error("World exit lease is invalid or stale")
+      end
+      return target, lease
     end
 
     local function cancel(params)
-      local door, lease = preflightCancel(params)
+      local target, lease = preflightCancel(params)
+      if lease.kind == "shipWheel" then
+        wheelLeases[target.wheel] = nil
+        restoreShipWheelReward(target.wheel, lease)
+        return
+      end
+      if lease.kind == "cageReward" then
+        local doorSlots = cageLeases[target.door]
+        if type(doorSlots) == "table" then doorSlots[lease.slotIndex] = nil end
+        restoreCageReward(target.door, lease.slotIndex, lease)
+        return
+      end
+      local door = target.door
       leases[door] = nil
-      if lease.kind == "reward" then restoreReward(door, lease)
-      else refreshPreview(door) end
+      if lease.kind == "reward" then
+        restoreReward(door, lease)
+      else
+        if doorCageRewards(door) ~= nil then setExtraCagePreviewAlpha(door, 1) end
+        refreshPreview(door)
+      end
       releaseRouteHooksIfUnused()
     end
 
@@ -11050,6 +11699,7 @@ if __MacGamingTrainerV1 == nil then
       if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
     end
 
+    local wheelSideOrder = { left = 1, forward = 2, right = 3 }
     local function observe(includeTargets)
       local exits = setmetatable({}, arrayMeta)
       local result = { exits = exits }
@@ -11060,52 +11710,132 @@ if __MacGamingTrainerV1 == nil then
           leaseToken = M.nextOccurrenceToken,
         }
       end
-      if type(MapState) ~= "table" or type(MapState.OfferedExitDoors) ~= "table"
+      if type(MapState) ~= "table"
+          or (type(MapState.OfferedExitDoors) ~= "table" and type(MapState.ShipWheels) ~= "table")
           or currentSource() == nil or currentHero() == nil then return result end
       -- Sparse Host replies may omit a full catalog request, but sibling door
       -- rewards/routes and run eligibility can still change in place. A cheap
       -- state fingerprint refreshes cached catalogs only when those inputs do.
       local contextSignature = catalogContextSignature()
-      for _, door in pairs(MapState.OfferedExitDoors) do
-        if editableDoor(door) then
-          local lease = activeLease(door)
+      local doors = {}
+      for _, door in pairs(type(MapState.OfferedExitDoors) == "table" and MapState.OfferedExitDoors or {}) do
+        if editableDoor(door) then doors[#doors + 1] = door end
+      end
+      table.sort(doors, function(a, b) return number(a.ObjectId) < number(b.ObjectId) end)
+      for doorOrdinal, door in ipairs(doors) do
+        local doorLease = activeLease(door)
+        local cageRewards = doorCageRewards(door)
+        if cageRewards ~= nil then
+          for slotIndex, entry in ipairs(cageRewards) do
+            local slotToken = tokenForCageSlot(door, slotIndex)
+            local targets, targetDiagnostics = targetCatalogForDoorSlot(
+              door, slotIndex, slotToken, includeTargets == true, contextSignature
+            )
+            local lease = activeCageLease(door, slotIndex) or doorLease
+            exits[#exits + 1] = {
+              doorToken = slotToken, objectId = door.ObjectId,
+              exitKind = "cageReward", doorOrdinal = doorOrdinal, slotIndex = slotIndex,
+              roomName = door.Room.Name,
+              roomKind = routeKind(door.Room.Name) or "",
+              reward = (type(entry) == "table" and (entry.ForceLootName or entry.RewardType)) or "",
+              rewardWarning = targetDiagnostics.reward and targetDiagnostics.reward.roomWarning or nil,
+              targets = targets,
+              targetDiagnostics = targetDiagnostics,
+              activeLease = type(lease) == "table" and {
+                room = lease.room, reward = lease.rewardID, leaseToken = lease.leaseToken,
+              } or nil,
+            }
+          end
+        else
           local doorToken = tokenFor(door)
           local targets, targetDiagnostics = targetCatalogForDoor(
             door, doorToken, includeTargets == true, contextSignature
           )
           -- What the door holds now, as the game reports it; an unbuilt
           -- room-type reservation is reported only as the active lease.
-          local row = {
+          exits[#exits + 1] = {
             doorToken = doorToken, objectId = door.ObjectId,
+            exitKind = "door", doorOrdinal = doorOrdinal,
             roomName = door.Room.Name,
             roomKind = routeKind(door.Room.Name) or "",
             reward = door.Room.ForceLootName or door.Room.ChosenRewardType or "",
             rewardWarning = targetDiagnostics.reward and targetDiagnostics.reward.roomWarning or nil,
             targets = targets,
             targetDiagnostics = targetDiagnostics,
-            activeLease = type(lease) == "table" and {
-              room = lease.room, reward = lease.rewardID, leaseToken = lease.leaseToken,
+            activeLease = type(doorLease) == "table" and {
+              room = doorLease.room, reward = doorLease.rewardID, leaseToken = doorLease.leaseToken,
             } or nil,
           }
-          exits[#exits + 1] = row
         end
       end
-      table.sort(exits, function(a,b) return number(a.objectId) < number(b.objectId) end)
+      local wheels = {}
+      for _, wheel in pairs(type(MapState.ShipWheels) == "table" and MapState.ShipWheels or {}) do
+        if editableShipWheel(wheel) then wheels[#wheels + 1] = wheel end
+      end
+      table.sort(wheels, function(a, b)
+        local sa = wheelSideOrder[wheelSide(a)] or 9
+        local sb = wheelSideOrder[wheelSide(b)] or 9
+        if sa ~= sb then return sa < sb end
+        return number(a.ObjectId) < number(b.ObjectId)
+      end)
+      for _, wheel in ipairs(wheels) do
+        local wheelToken = tokenForWheel(wheel)
+        local targets, targetDiagnostics = targetCatalogForWheel(
+          wheel, wheelToken, includeTargets == true, contextSignature
+        )
+        local lease = activeWheelLease(wheel)
+        exits[#exits + 1] = {
+          doorToken = wheelToken, objectId = wheel.ObjectId,
+          exitKind = "shipWheel", wheelSide = wheelSide(wheel),
+          roomName = wheel.Room.Name,
+          roomKind = "",
+          reward = wheel.ForceLootName or wheel.ChosenRewardType or "",
+          rewardWarning = targetDiagnostics.reward and targetDiagnostics.reward.roomWarning or nil,
+          targets = targets,
+          targetDiagnostics = targetDiagnostics,
+          activeLease = type(lease) == "table" and {
+            room = lease.room, reward = lease.rewardID, leaseToken = lease.leaseToken,
+          } or nil,
+        }
+      end
       for index, row in ipairs(exits) do row.ordinal = index end
       return result
     end
 
     local function release()
       for door, lease in pairs(leases) do
+        local expectedDoorToken = type(lease) == "table" and (lease.physicalDoorToken or lease.doorToken) or nil
         if type(lease) == "table" and lease.run == CurrentRun
-            and lease.sourceRoom == currentSource() and lease.doorToken == tokenFor(door) then
+            and lease.sourceRoom == currentSource() and expectedDoorToken == tokenFor(door) then
           if lease.kind == "reward" then pcall(restoreReward, door, lease)
           elseif lease.kind == "roomCategory" then
             leases[door] = nil
+            if doorCageRewards(door) ~= nil then setExtraCagePreviewAlpha(door, 1) end
             pcall(refreshPreview, door)
           end
         end
         leases[door] = nil
+      end
+      for door, doorSlots in pairs(cageLeases) do
+        if type(doorSlots) == "table" then
+          for slotIndex, lease in pairs(doorSlots) do
+            if type(lease) == "table" and lease.run == CurrentRun
+                and lease.sourceRoom == currentSource()
+                and lease.doorToken == tokenForCageSlot(door, slotIndex) then
+              pcall(restoreCageReward, door, slotIndex, lease)
+            end
+            doorSlots[slotIndex] = nil
+          end
+        end
+        cageLeases[door] = nil
+      end
+      for wheel, lease in pairs(wheelLeases) do
+        if type(lease) == "table" and lease.run == CurrentRun
+            and lease.sourceRoom == currentSource()
+            and lease.doorToken == tokenForWheel(wheel) then
+          pcall(restoreShipWheelReward, wheel, lease)
+        end
+        wheelLeases[wheel] = nil
       end
       releaseHook("CreateDoorRewardPreview")
       releaseHook("LeaveRoom")
