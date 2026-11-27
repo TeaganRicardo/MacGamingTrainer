@@ -5811,6 +5811,64 @@ if __MacGamingTrainerV1 == nil then
       "SetScale", "Attach", "SetThingProperty", "StopAnimation", "IsAlive",
       "thread", "CallFunctionName",
     }
+    local function filterFacilityRequirements(requirements, stripTalentLegal)
+      if type(requirements) ~= "table" then return nil end
+      local function containsValue(list, targetValue)
+        for _, item in ipairs(list) do
+          if item == targetValue then return true end
+        end
+        return false
+      end
+      local function isPacingClause(clause)
+        if type(clause) ~= "table" then return false end
+        if clause.FunctionName == "RequiredMinRoomsSinceEvent" or clause.SumPrevRooms ~= nil then
+          return true
+        end
+        if type(clause.Path) == "table" then
+          local tail = clause.Path[#clause.Path]
+          if tail == "BiomeDepthCache" or tail == "LastMetaRewardStandDepth" or tail == "ActiveBounty" then
+            return true
+          end
+        end
+        if type(clause.PathFalse) == "table" then
+          local tail = clause.PathFalse[#clause.PathFalse]
+          if tail == "ActiveBounty" or tail == "LastMetaRewardStandDepth" then
+            return true
+          end
+        end
+        return false
+      end
+      local filtered = {}
+      for key, value in pairs(requirements) do
+        if type(key) == "number" and type(value) == "table" then
+          if not isPacingClause(value) then
+            if type(value.HasNone) == "table" and containsValue(value.HasNone, "ActiveBounty") then
+              local kept = {}
+              for _, item in ipairs(value.HasNone) do
+                if item ~= "ActiveBounty" then kept[#kept + 1] = item end
+              end
+              if #kept > 0 then
+                local copied = {}
+                for k, v in pairs(value) do copied[k] = v end
+                copied.HasNone = kept
+                filtered[#filtered + 1] = copied
+              end
+            else
+              filtered[#filtered + 1] = value
+            end
+          end
+        elseif key == "NamedRequirements" and stripTalentLegal and type(value) == "table" then
+          local kept = {}
+          for _, item in ipairs(value) do
+            if item ~= "TalentLegal" then kept[#kept + 1] = item end
+          end
+          if #kept > 0 then filtered.NamedRequirements = kept end
+        else
+          filtered[key] = value
+        end
+      end
+      return filtered
+    end
     local function inspectFacility(kind, getSharedBaseIds)
       local definition = facilityById[kind]
       local owner = M.runtimeOwners.roomContext()
@@ -5823,6 +5881,7 @@ if __MacGamingTrainerV1 == nil then
       if (type(ScreenState) == "table" and ScreenState.InTransition)
           or next(ActiveScreens or {}) ~= nil or MapState.HostilePolymorph
           or type(room.Encounter) == "table" and room.Encounter.InProgress
+            and not room.Encounter.ExitsDontRequireCompleted
           or type(room.ChallengeEncounter) == "table" and room.ChallengeEncounter.InProgress
           or CurrentRun.IsDreamRun or room ~= CurrentRun.CurrentRoom
           or room.ExitsUnlocked ~= true or type(CheckRoomExitsReady) ~= "function"
@@ -5853,7 +5912,8 @@ if __MacGamingTrainerV1 == nil then
       end
       -- A 0.0 authored chance is an explicit room/biome exclusion, separate
       -- from a failed roll in an otherwise legal room. Surface and sell shops
-      -- require a room-owned positive chance (BaseRoom defaults to zero).
+      -- default to zero in BaseRoom: allow them in ordinary combat rooms when
+      -- not explicitly excluded (`<= 0`).
       local spawnChance = room[definition.configuredChance]
       if spawnChance == nil and definition.id == "well" then
         spawnChance = RoomData.BaseRoom.WellShopSpawnChance
@@ -5861,8 +5921,25 @@ if __MacGamingTrainerV1 == nil then
         spawnChance = RoomData.BaseRoom.ChallengeSpawnChance
       elseif spawnChance == nil and definition.requiresMeta then
         spawnChance = RoomData.BaseRoom.MetaRewardStandSpawnChance
+      elseif spawnChance == nil and definition.id == "shrine" then
+        if room.RoomSetName == "N" and rawget(authored, "SurfaceShopSpawnChance") == nil
+            and room.StoreDataName == nil and room.ChosenRewardType ~= "Shop" then
+          spawnChance = 0.1
+        end
+      elseif spawnChance == nil and definition.requiresSell then
+        spawnChance = 1
       end
       if not finite(spawnChance) or spawnChance <= 0 then return nil, "hades2.facility.unavailable.route" end
+      if definition.requiresSell and type(GameState) == "table"
+          and (type(GameState.WorldUpgradesAdded) == "table" or type(GameState.ScreensViewed) == "table") then
+        local upgrades = type(GameState.WorldUpgradesAdded) == "table" and GameState.WorldUpgradesAdded or {}
+        local viewed = type(GameState.ScreensViewed) == "table" and GameState.ScreensViewed or {}
+        if not upgrades.WorldUpgradeRestoreSellTraitShop
+            and not upgrades.WorldUpgradePostBossSellTraitShops
+            and not viewed.SellTraits then
+          return nil, "hades2.facility.unavailable.progression"
+        end
+      end
       if definition.requiresMeta then
         -- RoomLogic.lua's IsMetaRewardStandEligible references the game-owned
         -- global roomData set by OnAnyLoad. Require that source-room identity
@@ -5880,16 +5957,21 @@ if __MacGamingTrainerV1 == nil then
           return nil, "hades2.facility.unavailable.fear"
         end
       end
+      local baseUnlockRequirements = nil
       if definition.challenge then
-        local baseRequirements = authored.ChallengeSpawnRequirements
+        local rawBaseRequirements = authored.ChallengeSpawnRequirements
           or RoomData.BaseRoom.ChallengeSpawnRequirements
-        if baseRequirements ~= nil and not IsGameStateEligible(room, baseRequirements) then
+        baseUnlockRequirements = filterFacilityRequirements(rawBaseRequirements, false)
+        if baseUnlockRequirements ~= nil and next(baseUnlockRequirements) ~= nil
+            and not IsGameStateEligible(room, baseUnlockRequirements) then
           return nil, "hades2.facility.unavailable.progression"
         end
       end
-      local requirements = authored[definition.requirements] or room[definition.requirements]
+      local rawRequirements = authored[definition.requirements] or room[definition.requirements]
         or definition.defaultRequirements and RoomData.BaseRoom[definition.defaultRequirements]
-      if requirements ~= nil and not IsGameStateEligible(room, requirements) then
+      local unlockRequirements = filterFacilityRequirements(rawRequirements, definition.id == "monument")
+      if unlockRequirements ~= nil and next(unlockRequirements) ~= nil
+          and not IsGameStateEligible(room, unlockRequirements) then
         return nil, "hades2.facility.unavailable.progression"
       end
       if definition.requiresStore then
@@ -5971,7 +6053,7 @@ if __MacGamingTrainerV1 == nil then
         if finite(id) and id > 0 and (forcedId == nil or forcedId == id)
             and not occupied[id]
             and (resident == nil or
-              resident.Name == "ChallengeSwitchBase" and
+              (resident.Name == "ChallengeSwitchBase" or resident.Template == "ChallengeSwitchBase") and
               resident.OnUsedFunctionName == nil)
             and (type(MapState.RoomRequiredObjects) ~= "table"
               or MapState.RoomRequiredObjects[id] == nil)
@@ -5990,6 +6072,8 @@ if __MacGamingTrainerV1 == nil then
         run = CurrentRun, hero = owner.hero, room = room, map = MapState,
         name = room.Name, biome = room.RoomSetName,
         point = point, authored = authored, configuredChance = spawnChance,
+        baseUnlockRequirements = baseUnlockRequirements,
+        unlockRequirements = unlockRequirements,
         forceNextRoom = ForceNextRoom, depth = CurrentRun.RunDepthCache,
         store = room.Store,
         challengeVariants = variants, challengeKey = variants and table.concat(variants, "|") or nil,
@@ -6006,8 +6090,20 @@ if __MacGamingTrainerV1 == nil then
       end
       return true
     end
+    local facilityReasonPriority = {
+      ["hades2.facility.unavailable.scene"] = 1,
+      ["hades2.facility.unavailable.placement"] = 2,
+      ["hades2.facility.unavailable.existing"] = 3,
+      ["hades2.facility.unavailable.progression"] = 4,
+      ["hades2.facility.unavailable.stock"] = 5,
+      ["hades2.facility.unavailable.encounter"] = 6,
+      ["hades2.facility.unavailable.fear"] = 7,
+      ["hades2.facility.unavailable.route"] = 8,
+      ["hades2.facility.unavailable.native"] = 9,
+    }
     local function observeFacilities()
       local options, nextObservations = {}, {}
+      local summaryReason, summaryPriority = nil, 999
       local pointIds, queried = nil, false
       local function sharedPoints()
         if not queried then
@@ -6017,8 +6113,9 @@ if __MacGamingTrainerV1 == nil then
         return pointIds
       end
       for _, entry in ipairs(facilityDefinitions) do
-        local ok, target = pcall(inspectFacility, entry.id, sharedPoints)
-        if ok and target ~= nil then
+        local ok, target, reason = pcall(inspectFacility, entry.id, sharedPoints)
+        if not ok then target, reason = nil, "hades2.facility.unavailable.native" end
+        if target ~= nil then
           local old = facilityObservations[entry.id]
           if sameFacility(old, target) then target.token = old.token
           else
@@ -6029,10 +6126,16 @@ if __MacGamingTrainerV1 == nil then
             id = entry.id, labelKey = entry.labelKey, scopeToken = target.token,
           }
           nextObservations[entry.id] = target
+        elseif type(reason) == "string" then
+          local priority = facilityReasonPriority[reason] or 99
+          if priority < summaryPriority then
+            summaryPriority = priority
+            summaryReason = reason
+          end
         end
       end
       facilityObservations = nextObservations
-      return setmetatable(options, arrayMeta)
+      return setmetatable(options, arrayMeta), #options == 0 and summaryReason or nil
     end
     local function prepareFacility(params)
       local prior = facilityObservations[params.facility]
@@ -6130,6 +6233,30 @@ if __MacGamingTrainerV1 == nil then
           return originalUseHeroTraits(name, ...)
         end
       end
+      local savedReqs = {}
+      local function stageReq(owner, key, value)
+        if type(owner) ~= "table" or type(key) ~= "string" then return end
+        local raw = rawget(owner, key)
+        savedReqs[#savedReqs + 1] = { owner = owner, key = key, existed = raw ~= nil, value = raw }
+        owner[key] = value
+      end
+      if definition.challenge then
+        stageReq(target.authored, "ChallengeSpawnRequirements", target.baseUnlockRequirements or {})
+        stageReq(target.authored, definition.requirements, target.unlockRequirements or {})
+        if room ~= target.authored then
+          stageReq(room, "ChallengeSpawnRequirements", target.baseUnlockRequirements or {})
+          stageReq(room, definition.requirements, target.unlockRequirements or {})
+        end
+      elseif definition.requiresMeta then
+        if type(roomData) == "table" then
+          stageReq(roomData, "MetaRewardStandRequirements", target.unlockRequirements or {})
+        end
+        if room ~= roomData then
+          stageReq(room, "MetaRewardStandRequirements", target.unlockRequirements or {})
+        end
+      else
+        stageReq(room, definition.requirements, target.unlockRequirements or {})
+      end
       GetIdsByType, SetupHarvestPoints = pointLease, suppressHarvest
       IsWellShopEligible = nativeEligible("well", originalWell)
       IsSurfaceShopEligible = nativeEligible("shrine", originalSurface)
@@ -6140,6 +6267,11 @@ if __MacGamingTrainerV1 == nil then
       end)
       -- Every temporary override is invocation-local, even when the game
       -- throws. Preserve any other resident's newer replacement if present.
+      for index = #savedReqs, 1, -1 do
+        local entry = savedReqs[index]
+        if entry.existed then entry.owner[entry.key] = entry.value
+        else entry.owner[entry.key] = nil end
+      end
       if GetIdsByType == pointLease then GetIdsByType = originalIds end
       if SetupHarvestPoints == suppressHarvest then SetupHarvestPoints = originalHarvest end
       IsWellShopEligible, IsSurfaceShopEligible, IsSellTraitShopEligible =
@@ -8531,6 +8663,7 @@ if __MacGamingTrainerV1 == nil then
     local sceneOperational = currentScene == "crossroads"
       or (currentScene == "run" and M.runtimeOwners.heroAvailable())
     local gardenScopeToken = M.gardenMaturity.scopeToken()
+    local facilityOptions, facilityReason = runtimeState.roomGeneration.observeFacilities()
     return {
       status = sceneOperational and "ready" or "waiting", scene = currentScene,
       capabilities = {
@@ -8623,7 +8756,8 @@ if __MacGamingTrainerV1 == nil then
       chaosGateProbability = M.chaosGateProbability == nil and jsonNull or M.chaosGateProbability,
       gatheringTargets = runtimeState.roomGeneration.observe(),
       chaosGateTarget = runtimeState.roomGeneration.observeChaos(),
-      facilityOptions = runtimeState.roomGeneration.observeFacilities(),
+      facilityOptions = facilityOptions,
+      facilityReason = facilityReason == nil and jsonNull or facilityReason,
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,

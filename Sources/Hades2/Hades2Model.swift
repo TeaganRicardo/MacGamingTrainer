@@ -219,6 +219,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var gatheringTargets: [Hades2GatheringFamily: Hades2GatheringTarget] = [:]
     @Published private(set) var chaosGateTarget: Hades2GatheringTarget?
     @Published private(set) var facilityOptions: [Hades2ChamberFacility] = []
+    @Published private(set) var facilityReason: String?
     @Published var selectedFacilityID = ""
     @Published var boons: [BoonOption] = []
     @Published var selectedOlympianReward = ""
@@ -725,6 +726,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         gatheringTargets = [:]
         chaosGateTarget = nil
         facilityOptions = []
+        facilityReason = nil
         selectedFacilityID = ""
         gardenScopeToken = nil
         if !graspLocked { graspValue = nil }
@@ -876,6 +878,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             if !facilityOptions.contains(where: { $0.id == selectedFacilityID }) {
                 selectedFacilityID = facilityOptions.first?.id ?? ""
             }
+        }
+        if patch.facilityReason.isPresent {
+            facilityReason = patch.facilityReason.value
         }
         if patch.gardenScopeToken.isPresent { gardenScopeToken = patch.gardenScopeToken.value }
         if patch.warningText.isPresent {

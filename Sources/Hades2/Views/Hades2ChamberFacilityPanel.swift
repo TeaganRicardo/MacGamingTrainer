@@ -12,6 +12,14 @@ struct Hades2ChamberFacilityPanel: View {
         localization.string(key)
     }
 
+    private var emptyFacilityTitle: String {
+        if let reason = model.facilityReason {
+            let localized = text(reason)
+            if localized != reason { return localized }
+        }
+        return text("hades2.facility.empty")
+    }
+
     var body: some View {
         TrainerLabeledControlRow(
             title: text("hades2.facility.title"),
@@ -22,7 +30,7 @@ struct Hades2ChamberFacilityPanel: View {
         ) {
             Picker(text("hades2.facility.title"), selection: $model.selectedFacilityID) {
                 if model.facilityOptions.isEmpty {
-                    Text(text("hades2.facility.empty")).tag("")
+                    Text(emptyFacilityTitle).tag("")
                 }
                 ForEach(model.facilityOptions) { facility in
                     Text(text(facility.labelKey)).tag(facility.id)

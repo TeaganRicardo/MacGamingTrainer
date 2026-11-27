@@ -210,6 +210,7 @@ struct Hades2StatePatch {
     let chaosGateProbability: Hades2FieldPatch<Double>
     let chaosGateTarget: Hades2FieldPatch<Hades2GatheringTarget>
     let facilityOptions: Hades2FieldPatch<[Hades2ChamberFacility]>
+    let facilityReason: Hades2FieldPatch<String>
     let gatheringTargets: Hades2FieldPatch<[Hades2GatheringFamily: Hades2GatheringTarget]>
     let gardenScopeToken: Hades2FieldPatch<String>
 
@@ -325,6 +326,7 @@ struct Hades2StatePatch {
         } else {
             facilityOptions = payload.keys.contains("facilityOptions") ? .present(nil) : .absent
         }
+        facilityReason = Self.field(payload, "facilityReason", String.self)
         if let values = payload["gatheringTargets"] as? [String: Any] {
             var decoded: [Hades2GatheringFamily: Hades2GatheringTarget] = [:]
             for (key, raw) in values {
