@@ -230,6 +230,85 @@ assert(not pcall(M.dispatch,'generate_chamber_facility',{
 }))
 print('chamber_facility_ok')
 """,
+r"""
+-- Pacing, depth, cooldown, Biome H passive encounters, Template pedestals,
+-- Ephyra shrines, and combat-room Purging Pool are all accepted when native
+-- permanent unlocks hold; facilityReason summarizes empty options.
+CurrentRun.BiomeDepthCache = 1
+CurrentRun.RunDepthCache = 2
+CurrentRun.LastWellShopDepth = 1
+RequiredMinRoomsSinceEvent = function() return false end
+local originalIsGameStateEligible = IsGameStateEligible
+IsGameStateEligible = function(src, reqs, args)
+  if type(reqs) == 'table' then
+    for _, clause in ipairs(reqs) do
+      if type(clause) == 'table' and clause.FunctionName == 'RequiredMinRoomsSinceEvent' then
+        return false
+      end
+      if type(clause) == 'table' and clause.SumPrevRooms ~= nil then
+        return false
+      end
+      if type(clause) == 'table' and type(clause.Path) == 'table'
+          and clause.Path[#clause.Path] == 'BiomeDepthCache' then
+        return false
+      end
+    end
+  end
+  return originalIsGameStateEligible(src, reqs, args)
+end
+local passiveRoom = room({
+  Name = 'H_Combat01',
+  RoomSetName = 'H',
+  WellShopSpawnChance = 0.35,
+  WellShopRequirements = {
+    { PathTrue = { 'GameState', 'WorldUpgrades', 'WorldUpgradeWellShops' } },
+    { Path = { 'CurrentRun', 'BiomeDepthCache' }, Comparison = '>=', Value = 3 },
+    { FunctionName = 'RequiredMinRoomsSinceEvent', FunctionArgs = { Event = 'WellShop', Count = 4 } },
+  },
+  Encounter = { Name = 'GeneratedH_Passive', InProgress = true, ExitsDontRequireCompleted = true },
+}, .95)
+GameState.WorldUpgrades = { WorldUpgradeWellShops = true, WorldUpgradeSurfaceShops = true }
+MapState.ActiveObstacles[211] = { Template = 'ChallengeSwitchBase', ObjectId = 211 }
+local prevEligible = IsGameStateEligible
+IsGameStateEligible = function(src, reqs, args)
+  if type(reqs) == 'table' then
+    for _, clause in ipairs(reqs) do
+      if type(clause) == 'table' and clause.PathTrue
+          and clause.PathTrue[#clause.PathTrue] == 'WorldUpgradeWellShops' then
+        return GameState.WorldUpgrades.WorldUpgradeWellShops == true
+      end
+    end
+  end
+  return prevEligible(src, reqs, args)
+end
+local wellOpt = assert(option('well'))
+local wellReply = generate('well', 'passive-well')
+assert(wellReply.applied and passiveRoom.WellShop.ObjectId == 211)
+IsGameStateEligible = originalIsGameStateEligible
+RequiredMinRoomsSinceEvent = nil
+
+-- Ephyra combat room without explicit SurfaceShopSpawnChance offers shrine; N_Shop01 does not.
+MapState.ActiveObstacles[211] = { Template = 'ChallengeSwitchBase', ObjectId = 211 }
+room({ Name = 'N_Combat01', RoomSetName = 'N', WellShopSpawnChance = 0 }, .95)
+assert(option('shrine') and not option('well'))
+room({ Name = 'N_Shop01', RoomSetName = 'N', WellShopSpawnChance = 0, SurfaceShopSpawnChance = 0 }, .95)
+assert(not option('shrine'))
+
+-- Combat room with unlocked Purging Pool and sellable God Trait offers purging;
+-- empty options emit facilityReason.
+CurrentRun.Hero.Traits = { { Name = 'ZeusBoon', Rarity = 'Rare' } }
+GameState.WorldUpgradesAdded = { WorldUpgradePostBossSellTraitShops = true }
+room({ Name = 'F_Combat01', RoomSetName = 'F', WellShopSpawnChance = 0 }, .95)
+assert(option('purging'))
+facilityPoints = {}
+local emptyStatus = M.dispatch('status', { includeCatalogs = false })
+assert(#emptyStatus.facilityOptions == 0 and emptyStatus.facilityReason == 'hades2.facility.unavailable.placement')
+passiveRoom.ExitsUnlocked = false
+CurrentRun.CurrentRoom = passiveRoom
+local sceneStatus = M.dispatch('status', { includeCatalogs = false })
+assert(#sceneStatus.facilityOptions == 0 and sceneStatus.facilityReason == 'hades2.facility.unavailable.scene')
+print('chamber_facility_ok')
+""",
 ]
 
 for scenario in CASES:

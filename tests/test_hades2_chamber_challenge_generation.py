@@ -193,6 +193,43 @@ assert(not pcall(M.dispatch,'generate_chamber_facility',{
 }))
 print('chamber_challenge_ok')
 """,
+r"""
+-- Depth/cooldown/TalentLegal pacing clauses are bypassed for chamber challenges
+-- while permanent upgrades and non-TalentLegal gates still apply.
+CurrentRun.BiomeDepthCache = 1
+local originalReq = IsGameStateEligible
+IsGameStateEligible = function(src, reqs, args)
+  if type(reqs) == 'table' then
+    if type(reqs.NamedRequirements) == 'table' then
+      for _, name in ipairs(reqs.NamedRequirements) do
+        if name == 'TalentLegal' then return false end
+      end
+    end
+    for _, clause in ipairs(reqs) do
+      if type(clause) == 'table' and (clause.FunctionName == 'RequiredMinRoomsSinceEvent'
+          or (type(clause.Path) == 'table' and clause.Path[#clause.Path] == 'BiomeDepthCache')) then
+        return false
+      end
+    end
+  end
+  return originalReq(src, reqs, args)
+end
+local gatedRoom = room({
+  ChallengeSpawnRequirements = {
+    { PathFalse = { 'CurrentRun', 'ActiveBounty' } },
+    { Path = { 'CurrentRun', 'BiomeDepthCache' }, Comparison = '>=', Value = 5 },
+    { FunctionName = 'RequiredMinRoomsSinceEvent', FunctionArgs = { Event = 'ChallengeSwitch', Count = 3 } },
+  },
+  EliteSwitchRequirements = {
+    NamedRequirements = { 'TalentLegal' },
+  },
+})
+local moon = assert(option('monument'))
+local moonReply = generate('monument', 'moon-unlocked')
+assert(moonReply.applied and gatedRoom.ChallengeSwitch.ObjectId == 211)
+IsGameStateEligible = originalReq
+print('chamber_challenge_ok')
+""",
 ]
 
 for scenario in CASES:
