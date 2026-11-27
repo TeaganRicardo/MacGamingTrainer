@@ -1321,7 +1321,29 @@ struct Hades2TrainerView: View {
 
     /// `Exit 1 · Combat · Zeus`: what the door holds now, as the game reports it.
     private func worldExitLabel(_ exit: Hades2WorldExit) -> String {
-        var parts = [text("hades2.worldActions.exitNumber", arguments: [String(exit.ordinal)])]
+        if exit.exitKind == "shipWheel" {
+            let wheelTitle: String
+            switch exit.wheelSide {
+            case "left": wheelTitle = text("hades2.worldActions.shipWheel.left")
+            case "right": wheelTitle = text("hades2.worldActions.shipWheel.right")
+            case "forward": wheelTitle = text("hades2.worldActions.shipWheel.forward")
+            default: wheelTitle = text("hades2.worldActions.shipWheel")
+            }
+            let rewardText = exit.reward.isEmpty
+                ? text("hades2.worldActions.noReward")
+                : worldActionRewardLabel(exit.reward)
+            return "\(wheelTitle) · \(rewardText)"
+        }
+        let prefix: String
+        if exit.exitKind == "cageReward", let slot = exit.slotIndex {
+            prefix = text(
+                "hades2.worldActions.exitRewardSlot",
+                arguments: [String(exit.doorOrdinal ?? exit.ordinal), String(slot)]
+            )
+        } else {
+            prefix = text("hades2.worldActions.exitNumber", arguments: [String(exit.ordinal)])
+        }
+        var parts = [prefix]
         if !exit.roomKind.isEmpty {
             parts.append(worldActionRoomLabel(exit.roomKind))
         } else {
