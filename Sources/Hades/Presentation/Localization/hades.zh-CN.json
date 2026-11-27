@@ -147,6 +147,7 @@
     "hades.error.luaInterrupted": "调试器中断了游戏执行；为阻止继续写坏存档，已强制退出游戏，未保存进度已丢失。请重新启动游戏后连接。",
     "hades.error.luaTerminationFailed": "游戏执行已被中断，但无法确认强制退出成功。请立即在“活动监视器”中强制退出游戏，避免继续运行或保存，然后重新启动。",
     "hades.error.restartRequired": "当前运行时需要重启游戏后重新连接。",
+    "hades.error.commandResultConnectionLost": "操作已在游戏中完成，但确认连接已丢失；请重启游戏后重新连接。",
     "hades.error.stopTimeout": "等待游戏暂停超时，请重新连接。",
     "hades.error.resumeFailed": "游戏尚未恢复运行，请保持连接并重试断开。",
     "hades.error.restoreFailed": "后台暂停设置尚未恢复，请保持连接并重试断开。",

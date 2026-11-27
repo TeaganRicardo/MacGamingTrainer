@@ -46,6 +46,15 @@ assert terms["target"]["steamBuild"] == hades2["steamBuildID"]
 hades_catalog = json.loads((game_root / "hades/catalog.json").read_text(encoding="utf-8"))
 assert hades_catalog["steamBuildID"] == hades["steamBuildID"]
 
+hades_header = game_root / "hades" / hades["nativeUUIDHeader"]
+assert hades_header.read_text(encoding="utf-8") == native_header(
+    hades, game_name=json.loads((game_root / "hades/module.json").read_text())["displayName"]
+)
+hades_mailbox_c = (game_root / "hades/native/CommandMailbox.c").read_text(encoding="utf-8")
+assert '#include "SupportedBuildIdentity.h"' in hades_mailbox_c
+assert "MGT_SUPPORTED_GAME_UUID_BYTES" in hades_mailbox_c
+assert "0xba,0x8c,0xe5,0x10" not in hades_mailbox_c
+
 header = game_root / "hades2" / hades2["nativeUUIDHeader"]
 assert header.read_text(encoding="utf-8") == native_header(
     hades2, game_name=json.loads((game_root / "hades2/module.json").read_text())["displayName"]

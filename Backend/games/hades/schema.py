@@ -41,6 +41,9 @@ WORLD_COMMANDS = frozenset(('gain_resource', 'spawn_reward', 'generate_fishing',
                             'generate_chaos_gate', 'generate_chamber_object',
                             'apply_world_exit', 'cancel_world_exit',
                             'apply_world_occurrence', 'cancel_world_occurrence'))
+DEFERRED_WORLD_COMMANDS = frozenset(('gain_resource', 'spawn_reward', 'generate_fishing',
+                                     'generate_chaos_gate', 'generate_chamber_object',
+                                     'apply_world_exit', 'cancel_world_exit'))
 DEFERRED_TRAIT_COMMANDS = frozenset(('add_trait', 'update_trait', 'remove_trait',
                                      'set_trait_uses', 'expire_trait', 'refresh_trait',
                                      'add_chaos_pair'))

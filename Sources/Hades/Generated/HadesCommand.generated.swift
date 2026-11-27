@@ -59,6 +59,13 @@ enum HadesCommand: String {
         case .lockResource: return 55.0
         case .lockRerolls: return 55.0
         case .setValue: return 55.0
+        case .gainResource: return 60.0
+        case .spawnReward: return 60.0
+        case .generateFishing: return 60.0
+        case .generateChaosGate: return 60.0
+        case .generateChamberObject: return 60.0
+        case .applyWorldExit: return 60.0
+        case .cancelWorldExit: return 60.0
         case .addTrait: return 60.0
         case .updateTrait: return 60.0
         case .removeTrait: return 60.0

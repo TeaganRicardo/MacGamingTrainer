@@ -107,13 +107,41 @@ _COMMAND_SPECS = (
         inner=MUTATION_WITH_ROLLBACK_BUDGET_SECONDS,
     ),
     _spec("set_resource"),
-    _spec("gain_resource"),
-    _spec("spawn_reward"),
-    _spec("generate_fishing"),
-    _spec("generate_chaos_gate"),
-    _spec("generate_chamber_object"),
-    _spec("apply_world_exit"),
-    _spec("cancel_world_exit"),
+    _spec(
+        "gain_resource",
+        timeout=DEFERRED_TRAIT_COMMAND_TIMEOUT_SECONDS,
+        inner=SIDECAR_DEFERRED_TRAIT_TIMEOUT_SECONDS,
+    ),
+    _spec(
+        "spawn_reward",
+        timeout=DEFERRED_TRAIT_COMMAND_TIMEOUT_SECONDS,
+        inner=SIDECAR_DEFERRED_TRAIT_TIMEOUT_SECONDS,
+    ),
+    _spec(
+        "generate_fishing",
+        timeout=DEFERRED_TRAIT_COMMAND_TIMEOUT_SECONDS,
+        inner=SIDECAR_DEFERRED_TRAIT_TIMEOUT_SECONDS,
+    ),
+    _spec(
+        "generate_chaos_gate",
+        timeout=DEFERRED_TRAIT_COMMAND_TIMEOUT_SECONDS,
+        inner=SIDECAR_DEFERRED_TRAIT_TIMEOUT_SECONDS,
+    ),
+    _spec(
+        "generate_chamber_object",
+        timeout=DEFERRED_TRAIT_COMMAND_TIMEOUT_SECONDS,
+        inner=SIDECAR_DEFERRED_TRAIT_TIMEOUT_SECONDS,
+    ),
+    _spec(
+        "apply_world_exit",
+        timeout=DEFERRED_TRAIT_COMMAND_TIMEOUT_SECONDS,
+        inner=SIDECAR_DEFERRED_TRAIT_TIMEOUT_SECONDS,
+    ),
+    _spec(
+        "cancel_world_exit",
+        timeout=DEFERRED_TRAIT_COMMAND_TIMEOUT_SECONDS,
+        inner=SIDECAR_DEFERRED_TRAIT_TIMEOUT_SECONDS,
+    ),
     _spec("apply_world_occurrence"),
     _spec("cancel_world_occurrence"),
     _spec(
