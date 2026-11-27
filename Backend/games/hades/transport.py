@@ -28,7 +28,7 @@ def failure(code, key, detail=None):
 
 class HadesLuaTransport:
     def __init__(self):
-        self.mailbox_mode = os.environ.get('MGT_HADES_TRANSPORT', 'lldb')
+        self.mailbox_mode = os.environ.get('MGT_HADES_TRANSPORT', 'mailbox')
         if self.mailbox_mode not in ('mailbox', 'lldb'):
             raise ValueError('MGT_HADES_TRANSPORT must be mailbox or lldb')
         self.manifest = json.loads(Path(__file__).with_name('symbols.json').read_text())

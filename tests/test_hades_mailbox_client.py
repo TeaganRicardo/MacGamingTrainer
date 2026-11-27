@@ -221,7 +221,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-mailbox-client-") as temporar
         assert transport.tainted and transport._mailbox.tainted
         assert transport._mailbox.ack_calls == 0, f"{bad_receipt!r} ACKed before validation"
 
-    # Default MGT_HADES_TRANSPORT stays 'lldb' until real-game A/B validation passes
+    # Default MGT_HADES_TRANSPORT uses 'mailbox', with explicit 'lldb' fallback retained
     fake_debugger = types.SimpleNamespace(
         SetAsync=lambda *a: None,
         GetCommandInterpreter=lambda: types.SimpleNamespace(
@@ -239,10 +239,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-mailbox-client-") as temporar
     with patch.dict(os.environ, {}, clear=False):
         os.environ.pop("MGT_HADES_TRANSPORT", None)
         with patch.object(t_mod, "lldb", fake_lldb_init):
-            assert t_mod.HadesLuaTransport().mailbox_mode == "lldb"
-    with patch.dict(os.environ, {"MGT_HADES_TRANSPORT": "mailbox"}):
-        with patch.object(t_mod, "lldb", fake_lldb_init):
             assert t_mod.HadesLuaTransport().mailbox_mode == "mailbox"
+    with patch.dict(os.environ, {"MGT_HADES_TRANSPORT": "lldb"}):
+        with patch.object(t_mod, "lldb", fake_lldb_init):
+            assert t_mod.HadesLuaTransport().mailbox_mode == "lldb"
 
     # Detach with _real_attached_pid=None must NOT call os.kill (safe for fake PIDs in unit tests)
     transport._tainted_pid = None
