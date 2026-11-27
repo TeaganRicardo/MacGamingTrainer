@@ -10077,6 +10077,17 @@ if __MacGamingTrainerV1 == nil then
       if not snapshot.existed and next(collection) == nil then source[field] = nil end
     end
 
+    local function refreshUsePrompt(target)
+      if type(RefreshUseButton) ~= "function" or type(target) ~= "table" or target.ObjectId == nil then
+        return
+      end
+      if type(thread) == "function" then
+        thread(RefreshUseButton, target.ObjectId, target)
+      else
+        RefreshUseButton(target.ObjectId, target)
+      end
+    end
+
     local function refreshCageSlotPreview(door, slotIndex)
       local cageRewards = doorCageRewards(door)
       local entry = cageRewards and cageRewards[slotIndex] or nil
@@ -10090,7 +10101,7 @@ if __MacGamingTrainerV1 == nil then
         }
         CreateDoorRewardPreview(door, entry.RewardType, entry.ForceLootName, slotIndex, args)
       end
-      if type(RefreshUseButton) == "function" then RefreshUseButton(door.ObjectId, door) end
+      refreshUsePrompt(door)
     end
 
     local function setExtraCagePreviewAlpha(door, alpha)
@@ -10131,7 +10142,7 @@ if __MacGamingTrainerV1 == nil then
           CreateDoorRewardPreview(wheel, wheel.ChosenRewardType, wheel.ForceLootName)
         end
       end
-      if type(RefreshUseButton) == "function" then RefreshUseButton(wheel.ObjectId, wheel) end
+      refreshUsePrompt(wheel)
     end
 
     local function routeKind(name)
@@ -11358,7 +11369,7 @@ if __MacGamingTrainerV1 == nil then
       restoreField(door, "CanBeRerolled", lease.snapshot.door.CanBeRerolled)
       restoreDoorMap(source, "OfferedRewards", door.ObjectId, lease.snapshot.offered)
       restoreDoorMap(source, "ExitDoorRooms", door.ObjectId, lease.snapshot.exitRoom)
-      if type(RefreshUseButton) == "function" then RefreshUseButton(door.ObjectId, door) end
+      refreshUsePrompt(door)
       -- Explicit Trainer Cancel/unused-sibling cleanup restores the native
       -- snapshot; it is not an external reroll of this physical exit.
       local observed = doorObservations[door]
@@ -11410,7 +11421,6 @@ if __MacGamingTrainerV1 == nil then
         restoreField(door, "AllowReroll", lease.snapshot.door.AllowReroll)
         restoreField(door, "CanBeRerolled", lease.snapshot.door.CanBeRerolled)
       end
-      if type(RefreshUseButton) == "function" then RefreshUseButton(door.ObjectId, door) end
       local slotObservations = cageObservations[door]
       local observed = type(slotObservations) == "table" and slotObservations[slotIndex] or nil
       local physicalDoor = physicalTokenFor(door)

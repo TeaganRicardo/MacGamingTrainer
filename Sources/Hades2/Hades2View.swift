@@ -1341,7 +1341,10 @@ struct Hades2TrainerView: View {
                 arguments: [String(exit.doorOrdinal ?? exit.ordinal), String(slot)]
             )
         } else {
-            prefix = text("hades2.worldActions.exitNumber", arguments: [String(exit.ordinal)])
+            prefix = text(
+                "hades2.worldActions.exitNumber",
+                arguments: [String(exit.doorOrdinal ?? exit.ordinal)]
+            )
         }
         var parts = [prefix]
         if !exit.roomKind.isEmpty {

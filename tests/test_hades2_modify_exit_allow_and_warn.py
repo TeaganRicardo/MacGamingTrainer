@@ -478,6 +478,84 @@ MapState.ShipWheels = {}
 IsUseable, IsAlive = prevIsUseable, prevIsAlive
 CreateDoorRewardPreview = prevPreviewFn
 
+-- Yielding RefreshUseButton calls must run inside `thread(...)` so apply/cancel
+-- on Fields CageRewards and Thessaly ShipWheels do not yield across dispatch.
+local prevRefreshUseButton, prevThread = RefreshUseButton, thread
+local refreshedTargets = {}
+RefreshUseButton = function(id, target)
+  coroutine.yield(0)
+  refreshedTargets[#refreshedTargets + 1] = { id = id, target = target }
+end
+thread = function(fn, ...)
+  local co = coroutine.create(fn)
+  local ok, err = coroutine.resume(co, ...)
+  assert(ok, err)
+  if coroutine.status(co) == "suspended" then
+    local ok2, err2 = coroutine.resume(co)
+    assert(ok2, err2)
+  end
+end
+
+setRoomSet("H")
+local yieldDoor = {
+  ObjectId = 11,
+  ChooseRoomArgs = {},
+  ReadyToUse = true,
+  RewardPreviewIconIds = {},
+  RewardPreviewBackingIds = {},
+  Room = {
+    Name = "H_Combat01",
+    RoomSetName = "H",
+    NoReward = true,
+    RewardStoreName = "RunProgress",
+    CageRewards = {
+      { RewardType = "MaxHealthDrop", ForceLootName = nil },
+    },
+  },
+}
+MapState.OfferedExitDoors = { [11] = yieldDoor }
+local yieldCageRow = M.dispatch("status", { includeCatalogs = true }).worldActions.exits[1]
+local yieldApplied = M.dispatch("apply_world_exit", {
+  doorToken = yieldCageRow.doorToken, room = "current", reward = "ZeusUpgrade",
+  requestId = "h-yield-apply", includeCatalogs = true,
+})
+assert(#refreshedTargets >= 1 and refreshedTargets[#refreshedTargets].id == yieldDoor.ObjectId,
+  "yielding RefreshUseButton did not refresh cage door via thread")
+M.dispatch("cancel_world_exit", {
+  doorToken = yieldApplied.worldActions.exits[1].doorToken,
+  leaseToken = yieldApplied.worldActions.exits[1].activeLease.leaseToken,
+  requestId = "h-yield-cancel", includeCatalogs = true,
+})
+
+setRoomSet("O")
+CurrentRun.CurrentRoom.NoReward = true
+MapState.OfferedExitDoors = {}
+local yieldWheel = {
+  ObjectId = 503, Name = "ShipsSteeringWheelForward", ReadyToUse = true,
+  Room = CurrentRun.CurrentRoom, RewardStoreName = "RunProgress",
+  ChosenRewardType = "MaxHealthDrop", ForceLootName = nil,
+}
+MapState.ShipWheels = { [503] = yieldWheel }
+local prevYieldUseable, prevYieldAlive = IsUseable, IsAlive
+IsUseable = function(args) return MapState.ShipWheels and MapState.ShipWheels[args.Id] and MapState.ShipWheels[args.Id].ReadyToUse == true end
+IsAlive = function(args) return MapState.ShipWheels and MapState.ShipWheels[args.Id] ~= nil end
+local yieldWheelRow = M.dispatch("status", { includeCatalogs = true }).worldActions.exits[1]
+assert(yieldWheelRow.wheelSide == "forward")
+local yieldWheelApplied = M.dispatch("apply_world_exit", {
+  doorToken = yieldWheelRow.doorToken, room = "current", reward = "ApolloUpgrade",
+  requestId = "o-yield-apply", includeCatalogs = true,
+})
+assert(refreshedTargets[#refreshedTargets].id == yieldWheel.ObjectId,
+  "yielding RefreshUseButton did not refresh ship wheel via thread")
+M.dispatch("cancel_world_exit", {
+  doorToken = yieldWheelApplied.worldActions.exits[1].doorToken,
+  leaseToken = yieldWheelApplied.worldActions.exits[1].activeLease.leaseToken,
+  requestId = "o-yield-cancel", includeCatalogs = true,
+})
+MapState.ShipWheels = {}
+IsUseable, IsAlive = prevYieldUseable, prevYieldAlive
+RefreshUseButton, thread = prevRefreshUseButton, prevThread
+
 -- 9. Unknown outcome: a native failure after the edit began is never
 -- replayed, and the same request cannot run again.
 setRoomSet("F")
