@@ -335,10 +335,15 @@ class PayloadCapture:
         self.sizes.append(len(source.encode('utf-8')))
         assert self.sizes[-1] <= module.LUA_SOURCE_LIMIT_BYTES, 'assembled resident request exceeds transport capacity'
         result = {'heroId': 'a' * 32 + ':1:2:40000', 'heroReady': True}
-        submitted = re.search(r'return runtime\.json\(runtime\.submit_trait_command\("([0-9a-f]{32})",', source)
+        submitted = re.search(
+            r'return runtime\.json\(runtime\.(?:submit_trait_command|submit_world_command)\("([0-9a-f]{32})",',
+            source,
+        )
         if submitted:
             return {'id': submitted.group(1), 'state': 'complete', 'mutationStarted': True, 'result': result}
-        return result
+        receipt = re.search(r'\\034id\\034:\\034([0-9a-f]{32})\\034,\\034method\\034:\\034([A-Za-z0-9_]+)\\034', source)
+        assert receipt, source[-200:]
+        return {'__mgtReceipt': {'id': receipt.group(1), 'method': receipt.group(2)}, 'result': result}
 
 
 # Exercise the actual request builder, including its resident, world registry,

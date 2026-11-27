@@ -10,7 +10,26 @@ from .operation_budgets import (
     SIDECAR_DEFERRED_TRAIT_TIMEOUT_SECONDS,
 )
 from .recovery import process_identity
-from .schema import DEFERRED_TRAIT_COMMANDS, MUTATING_COMMANDS
+from .schema import DEFERRED_TRAIT_COMMANDS, DEFERRED_WORLD_COMMANDS, MUTATING_COMMANDS
+
+_KNOWN_PRE_MUTATION_ERROR_CODES = frozenset((
+    'not_connected',
+    'debugger_lost',
+    'attach_denied',
+    'debugger_configuration',
+    'incompatible',
+    'invalid_value',
+    'stale_target',
+    'stale_room',
+    'stale_door',
+    'runtime_not_ready',
+    'stop_timeout',
+    'stop_failed',
+    'unexpected_stop',
+    'memory_error',
+    'detach_failed',
+    'lua_error',
+))
 
 
 class HadesRuntimeClient:
@@ -18,7 +37,7 @@ class HadesRuntimeClient:
     def _reply_timeout(method):
         if method == 'connect':
             return SIDECAR_CONNECT_TIMEOUT_SECONDS
-        if method in DEFERRED_TRAIT_COMMANDS:
+        if method in DEFERRED_TRAIT_COMMANDS or method in DEFERRED_WORLD_COMMANDS:
             return SIDECAR_DEFERRED_TRAIT_TIMEOUT_SECONDS
         return SIDECAR_DEFAULT_TIMEOUT_SECONDS
     def __init__(self, sidecar=None, *, recovery, identity=process_identity):
@@ -76,23 +95,66 @@ class HadesRuntimeClient:
             raise AdapterError('outcome_unknown' if error.outcome_unknown else 'debugger_lost',
                                'hades.error.' + key, diagnostic=str(error)) from error
         self._require_current_lifetime(lifetime)
+        worker_state = response.get('state')
+        if worker_state is not None and not isinstance(worker_state, dict):
+            self.sidecar.close()
+            self.connected = False
+            self.uncertain_pid = self.pid
+            raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
         error = response.get('error')
-        if error:
-            if error['code'] in ('outcome_unknown', 'restart_required'):
+        if error is not None:
+            if (not isinstance(error, dict)
+                    or not isinstance(error.get('code'), str)
+                    or not isinstance(error.get('presentation'), str)):
+                self.sidecar.close()
+                self.connected = False
+                self.uncertain_pid = self.pid
+                raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+            state_dict = worker_state or {}
+            code = error['code']
+            known_safe = (
+                code in _KNOWN_PRE_MUTATION_ERROR_CODES
+                and state_dict.get('tainted') is not True
+                and state_dict.get('ackPending') is not True
+            )
+            if not known_safe:
                 self.uncertain_pid = self.pid
                 self.connected = False
+                if code == 'debugger_internal':
+                    self.sidecar.close()
+                    raise AdapterError(
+                        'outcome_unknown',
+                        'hades.error.outcomeUnknown',
+                        diagnostic=error.get('diagnostic'),
+                    )
             else:
-                if error['code'] in ('not_connected', 'debugger_lost', 'detach_failed'):
+                if code in ('not_connected', 'debugger_lost', 'detach_failed'):
                     self.connected = False
                 self.recovery.complete(pending)
-            raise AdapterError(error['code'], error['presentation'],
-                               diagnostic=error.get('diagnostic'), arguments=error.get('arguments', []))
+            raise AdapterError(
+                code,
+                error['presentation'],
+                diagnostic=error.get('diagnostic'),
+                arguments=error.get('arguments', []),
+            )
         result = response.get('result')
         if not isinstance(result, dict) or type(result.get('connected')) is not bool:
             self.sidecar.close()
             self.connected = False
             self.uncertain_pid = self.pid
             raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+        ack_pending = isinstance(worker_state, dict) and worker_state.get('ackPending') is True
+        if ack_pending:
+            ack_seq = worker_state.get('ackSequence')
+            ack_id = worker_state.get('ackId')
+            ack_method = worker_state.get('ackMethod')
+            if (type(ack_seq) is not int or ack_seq <= 0
+                    or not isinstance(ack_id, str) or not ack_id
+                    or ack_method != method):
+                self.sidecar.close()
+                self.connected = False
+                self.uncertain_pid = self.pid
+                raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
         if method in ('time_warp.current_speed', 'time_warp.set_speed'):
             speed = result.get('gameSpeed')
             if type(speed) not in (int, float) or not 0 <= speed <= 10:
@@ -100,7 +162,87 @@ class HadesRuntimeClient:
                 self.connected = False
                 self.uncertain_pid = self.pid
                 raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
-        self.recovery.complete(pending)
+        if ack_pending:
+            receipt = {
+                'method': method,
+                'ackId': worker_state['ackId'],
+                'ackSequence': worker_state['ackSequence'],
+                'connected': result['connected'],
+            }
+            target = result.get('target')
+            if isinstance(target, dict) and isinstance(target.get('heroId'), str):
+                receipt['heroId'] = target['heroId']
+            if isinstance(params, dict) and isinstance(params.get('requestId'), str):
+                receipt['requestId'] = params['requestId']
+            try:
+                self.recovery.require_current(pending, self.pid, self.process_identity)
+                self.recovery.confirm(pending, receipt)
+            except AdapterError as error:
+                self.sidecar.close()
+                self.connected = False
+                self.uncertain_pid = self.pid
+                if error.code == 'debugger_lost':
+                    raise
+                raise AdapterError(
+                    'outcome_unknown',
+                    'hades.error.outcomeUnknown',
+                    diagnostic=error.diagnostic or str(error),
+                ) from error
+            except Exception as error:
+                self.sidecar.close()
+                self.connected = False
+                self.uncertain_pid = self.pid
+                raise AdapterError(
+                    'outcome_unknown',
+                    'hades.error.outcomeUnknown',
+                    diagnostic=str(error),
+                ) from error
+            ack_params = {
+                'sequence': worker_state['ackSequence'],
+                'ackId': worker_state['ackId'],
+                'method': method,
+            }
+            try:
+                ack_response = sidecar.request(
+                    'acknowledge_result',
+                    ack_params,
+                    allow_start=False,
+                    outcome_unknown_on_loss=False,
+                )
+            except Exception as error:
+                self.sidecar.close()
+                self.connected = False
+                self.uncertain_pid = self.pid
+                raise AdapterError(
+                    'restart_required',
+                    'hades.error.commandResultConnectionLost',
+                    diagnostic=getattr(error, 'detail', None) or str(error),
+                ) from error
+            if not isinstance(ack_response, dict) or ack_response.get('error') is not None:
+                self.sidecar.close()
+                self.connected = False
+                self.uncertain_pid = self.pid
+                err = ack_response.get('error') if isinstance(ack_response, dict) else None
+                detail = err.get('diagnostic') if isinstance(err, dict) else repr(ack_response)
+                raise AdapterError(
+                    'restart_required',
+                    'hades.error.commandResultConnectionLost',
+                    diagnostic=detail,
+                )
+            ack_result = ack_response.get('result')
+            if not isinstance(ack_result, dict) or ack_result.get('acknowledged') is not True:
+                self.sidecar.close()
+                self.connected = False
+                self.uncertain_pid = self.pid
+                raise AdapterError(
+                    'restart_required',
+                    'hades.error.commandResultConnectionLost',
+                    diagnostic=f'Malformed mailbox acknowledgement reply: {ack_result!r}',
+                )
+            self.recovery.require_current(pending, self.pid, self.process_identity)
+            self.recovery.complete(pending)
+        else:
+            self.recovery.complete(pending)
         self.connected = result['connected']
         return result
 

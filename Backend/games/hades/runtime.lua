@@ -1034,9 +1034,12 @@ local function addTraits(unit, name, rarity, level, preserved)
   AddTraitToHero({ TraitData = processed })
   for _ = 2, level do AddTraitToHero({ TraitName = name }) end
 end
-local function beginTraitMutation()
-  local command = runtime.traitCommand
+local function beginDeferredMutation(slot)
+  local command = runtime[slot]
   if command and command.executionThread == coroutine.running() then command.mutationStarted = true end
+end
+local function beginTraitMutation()
+  beginDeferredMutation("traitCommand")
 end
 local function closeTraitMenu()
   local menu = type(ScreenAnchors) == "table" and ScreenAnchors.TraitTrayScreen
@@ -1275,45 +1278,35 @@ function runtime.add_chaos_pair(blessingName, curseName, rarity, encounters)
   mount(unit, false)
   return runtime.status()
 end
-function runtime.trait_command_result(id)
-  local command = runtime.traitCommand
+local function deferredCommandResult(slot, id)
+  local command = runtime[slot]
   assert(command and command.id == id, "hades.error.staleTarget")
   return { id = id, state = command.state, mutationStarted = command.mutationStarted,
     result = command.result, error = command.error }
 end
-function runtime.cancel_trait_command(id)
-  local command = runtime.traitCommand
+local function cancelDeferredCommand(slot, id, timeoutMessage)
+  local command = runtime[slot]
   assert(command and command.id == id, "hades.error.staleTarget")
   if command.state == "pending" then
     command.state = "cancelled"
   elseif command.state == "running" then
     command.state = "unknown"
-    command.error = "native trait command did not complete before its deadline"
+    command.error = timeoutMessage
     runtime.propertyDepth = command.propertyDepth
   end
-  return runtime.trait_command_result(id)
+  return deferredCommandResult(slot, id)
 end
-function runtime.submit_trait_command(id, name, arguments)
-  local previous = runtime.traitCommand
-  if previous and previous.id == id then return runtime.trait_command_result(id) end
+local function submitDeferredCommand(slot, id, name, arguments, options)
+  local previous = runtime[slot]
+  if previous and previous.id == id then return deferredCommandResult(slot, id) end
   assert(not previous or (previous.state ~= "unknown"
     and not (previous.state == "error" and previous.mutationStarted)), "hades.error.restartRequired")
   assert(not previous or (previous.state ~= "pending" and previous.state ~= "running"),
     "hades.error.runtimeNotReady")
-  assert(name == "add_trait" or name == "update_trait" or name == "remove_trait"
-    or name == "set_trait_uses" or name == "expire_trait" or name == "refresh_trait"
-    or name == "add_chaos_pair", "hades.error.invalidValue")
+  assert(options.allowed(name), "hades.error.invalidValue")
   assert(type(_threads) == "table", "hades.error.runtimeNotReady")
-  local unit = requireHero()
-  local command = { id = id, state = "pending", mutationStarted = false,
-    run = CurrentRun, unit = unit, objectId = unit.ObjectId, room = CurrentRun.CurrentRoom,
-    menu = type(ScreenAnchors) == "table" and ScreenAnchors.TraitTrayScreen or nil }
-  runtime.traitCommand = command
-  local function ownsContext()
-    return CurrentRun == command.run and hero() == command.unit
-      and command.unit.ObjectId == command.objectId and CurrentRun.CurrentRoom == command.room
-      and (type(ScreenAnchors) == "table" and ScreenAnchors.TraitTrayScreen or nil) == command.menu
-  end
+  local command = options.captureContext({ id = id, state = "pending", mutationStarted = false })
+  runtime[slot] = command
   local function failOwner()
     command.state = command.state == "running" and "unknown" or "error"
     command.error = "hades.error.staleTarget"
@@ -1321,7 +1314,7 @@ function runtime.submit_trait_command(id, name, arguments)
   end
   local scheduled = coroutine.create(function()
     if command.state ~= "pending" then return end
-    if not ownsContext() then failOwner(); return end
+    if not options.ownsContext(command) then failOwner(); return end
     command.state = "running"
     command.propertyDepth = runtime.propertyDepth
     command.executionThread = coroutine.create(function()
@@ -1336,7 +1329,7 @@ function runtime.submit_trait_command(id, name, arguments)
       end
     end)
     while command.state == "running" do
-      if not ownsContext() then failOwner(); return end
+      if not options.ownsContext(command) then failOwner(); return end
       local ok, waiting = coroutine.resume(command.executionThread)
       if not ok then
         command.error, command.state = tostring(waiting), "error"
@@ -1350,7 +1343,64 @@ function runtime.submit_trait_command(id, name, arguments)
   -- Main.lua update owns the first resume. Calling native thread() here would
   -- run the first native side effects inside the debugger expression again.
   table.insert(_threads, { thread = scheduled, resumeTime = -1 })
-  return runtime.trait_command_result(id)
+  return deferredCommandResult(slot, id)
+end
+function runtime.trait_command_result(id)
+  return deferredCommandResult("traitCommand", id)
+end
+function runtime.cancel_trait_command(id)
+  return cancelDeferredCommand("traitCommand", id, "native trait command did not complete before its deadline")
+end
+function runtime.submit_trait_command(id, name, arguments)
+  return submitDeferredCommand("traitCommand", id, name, arguments, {
+    allowed = function(commandName)
+      return commandName == "add_trait" or commandName == "update_trait" or commandName == "remove_trait"
+        or commandName == "set_trait_uses" or commandName == "expire_trait" or commandName == "refresh_trait"
+        or commandName == "add_chaos_pair"
+    end,
+    captureContext = function(command)
+      local unit = requireHero()
+      command.run = CurrentRun
+      command.unit = unit
+      command.objectId = unit.ObjectId
+      command.room = CurrentRun.CurrentRoom
+      command.menu = type(ScreenAnchors) == "table" and ScreenAnchors.TraitTrayScreen or nil
+      return command
+    end,
+    ownsContext = function(command)
+      return CurrentRun == command.run and hero() == command.unit
+        and command.unit.ObjectId == command.objectId and CurrentRun.CurrentRoom == command.room
+        and (type(ScreenAnchors) == "table" and ScreenAnchors.TraitTrayScreen or nil) == command.menu
+    end,
+  })
+end
+function runtime.world_command_result(id)
+  return deferredCommandResult("worldCommand", id)
+end
+function runtime.cancel_world_command(id)
+  return cancelDeferredCommand("worldCommand", id, "native world command did not complete before its deadline")
+end
+function runtime.submit_world_command(id, name, arguments)
+  return submitDeferredCommand("worldCommand", id, name, arguments, {
+    allowed = function(commandName)
+      return commandName == "gain_resource" or commandName == "spawn_reward"
+        or commandName == "generate_fishing" or commandName == "generate_chaos_gate"
+        or commandName == "generate_chamber_object" or commandName == "apply_world_exit"
+        or commandName == "cancel_world_exit"
+    end,
+    captureContext = function(command)
+      local unit = requireHero()
+      command.run = CurrentRun
+      command.unit = unit
+      command.objectId = unit.ObjectId
+      command.room = CurrentRun.CurrentRoom
+      return command
+    end,
+    ownsContext = function(command)
+      return CurrentRun == command.run and hero() == command.unit
+        and command.unit.ObjectId == command.objectId and CurrentRun.CurrentRoom == command.room
+    end,
+  })
 end
 world = (function()
   local edits = setmetatable({}, { __mode = "k" })
@@ -1897,6 +1947,9 @@ world = (function()
     end
     return proxy
   end
+  local function beginWorldMutation()
+    beginDeferredMutation("worldCommand")
+  end
   local function reserveRoute(door, route, leaseToken)
     assert(activeEdit(door) == nil, "hades.error.staleDoor")
     local routes = routeRooms(currentRoom(), door)
@@ -1904,6 +1957,7 @@ world = (function()
     assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
     -- Only present the native generic category icon; candidate selection,
     -- room generation and RNG are reserved for authorized native departure.
+    beginWorldMutation()
     drawDoorPreview(door, routePreviewDescriptor(door, route))
     edits[door] = {
       kind = "route", route = route, target = route, leaseToken = leaseToken,
@@ -1972,6 +2026,7 @@ world = (function()
     prepared.Encounter = nil
     prepared.OriginalChosenRewardType = nil; prepared.OriginalForceLootName = nil
     SetupRoomReward(CurrentRun, prepared, nil, { IgnoreForceLootName = true })
+    beginWorldMutation()
     local edit = snapshotReward(door, rewardId, leaseToken)
     for _, field in ipairs(rewardFields) do room[field] = prepared[field] end
     edit.appliedSignature = rewardSignature(room)
@@ -2243,11 +2298,13 @@ world = (function()
     assert(finite(params.amount) and params.amount >= 1 and params.amount <= 1000000
       and params.amount == math.floor(params.amount), "hades.error.invalidValue")
     if params.resource == "Money" then
+      beginWorldMutation()
       AddMoney(params.amount, trainerFlag)
     else
       local allowed = false
       for _, name in ipairs(resourceNames) do if name == params.resource then allowed = true end end
       assert(allowed, "hades.error.invalidValue")
+      beginWorldMutation()
       AddResource(params.resource, params.amount, trainerFlag)
     end
     return runtime.status()
@@ -2258,6 +2315,7 @@ world = (function()
     assert(rewardSourceEligible(data), "hades.error.worldUnavailable")
     local unit = requireHero()
     if data.kind == "loot" then
+      beginWorldMutation()
       if params.reward == "WeaponUpgrade" then
         CreateWeaponLoot({ SpawnPoint = unit.ObjectId, OffsetX = 100 })
       elseif params.reward == "StackUpgrade" then
@@ -2267,6 +2325,7 @@ world = (function()
       end
     else
       assert(ConsumableData[params.reward], "hades.error.worldUnavailable")
+      beginWorldMutation()
       local id = SpawnObstacle({ Name = params.reward, DestinationId = unit.ObjectId, Group = "Standing", OffsetX = 100 })
       local reward = CreateConsumableItem(id, params.reward, 0)
       ApplyConsumableItemResourceMultiplier(CurrentRun.CurrentRoom, reward)
@@ -2279,6 +2338,7 @@ world = (function()
     local room = requireRoom(params)
     assert(canFish(room), "hades.error.worldUnavailable")
     local points = GetInactiveIdsByType({ Name = "FishingPoint" })
+    beginWorldMutation()
     room.ForceFishing = true
     UseHeroTraitsWithValue("ForceFishingPoint", true)
     room.FishingPointId = GetRandomValue(points)
@@ -2294,6 +2354,7 @@ world = (function()
     local data = ChooseNextRoomData(CurrentRun, { RoomDataSet = RoomSetData.Secrets })
     assert(data, "hades.error.worldUnavailable")
     local point = GetRandomValue(points)
+    beginWorldMutation()
     local door = DeepCopyTable(ObstacleData.SecretDoor)
     door.ObjectId = SpawnObstacle({ Name = "SecretDoor", Group = "FX_Terrain", DestinationId = point, AttachedTable = door })
     SetupObstacle(door)
@@ -2316,6 +2377,7 @@ world = (function()
     local owner = objectOwners[params.object]
     assert(owner and canGenerate(room, params.object), "hades.error.worldUnavailable")
     local previous = room[owner.chance]
+    beginWorldMutation()
     room[owner.chance] = true
     spawnContext = { room = room, query = owner.query }
     local ok, result = pcall(HandleSecretSpawns, CurrentRun)
@@ -2356,6 +2418,7 @@ world = (function()
     local door = requireDoor(params)
     local edit = activeEdit(door)
     assert(edit and edit.leaseToken == params.leaseToken, "hades.error.staleDoor")
+    beginWorldMutation()
     if edit.kind == "reward" then
       restoreReward(door, edit)
     elseif edit.kind == "route" then

@@ -51,8 +51,19 @@
     "steamBuildID": "10929685",
     "uuid": "BA8CE510-EB7F-3E65-96B6-574608EA4550",
     "originalExecutableSHA256": "f69aab08ba6d12da66252a198d3c6c6606fc9de2e1b277458fae442526a75279",
-    "referenceDirectory": "docs/reference/hades"
+    "referenceDirectory": "docs/reference/hades",
+    "nativeUUIDHeader": "native/SupportedBuildIdentity.h"
   },
+  "nativeLibraries": [
+    {
+      "source": "native/CommandMailbox.c",
+      "filename": "libMGTHadesCommandMailbox.dylib",
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ]
+    }
+  ],
   "appResources": [
     {
       "source": "Sources/Hades/Presentation/Localization/hades.zh-CN.json",

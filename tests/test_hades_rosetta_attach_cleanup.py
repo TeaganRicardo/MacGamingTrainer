@@ -14,7 +14,7 @@ from games.hades.client import HadesRuntimeClient
 from games.hades.lldb_worker import HadesLLDBWorker
 from games.hades.preferences import HadesPreferenceStore
 from games.hades.recovery import HadesRecoveryJournal
-from games.hades.schema import DEFAULT_FEATURES, DEFERRED_TRAIT_COMMANDS
+from games.hades.schema import DEFAULT_FEATURES, DEFERRED_TRAIT_COMMANDS, DEFERRED_WORLD_COMMANDS
 from games.hades.time_warp_worker import HadesTimeWarpWorker
 
 fake_lldb = types.SimpleNamespace(
@@ -283,11 +283,15 @@ with tempfile.TemporaryDirectory(prefix='hades-timeouts-') as directory:
     client.set_game_speed(1.5)
     for trait_command in DEFERRED_TRAIT_COMMANDS:
         client.command(trait_command, {})
+    for world_command in DEFERRED_WORLD_COMMANDS:
+        client.command(world_command, {})
     assert sidecar.recorded == [
         ('connect', 90),
         ('time_warp.current_speed', 22),
         ('time_warp.set_speed', 22),
-    ] + [(command, 50) for command in DEFERRED_TRAIT_COMMANDS], sidecar.recorded
+    ] + [(command, 50) for command in DEFERRED_TRAIT_COMMANDS] + [
+        (command, 50) for command in DEFERRED_WORLD_COMMANDS
+    ], sidecar.recorded
 
 from games.hades.command_contract import command_budget_audit, command_metadata
 
@@ -297,7 +301,11 @@ assert 'request.command.timeout' in hades_module_swift
 metadata = {row['name']: row for row in command_metadata()}
 assert metadata['connect']['timeoutSeconds'] == 190.0 and 190 > 90 + 4 * 22
 assert metadata['load_profile']['timeoutSeconds'] == 120.0 and 120 > 5 * 22
-for command in ('add_trait', 'update_trait', 'remove_trait', 'set_trait_uses', 'expire_trait', 'refresh_trait', 'add_chaos_pair'):
+for command in (
+    'add_trait', 'update_trait', 'remove_trait', 'set_trait_uses', 'expire_trait', 'refresh_trait', 'add_chaos_pair',
+    'gain_resource', 'spawn_reward', 'generate_fishing', 'generate_chaos_gate',
+    'generate_chamber_object', 'apply_world_exit', 'cancel_world_exit',
+):
     assert metadata[command]['timeoutSeconds'] == 60.0 and 60 > 50, command
 assert set(('add_trait', 'update_trait', 'remove_trait', 'set_trait_uses', 'expire_trait', 'refresh_trait', 'add_chaos_pair')) == set(DEFERRED_TRAIT_COMMANDS)
 for command in ('set_feature', 'disable_all', 'lock_vital', 'lock_resource', 'lock_rerolls', 'set_value'):

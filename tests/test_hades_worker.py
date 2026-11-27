@@ -189,6 +189,60 @@ result = subprocess.run([lua, '-e', probe], capture_output=True, text=True)
 assert result.returncode == 0, result.stderr
 print('hades_worker_native_target_capture_and_lua_encoding_ok')
 
+# Fast-path invocation skips repeating the >64 KiB runtime bootstrap on subsequent calls
+# for the same process, and falls back to full bootstrap automatically after a Lua VM reset.
+class FastPathTransport(LuaStateTransport):
+    def __init__(self):
+        super().__init__()
+        self.sizes = []
+
+    def execute(self, source, *, mutating):
+        self.sizes.append(len(source.encode('utf-8')))
+        return super().execute(source, mutating=mutating)
+
+
+fast_transport = FastPathTransport()
+fast_worker = HadesLLDBWorker(fast_transport)
+fast_first = fast_worker.dispatch('status', {})
+fast_second = fast_worker.dispatch('status', {})
+assert fast_transport.sizes[0] > 64 * 1024, f'first call too small: {fast_transport.sizes[0]}'
+assert fast_transport.sizes[1] < 2048, f'fast path did not avoid full bootstrap: {fast_transport.sizes[1]}'
+assert fast_second['target'] == fast_first['target']
+fast_transport.history.clear()
+fast_after_reset = fast_worker.dispatch('status', {})
+assert fast_after_reset['target'] != fast_first['target']
+assert max(fast_transport.sizes[-2:]) > 64 * 1024, 'Lua VM reset did not trigger full re-bootstrap'
+print('hades_worker_fast_path_and_reset_ok')
+
+# A deferred world command cancelled before starting (e.g. while PauseScreen is open)
+# raises runtime_not_ready cleanly without tainting transport.
+class PausedWorldTransport:
+    pid = 42
+    tainted = False
+
+    def execute(self, source, *, mutating):
+        if 'submit_world_command' in source or 'world_command_result' in source:
+            return {'id': 'wcmd', 'state': 'pending'}
+        if 'cancel_world_command' in source:
+            return {'id': 'wcmd', 'state': 'cancelled'}
+        raise AssertionError(f'unexpected source: {source}')
+
+
+paused_world_transport = PausedWorldTransport()
+with patch('games.hades.lldb_worker.PROCESS_CONTROL_TIMEOUT_SECONDS', 0.0), \
+        patch('games.hades.lldb_worker.time.sleep'):
+    try:
+        HadesLLDBWorker(paused_world_transport)._deferred_command(
+            'submit_world_command', 'wcmd',
+            result_cmd='world_command_result', cancel_cmd='cancel_world_command',
+        )
+    except AdapterError as error:
+        assert error.code == 'runtime_not_ready' and error.presentation == 'hades.error.runtimeNotReady'
+    else:
+        raise AssertionError('paused world command cancellation did not raise runtime_not_ready')
+assert not paused_world_transport.tainted
+print('hades_worker_deferred_world_pause_cancel_ok')
+
 
 class InterruptedReceiptTransport:
     tainted = False

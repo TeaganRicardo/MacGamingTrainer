@@ -135,7 +135,7 @@ assert (
 
 hades_timeouts = {row["name"]: float(row["timeoutSeconds"]) for row in hades_command_metadata()}
 assert hades_budgets.PROCESS_CONTROL_TIMEOUT_SECONDS == 3.0
-assert hades_budgets.EXPRESSION_TIMEOUT_MICROSECONDS == 2_000_000
+assert hades_budgets.EXPRESSION_TIMEOUT_MICROSECONDS == 8_000_000
 assert hades_time_warp.HadesSimulationTimeWarp.BOUNDED_TIMEOUT_SECONDS == hades_budgets.PROCESS_CONTROL_TIMEOUT_SECONDS
 assert hades_budgets.CONNECT_OPERATION_BUDGET_SECONDS == (
     hades_budgets.PROCESS_QUERY_TIMEOUT_SECONDS

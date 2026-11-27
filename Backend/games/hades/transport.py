@@ -1,11 +1,15 @@
-"""Exact-build x86_64 Hades Lua calls at the main-thread App::Update entry."""
+"""Exact-build x86_64 Hades Lua calls via shared-memory mailbox or LLDB fallback."""
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import time
 
 from core.adapter import AdapterError
+from .mailbox import HadesCommandMailbox, KNOWN_LUA_REFUSAL_KEYS
+from .native_mailbox import install_command_mailbox, prepare_command_mailbox
 from .operation_budgets import (
     EXPRESSION_TIMEOUT_MICROSECONDS,
     LLDB_MODULE_PATH_TIMEOUT_SECONDS,
@@ -24,6 +28,9 @@ def failure(code, key, detail=None):
 
 class HadesLuaTransport:
     def __init__(self):
+        self.mailbox_mode = os.environ.get('MGT_HADES_TRANSPORT', 'lldb')
+        if self.mailbox_mode not in ('mailbox', 'lldb'):
+            raise ValueError('MGT_HADES_TRANSPORT must be mailbox or lldb')
         self.manifest = json.loads(Path(__file__).with_name('symbols.json').read_text())
         self.supported_build = json.loads(Path(__file__).with_name('module.json').read_text())['supportedBuild']
         lldb.SBDebugger.Initialize()
@@ -45,6 +52,10 @@ class HadesLuaTransport:
         self.pid = None
         self.addresses = {}
         self.focus_original = None
+        self._mailbox = None
+        self.native_mailbox_library = None
+        self.last_mailbox_profile = {}
+        self._real_attached_pid = None
         self._tainted_pid = None
         self._unsafe_vm_pid = None
         self.tainted = False
@@ -53,15 +64,30 @@ class HadesLuaTransport:
 
     @property
     def tainted(self):
-        return self._tainted_pid is not None
+        mailbox = getattr(self, '_mailbox', None)
+        return self._tainted_pid is not None or (mailbox is not None and mailbox.tainted)
 
     @tainted.setter
     def tainted(self, value):
         self._tainted_pid = self.pid if value else None
+        mailbox = getattr(self, '_mailbox', None)
+        if value and mailbox is not None:
+            mailbox.poison()
 
     @property
     def vm_interrupted(self):
         return self.pid is not None and self._unsafe_vm_pid == self.pid
+
+    @property
+    def pending_acknowledgement_sequence(self):
+        mailbox = getattr(self, '_mailbox', None)
+        if mailbox is None:
+            return None
+        return getattr(mailbox, '_pending_sequence', None)
+
+    @property
+    def has_pending_acknowledgement(self):
+        return self.pending_acknowledgement_sequence is not None
 
     def _drain(self):
         event = lldb.SBEvent()
@@ -89,6 +115,7 @@ class HadesLuaTransport:
             self.process = None
             raise failure('attach_denied', 'attachDenied', str(error))
         self.pid = pid
+        self._real_attached_pid = pid
         try:
             image = self.target.GetModuleAtIndex(0)
             image_path = Path(str(image.GetFileSpec())).resolve()
@@ -107,6 +134,10 @@ class HadesLuaTransport:
                     if error.Fail() or observed != expected:
                         raise failure('incompatible', 'unsupportedBuild', 'Function prefix mismatch: ' + name)
                 self.addresses[name] = address
+            self.native_mailbox_library = (
+                prepare_command_mailbox(self, lldb)
+                if getattr(self, 'mailbox_mode', 'lldb') == 'mailbox' else None
+            )
             self.tainted = False
             self._resume(time.monotonic() + PROCESS_CONTROL_TIMEOUT_SECONDS)
         except Exception as exc:
@@ -240,7 +271,7 @@ class HadesLuaTransport:
             raise failure('restore_failed', 'restoreFailed', str(error))
         self.focus_original = None
 
-    def _boundary(self):
+    def _boundary(self, *, entry_address=None, touch_focus=True):
         if self.cleanup_pending:
             raise self._quarantined_error()
         # The initial stop precedes target breakpoint, focus mutation, or
@@ -251,14 +282,17 @@ class HadesLuaTransport:
         self._boundary_initial_stop_pending = False
         self._restore_focus()
         error = lldb.SBError()
-        focus = self.addresses['_ZN3sgg13ConfigOptions20RequireFocusToUpdateE']
-        self.focus_original = self.process.ReadMemory(focus, 1, error)
-        if error.Fail() or self.focus_original not in (b'\x00', b'\x01'):
-            self.focus_original = None
-            raise failure('incompatible', 'unsupportedBuild')
-        if self.process.WriteMemory(focus, b'\x00', error) != 1 or error.Fail():
-            raise failure('memory_error', 'debuggerCall', str(error))
-        breakpoint = self.target.BreakpointCreateByAddress(self.addresses['_ZN3sgg3App6UpdateEf'])
+        if touch_focus:
+            focus = self.addresses['_ZN3sgg13ConfigOptions20RequireFocusToUpdateE']
+            self.focus_original = self.process.ReadMemory(focus, 1, error)
+            if error.Fail() or self.focus_original not in (b'\x00', b'\x01'):
+                self.focus_original = None
+                raise failure('incompatible', 'unsupportedBuild')
+            if self.process.WriteMemory(focus, b'\x00', error) != 1 or error.Fail():
+                raise failure('memory_error', 'debuggerCall', str(error))
+        breakpoint = self.target.BreakpointCreateByAddress(
+            entry_address if entry_address is not None else self.addresses['_ZN3sgg3App6UpdateEf']
+        )
         deadline = time.monotonic() + PROCESS_CONTROL_TIMEOUT_SECONDS
         self._resume(deadline, breakpoint_expected=True)
         while time.monotonic() < deadline:
@@ -290,6 +324,79 @@ class HadesLuaTransport:
         raise failure('runtime_not_ready', 'runtimeNotReady')
 
     def execute(self, source, *, mutating=False):
+        if self.cleanup_pending:
+            raise self._quarantined_error()
+        if getattr(self, 'mailbox_mode', 'lldb') == 'mailbox':
+            return self._execute_mailbox(source, mutating=mutating)
+        return self._execute_lldb(source, mutating=mutating)
+
+    def acknowledge_result(self):
+        mailbox = getattr(self, '_mailbox', None)
+        if mailbox is not None:
+            try:
+                mailbox.acknowledge()
+            except BaseException:
+                self.tainted = True
+                raise
+
+    def _execute_mailbox(self, source, *, mutating=False):
+        if self.tainted:
+            raise failure('restart_required', 'restartRequired')
+        if not self.alive():
+            raise failure('not_connected', 'notConnected')
+        payload = source.encode('utf-8')
+        if len(payload) > LUA_SOURCE_LIMIT_BYTES:
+            raise ValueError('Hades Lua request exceeds 128 KiB')
+        self.last_mailbox_profile = {}
+        if getattr(self, '_mailbox', None) is None:
+            library = getattr(self, 'native_mailbox_library', None)
+            if library is None:
+                raise failure('incompatible', 'unsupportedBuild', 'Native Hades mailbox library is unavailable')
+            try:
+                mailbox = HadesCommandMailbox(library.path, self.pid, alive=self.alive)
+            except (OSError, ValueError) as error:
+                raise failure('incompatible', 'unsupportedBuild', str(error)) from error
+            self._mailbox = mailbox
+            try:
+                install_command_mailbox(self, lldb, mailbox, library)
+            except BaseException:
+                try:
+                    mailbox.close()
+                except Exception:
+                    pass
+                self._mailbox = None
+                if mailbox.tainted:
+                    self.tainted = True
+                raise
+        try:
+            text = self._mailbox.execute(source, mutating=mutating)
+        except AdapterError as error:
+            if self._mailbox.tainted:
+                self.tainted = True
+            if error.code == 'resident_generation_missing':
+                self._mailbox.close()
+                self._mailbox = None
+            raise
+        finally:
+            if getattr(self, '_mailbox', None) is not None:
+                self.last_mailbox_profile = dict(self._mailbox.last_profile)
+        try:
+            parsed = json.loads(text)
+        except (ValueError, TypeError) as error:
+            self._mailbox.poison()
+            self.tainted = True
+            raise failure('outcome_unknown', 'outcomeUnknown', f'Invalid mailbox JSON receipt: {error}') from error
+        if not isinstance(parsed, dict):
+            self._mailbox.poison()
+            self.tainted = True
+            raise failure(
+                'outcome_unknown',
+                'outcomeUnknown',
+                f'Mailbox JSON receipt must be an object, got {type(parsed).__name__}',
+            )
+        return parsed
+
+    def _execute_lldb(self, source, *, mutating=False):
         if self.cleanup_pending:
             raise self._quarantined_error()
         if self.tainted:
@@ -356,16 +463,26 @@ class HadesLuaTransport:
                 if 'hades.error.outcomeUnknown' in text:
                     self.tainted = True
                     raise failure('outcome_unknown', 'outcomeUnknown', text)
-                for key in ('heroNotReady', 'runtimeNotReady', 'invalidValue', 'staleTarget', 'staleTrait',
-                            'unsupportedTrait', 'traitWeaponRequired', 'traitSlotOccupied',
-                            'staleRoom', 'staleDoor', 'worldUnavailable', 'unsupportedRuntime'):
+                for key in KNOWN_LUA_REFUSAL_KEYS:
                     if 'hades.error.' + key in text:
                         raise failure('runtime_not_ready', key, text)
                 if mutating:
                     self.tainted = True
                     raise failure('outcome_unknown', 'outcomeUnknown', text)
                 raise failure('lua_error', 'debuggerCall', text)
-            return json.loads(text)
+            try:
+                parsed = json.loads(text)
+            except (ValueError, TypeError) as error:
+                self.tainted = True
+                raise failure('outcome_unknown', 'outcomeUnknown', f'Invalid LLDB JSON receipt: {error}') from error
+            if not isinstance(parsed, dict):
+                self.tainted = True
+                raise failure(
+                    'outcome_unknown',
+                    'outcomeUnknown',
+                    f'LLDB JSON receipt must be an object, got {type(parsed).__name__}',
+                )
+            return parsed
         finally:
             primary_error = sys.exc_info()[1]
             if not self._boundary_initial_stop_pending and (self.vm_interrupted or self.alive()):
@@ -441,6 +558,8 @@ class HadesLuaTransport:
         self._unsafe_vm_pid = None
         self.addresses = {}
         self.focus_original = None
+        self.native_mailbox_library = None
+        self._real_attached_pid = None
         self._clear_cleanup_state()
 
     def _rollback_failed_attach(self, error):
@@ -460,6 +579,15 @@ class HadesLuaTransport:
         raise error
 
     def detach(self):
+        mailbox = getattr(self, '_mailbox', None)
+        if mailbox is not None:
+            try:
+                mailbox.close()
+            except Exception as exc:
+                self._record_cleanup_failure('mailbox_close', exc)
+                raise
+            self._mailbox = None
+        detached_real_pid = None
         if self.vm_interrupted:
             self._terminate_interrupted_process()
         elif self.alive():
@@ -471,13 +599,21 @@ class HadesLuaTransport:
                 stage = 'delete_breakpoints'
                 self.target.DeleteAllBreakpoints()
                 stage = 'lldb_detach'
+                target_pid = self.pid
                 error = self.process.Detach()
                 if error.Fail():
                     raise failure('detach_failed', 'detachFailed', str(error))
+                if getattr(self, '_real_attached_pid', None) == target_pid:
+                    detached_real_pid = target_pid
             except Exception as exc:
                 self._record_cleanup_failure(stage, exc)
                 raise
         self._clear_attachment()
+        if detached_real_pid is not None:
+            try:
+                os.kill(detached_real_pid, signal.SIGCONT)
+            except (ProcessLookupError, PermissionError):
+                pass
 
     def close(self):
         # Detach failure still owns a stopped process.  Retain this debugger

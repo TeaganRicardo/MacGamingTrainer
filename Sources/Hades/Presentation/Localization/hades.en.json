@@ -147,6 +147,7 @@
     "hades.error.luaInterrupted": "The debugger interrupted game execution. The game was force quit to prevent further save corruption; unsaved progress was lost. Relaunch the game and reconnect.",
     "hades.error.luaTerminationFailed": "Game execution was interrupted, but Force Quit could not be confirmed. Force Quit the game immediately in Activity Monitor before it continues or saves, then relaunch.",
     "hades.error.restartRequired": "Restart the game before reconnecting to this runtime.",
+    "hades.error.commandResultConnectionLost": "The operation completed in the game, but the acknowledgement connection was lost. Restart the game before reconnecting.",
     "hades.error.stopTimeout": "Timed out waiting for the game to stop. Reconnect.",
     "hades.error.resumeFailed": "The game has not resumed. Keep connected and retry disconnecting.",
     "hades.error.restoreFailed": "The background focus setting has not been restored. Keep connected and retry disconnecting.",

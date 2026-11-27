@@ -16,6 +16,12 @@ class HadesTimeWarpWorker(HadesLLDBWorker):
         if not isinstance(params, dict):
             raise ValueError('Hades worker params must be an object')
         if method in ('time_warp.current_speed', 'time_warp.set_speed'):
+            if self._has_pending_acknowledgement():
+                raise AdapterError(
+                    'restart_required',
+                    'hades.error.restartRequired',
+                    diagnostic='Previous mailbox receipt has not been acknowledged',
+                )
             if getattr(self.transport, 'cleanup_pending', False):
                 raise self.transport._quarantined_error()
             if not self.transport.alive():
@@ -62,7 +68,7 @@ class HadesTimeWarpWorker(HadesLLDBWorker):
 def main():
     worker = HadesTimeWarpWorker()
     try:
-        serve_jsonl_requests(sys.stdin, sys.stdout, worker.dispatch, error_payload=error_payload)
+        serve_jsonl_requests(sys.stdin, sys.stdout, worker.dispatch, error_payload=error_payload, state=worker.state)
     finally:
         close_worker(worker)
     return 0

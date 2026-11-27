@@ -23,6 +23,13 @@
     "_ZN3sgg5Debug21AUTO_RESET_TIME_SCALEE": {
       "rva": 36180932
     },
+    "_ZN3sgg8HadesApp6UpdateEf": {
+      "rva": 805760,
+      "prefix": "554889e54157415641554154534883ec"
+    },
+    "_ZTVN3sgg8HadesAppE": {
+      "rva": 5432008
+    },
     "luaL_loadbufferx": {
       "rva": 102881,
       "prefix": "554889e54883ec10488d45f048893048"
