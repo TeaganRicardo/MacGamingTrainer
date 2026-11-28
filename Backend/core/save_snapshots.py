@@ -316,10 +316,7 @@ class SaveSnapshotStore:
                     before = _sha256(row.source_path)
                     destination = stage / 'files' / row.root_id / _safe_relative(row.relative_path)
                     destination.parent.mkdir(parents=True, exist_ok=True)
-                    copy_owned_save_file(row.source_path, destination)
-                    with destination.open('rb+') as payload:
-                        payload.flush()
-                        os.fsync(payload.fileno())
+                    copy_owned_save_file(row.source_path, destination, sync=True)
                     if _sha256(destination) != before or _sha256(row.source_path) != before:
                         raise _SaveSnapshotRace('Save changed while copying.')
                     copied_hashes[key] = before

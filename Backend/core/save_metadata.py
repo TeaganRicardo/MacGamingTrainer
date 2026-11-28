@@ -46,11 +46,13 @@ def copy_save_metadata(source_fd, destination_fd):
         _set_flags(destination_fd, metadata.st_flags & ~_LOCKING_FLAGS)
 
 
-def copy_owned_save_file(source, destination):
+def copy_owned_save_file(source, destination, *, sync=False):
     with Path(source).open('rb') as original, Path(destination).open('xb') as copied:
         shutil.copyfileobj(original, copied)
         copied.flush()
         copy_save_metadata(original.fileno(), copied.fileno())
+        if sync:
+            os.fsync(copied.fileno())
 
 
 def _clear_owned_locking_flags(descriptor):
