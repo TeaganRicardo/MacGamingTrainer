@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 LUA = require_lua52("Force Enable Rerolls UpgradeChoice behavior")
 
 HARNESS = r'''
+-- The installed game has no Lua 5.1 compatibility global.
+unpack = nil
 SessionState = {}; SessionMapState = {}
 GameState = { Resources = {}, LifetimeResourcesGained = {}, RunHistory = {}, LootPickups = {} }
 ResourceData = {}; ResourceDisplayOrderData = {}; TraitElementData = {}
@@ -69,7 +71,7 @@ pcall = function(fn, ...)
   protectedCallDepth = protectedCallDepth + 1
   local result = pack(rawPcall(fn, ...))
   protectedCallDepth = protectedCallDepth - 1
-  return unpack(result, 1, result.n)
+  return table.unpack(result, 1, result.n)
 end
 wait = function()
   if enforceNativePanelYieldBoundary then
