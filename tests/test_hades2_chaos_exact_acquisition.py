@@ -268,6 +268,7 @@ local pair = M.dispatch("acquire_chaos_pair", {
   curse = "ChaosDamageCurse",
   rarity = "Rare",
   level = 3,
+  encounters = 5,
   requestId = "chaos-pair-exact",
   includeCatalogs = false,
 })
@@ -278,6 +279,7 @@ eq(mounted.Name, "ChaosDamageCurse", "Chaos pair mounted the wrong curse")
 eq(mounted.OnExpire.TraitData.Name, "ChaosHealthBlessing", "Chaos pair queued the wrong blessing")
 eq(mounted.TraitTitle, "ChaosCombo_ChaosDamageCurse_ChaosHealthBlessing", "Chaos pair title drifted")
 eq(mounted.Rarity, "Rare", "Chaos pair curse rarity")
+eq(mounted.RemainingUses, 5, "Chaos pair did not apply requested encounter count")
 eq(mounted.OnExpire.TraitData.Rarity, "Rare", "Chaos pair blessing rarity")
 eq(mounted.OnExpire.TraitData.StackNum, 3, "Chaos pair blessing level")
 check(mounted.FromLootObserved, "Chaos pair did not preserve FromLoot")
@@ -288,6 +290,7 @@ local duplicate = M.dispatch("acquire_chaos_pair", {
   curse = "ChaosDamageCurse",
   rarity = "Rare",
   level = 3,
+  encounters = 5,
   requestId = "chaos-pair-exact",
   includeCatalogs = false,
 })
@@ -303,6 +306,18 @@ expectError("requestId reused for a different action", function()
   M.dispatch("acquire_chaos_pair", {
     blessing = "ChaosHealthBlessing", curse = "ChaosDamageCurse", rarity = "Rare", level = 1,
     requestId = "chaos-pair-exact", includeCatalogs = false,
+  })
+end)
+expectError("requestId reused for a different action", function()
+  M.dispatch("acquire_chaos_pair", {
+    blessing = "ChaosHealthBlessing", curse = "ChaosDamageCurse", rarity = "Rare", level = 3, encounters = 4,
+    requestId = "chaos-pair-exact", includeCatalogs = false,
+  })
+end)
+expectError("Chaos encounter count must be a whole number", function()
+  M.dispatch("acquire_chaos_pair", {
+    blessing = "ChaosHealthBlessing", curse = "ChaosDamageCurse", rarity = "Rare", encounters = 0,
+    requestId = "chaos-pair-encounters-zero", includeCatalogs = false,
   })
 end)
 eq(calls.add, beforePairAdd + 1, "Chaos pair reused request id mutated")

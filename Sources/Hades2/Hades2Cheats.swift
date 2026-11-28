@@ -143,7 +143,7 @@ package enum Hades2CheatCatalog {
             label: .key("hades2.feature.forceLegendary"),
             icon: Hades2CheatIcon.legendary,
             action: TrainerCheatActionSpec(command: "set_boon_rarity_desired", valueParam: "forceLegendary"),
-            shortcutID: "forceLegendary"
+            shortcutID: nil
         ),
         TrainerCheatDefinition(
             id: "forceDuo",
@@ -151,7 +151,7 @@ package enum Hades2CheatCatalog {
             label: .key("hades2.feature.forceDuo"),
             icon: Hades2CheatIcon.duo,
             action: TrainerCheatActionSpec(command: "set_boon_rarity_desired", valueParam: "forceDuo"),
-            shortcutID: "forceDuo"
+            shortcutID: nil
         ),
     ]
 

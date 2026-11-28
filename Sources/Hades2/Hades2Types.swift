@@ -83,7 +83,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     case invincibility, infiniteHealth, infiniteMana, infiniteMoney, infiniteRerolls
     case forceEnableRerolls, instantCastCooldown, hexAlwaysReady, infiniteAmmo, autoMiniGames
     case decreaseGameSpeed, increaseGameSpeed
-    case boonRarityEnabled, forceLegendary, forceDuo, acquireChaosPair, acquireExactBoon, openSellTraits
+    case boonRarityEnabled, acquireChaosPair, acquireExactBoon, openSellTraits
     case moneyMultiplierEnabled, resourceMultiplierEnabled
     case generateFlora, generateMining, generateDigging, generateShades, generateFishing, matureGarden
     case applyWorldExit
@@ -142,8 +142,6 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .matureGarden: return "hades2.garden.title"
         case .forceEnableRerolls: return "hades2.feature.forceEnableRerolls"
         case .boonRarityEnabled: return "hades2.feature.boonRarity"
-        case .forceLegendary: return "hades2.feature.forceLegendary"
-        case .forceDuo: return "hades2.feature.forceDuo"
         case .moneyMultiplierEnabled: return "hades2.feature.moneyMultiplier"
         case .resourceMultiplierEnabled: return "hades2.feature.resourceMultiplier"
         case .generateFlora: return "hades2.shortcut.generateFlora"

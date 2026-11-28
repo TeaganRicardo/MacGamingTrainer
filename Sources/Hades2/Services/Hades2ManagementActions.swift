@@ -19,8 +19,8 @@ enum Hades2ManagementCatalog {
             refresh: .init(.refreshStatus, localization: localization,
                            enabled: canStartBackendAction, action: model.refreshFromHost),
             disableAll: .init(.disableAll, localization: localization,
-                              enabled: { model.connected && canUseBackend() && model.canAcceptRuntimeAction },
-                              action: model.disableAll),
+                              enabled: { model.canDisableAll },
+                              action: { model.disableAll() }),
             profiles: .init(id: "profiles", title: text("hades2.manage.profiles"),
                             icon: TrainerSemanticIcon.Tool.profiles, enabled: canStartBackendAction) {
                 model.profilesPresented = true

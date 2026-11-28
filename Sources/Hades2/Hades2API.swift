@@ -32,7 +32,7 @@ enum Hades2Request {
     case cancelWorldExit(doorToken: String, leaseToken: String)
     case spawnReward(String)
     case acquireExactBoon(reward: String, rarity: String?, level: Int?)
-    case acquireChaosPair(blessing: String, curse: String, rarity: String?, level: Int?)
+    case acquireChaosPair(blessing: String, curse: String, rarity: String?, level: Int?, encounters: Int?)
     case openSellTraits
     case setTraitLevel(CurrentRunTrait, targetLevel: Int)
     case setTraitRarity(CurrentRunTrait, rarity: String)
@@ -204,10 +204,11 @@ enum Hades2Request {
             if let rarity { params["rarity"] = rarity }
             if let level { params["level"] = level }
             return params
-        case .acquireChaosPair(let blessing, let curse, let rarity, let level):
+        case .acquireChaosPair(let blessing, let curse, let rarity, let level, let encounters):
             var params: [String: Any] = ["blessing": blessing, "curse": curse]
             if let rarity { params["rarity"] = rarity }
             if let level { params["level"] = level }
+            if let encounters { params["encounters"] = encounters }
             return params
         case .openSellTraits:
             return [:]

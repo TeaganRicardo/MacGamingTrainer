@@ -40,8 +40,9 @@ package struct TrainerAcquisitionPanel<Settings: View, Rows: View>: View {
                     tint: theme.accent,
                     emphasized: true
                 )
-                settings
+                .fixedSize(horizontal: true, vertical: false)
                 Spacer(minLength: 0)
+                settings
                 TrainerSearchField(
                     text: $search,
                     placeholder: searchPlaceholder,

@@ -314,6 +314,13 @@ def _chaos_pair(raw):
         or not curse
     ):
         raise Hades2ValueError("hades2.error.selectReward", "请选择掉落物或祝福。")
+    if "encounters" in params:
+        encounters = params["encounters"]
+        if type(encounters) is not int or not 1 <= encounters <= 100:
+            raise Hades2ValueError(
+                "hades2.error.chaosEncountersRange",
+                "遭遇战次数必须是 1–100 的整数。",
+            )
     return _acquisition(params)
 
 

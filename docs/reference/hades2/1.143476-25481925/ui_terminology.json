@@ -525,8 +525,8 @@
       "status": "trainer_product_label"
     },
     "gatheringNative": {
-      "value": "原生 / 默认",
-      "englishValue": "Native / Default",
+      "value": "默认",
+      "englishValue": "Default",
       "reason": "Trainer setting leaves native gathering or room occurrence probability unchanged.",
       "status": "trainer_product_label"
     },

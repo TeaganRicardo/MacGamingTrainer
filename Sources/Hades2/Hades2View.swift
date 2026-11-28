@@ -524,6 +524,14 @@ struct Hades2TrainerView: View {
             VStack(alignment: .leading, spacing: 8) {
                 currentRunTraitCommonControls(managedCurrentRunTrait)
                     .frame(maxWidth: .infinity, alignment: .trailing)
+                if let trait = managedCurrentRunTrait, !trait.canIncreaseLevel && !trait.canSetRarity,
+                   let reason = [trait.levelReason, trait.rarityReason].first(where: { !$0.isEmpty }) {
+                    let key = "hades2.traits.limitation.\(reason)"
+                    let resolved = text(key)
+                    Text(resolved == key ? text("hades2.traits.limitation.default") : resolved)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let trait = managedCurrentRunTrait, trait.hasContextualControls {
                     currentRunTraitContextualControls(trait)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1312,11 +1320,14 @@ struct Hades2TrainerView: View {
     }
 
     /// A refused item names why; an allowed item names the game rule it breaks.
-    private func worldActionItemLabel(_ label: String, enabled: Bool = true,
-                                      reason: String? = nil, warning: String? = nil) -> String {
-        if !enabled { return "\(label) · \(worldActionReason(reason ?? "native_ineligible") ?? "")" }
-        guard let warning = worldActionReason(warning) else { return label }
-        return "\(label) · ⚠︎ \(warning)"
+    private func worldActionPopupLabel(_ label: String, enabled: Bool = true,
+                                       reason: String? = nil, warning: String? = nil) -> TrainerPopupLabel {
+        if !enabled {
+            let reasonText = worldActionReason(reason ?? "native_ineligible") ?? ""
+            return TrainerPopupLabel(primary: label, mutedSuffixes: reasonText.isEmpty ? [] : [" · \(reasonText)"])
+        }
+        guard let warningText = worldActionReason(warning) else { return TrainerPopupLabel(primary: label) }
+        return TrainerPopupLabel(primary: label, mutedSuffixes: [" · ⚠︎ \(warningText)"])
     }
 
     /// `Exit 1 · Combat · Zeus`: what the door holds now, as the game reports it.
@@ -1362,7 +1373,7 @@ struct Hades2TrainerView: View {
         return parts.joined(separator: " · ")
     }
 
-    private func worldExitChoiceLabel(_ choice: Hades2WorldExitChoice, in exit: Hades2WorldExit) -> String {
+    private func worldExitChoiceLabel(_ choice: Hades2WorldExitChoice, in exit: Hades2WorldExit) -> TrainerPopupLabel {
         let room = worldActionRoomLabel(choice.room)
         let label: String
         if let reward = choice.reward {
@@ -1376,109 +1387,107 @@ struct Hades2TrainerView: View {
 
     private func worldExitChoiceItemLabel(_ label: String, choice: Hades2WorldExitChoice,
                                           in exit: Hades2WorldExit, enabled: Bool = true,
-                                          reason: String? = nil) -> String {
-        guard enabled else { return worldActionItemLabel(label, enabled: false, reason: reason) }
+                                          reason: String? = nil) -> TrainerPopupLabel {
+        guard enabled else { return worldActionPopupLabel(label, enabled: false, reason: reason) }
         let room = exit.roomTargets.first { $0.id == choice.room }
         let reward = exit.rewardTargets.first { $0.id == choice.reward }
         let warnings = [choice.reward != nil && exit.isCurrentRoom(choice.room)
             ? exit.rewardWarning : room?.warning, reward?.warning]
         var seen = Set<String>()
-        return warnings.compactMap { $0 }.filter { seen.insert($0).inserted }.reduce(label) {
-            worldActionItemLabel($0, warning: $1)
-        }
-    }
-
-    private func worldExitChoiceItem(_ choice: Hades2WorldExitChoice, title: String, enabled: Bool) -> some View {
-        Toggle(isOn: Binding(
-            get: { model.selectedWorldExitTarget == choice.id },
-            set: { if $0 { model.selectedWorldExitTarget = choice.id } }
-        )) {
-            Text(title)
-        }
-        .disabled(!enabled)
+        let suffixes = warnings
+            .compactMap { $0 }
+            .filter { seen.insert($0).inserted }
+            .compactMap { worldActionReason($0).map { " · ⚠︎ \($0)" } }
+        return TrainerPopupLabel(primary: label, mutedSuffixes: suffixes)
     }
 
     /// One room type's submenu: "Any reward" (a reservation; the game picks),
     /// then Olympians, then other rewards. A reward under the door's own room
     /// type edits that room in place.
-    @ViewBuilder
-    private func worldExitRewardItems(_ exit: Hades2WorldExit, room: Hades2WorldActionTarget) -> some View {
+    private func worldExitRewardEntries(_ exit: Hades2WorldExit, room: Hades2WorldActionTarget) -> [TrainerPopupMenuEntry] {
         let gods = exit.rewardTargets.filter { Self.worldActionGodIDs.contains($0.id) }
         let others = exit.rewardTargets.filter { !Self.worldActionGodIDs.contains($0.id) }
+        var entries: [TrainerPopupMenuEntry] = []
         if exit.offersAnyReward(room) {
             let choice = Hades2WorldExitChoice(room: room.id)
-            worldExitChoiceItem(
-                choice,
-                title: worldExitChoiceItemLabel(text("hades2.worldActions.anyReward"), choice: choice, in: exit),
-                enabled: true
-            )
+            entries.append(.item(
+                id: choice.id,
+                label: worldExitChoiceItemLabel(text("hades2.worldActions.anyReward"), choice: choice, in: exit),
+                enabled: true,
+                selected: model.selectedWorldExitTarget == choice.id
+            ))
         }
         if !gods.isEmpty {
-            Section(text("hades2.worldActions.gods")) {
-                ForEach(gods) { reward in
-                    let choice = Hades2WorldExitChoice(room: room.id, reward: reward.id)
-                    worldExitChoiceItem(
-                        choice,
-                        title: worldExitChoiceItemLabel(worldActionRewardLabel(reward.id), choice: choice, in: exit,
-                            enabled: reward.enabled, reason: reward.reason),
-                        enabled: reward.enabled
-                    )
-                }
+            entries.append(.sectionHeader(text("hades2.worldActions.gods")))
+            for reward in gods {
+                let choice = Hades2WorldExitChoice(room: room.id, reward: reward.id)
+                entries.append(.item(
+                    id: choice.id,
+                    label: worldExitChoiceItemLabel(worldActionRewardLabel(reward.id), choice: choice, in: exit,
+                        enabled: reward.enabled, reason: reward.reason),
+                    enabled: reward.enabled,
+                    selected: model.selectedWorldExitTarget == choice.id
+                ))
             }
         }
         if !others.isEmpty {
-            Section(text("hades2.worldActions.rewards")) {
-                ForEach(others) { reward in
-                    let choice = Hades2WorldExitChoice(room: room.id, reward: reward.id)
-                    worldExitChoiceItem(
-                        choice,
-                        title: worldExitChoiceItemLabel(worldActionRewardLabel(reward.id), choice: choice, in: exit,
-                            enabled: reward.enabled, reason: reward.reason),
-                        enabled: reward.enabled
-                    )
-                }
+            entries.append(.sectionHeader(text("hades2.worldActions.rewards")))
+            for reward in others {
+                let choice = Hades2WorldExitChoice(room: room.id, reward: reward.id)
+                entries.append(.item(
+                    id: choice.id,
+                    label: worldExitChoiceItemLabel(worldActionRewardLabel(reward.id), choice: choice, in: exit,
+                        enabled: reward.enabled, reason: reward.reason),
+                    enabled: reward.enabled,
+                    selected: model.selectedWorldExitTarget == choice.id
+                ))
             }
         }
+        return entries
     }
 
-    /// Target: a nested menu by room type (`Combat > Zeus`, `Story`, ...).
+    /// Target: a nested popup by room type (`Combat > Zeus`, `Story`, ...).
     /// One choice sets the room type and the reward together (#832).
     private func worldExitTargetMenu(_ exit: Hades2WorldExit?) -> some View {
-        let title: String
+        let title: TrainerPopupLabel
         if let exit, let lease = exit.activeLease {
             title = worldExitChoiceLabel(lease.choice, in: exit)
         } else if let exit, let choice = model.selectedWorldExitChoice, exit.isEnabled(choice) {
             title = worldExitChoiceLabel(choice, in: exit)
         } else {
-            title = text("hades2.worldActions.noTarget")
+            title = TrainerPopupLabel(primary: text("hades2.worldActions.noTarget"))
         }
-        return Menu {
-            if let exit {
-                ForEach(exit.roomTargets) { room in
-                    if room.acceptsReward {
-                        Menu {
-                            worldExitRewardItems(exit, room: room)
-                        } label: {
-                            Text(worldActionItemLabel(worldActionRoomLabel(room.id), enabled: room.enabled,
-                                reason: room.reason))
-                        }
-                        .disabled(!room.enabled)
-                    } else {
-                        let choice = Hades2WorldExitChoice(room: room.id)
-                        worldExitChoiceItem(
-                            choice,
-                            title: worldExitChoiceItemLabel(worldActionRoomLabel(room.id), choice: choice, in: exit,
-                                enabled: room.enabled, reason: room.reason),
-                            enabled: room.enabled
-                        )
-                    }
+        let entries: [TrainerPopupMenuEntry]
+        if let exit {
+            entries = exit.roomTargets.map { room in
+                if room.acceptsReward {
+                    return .submenu(
+                        label: worldActionPopupLabel(worldActionRoomLabel(room.id), enabled: room.enabled,
+                            reason: room.reason),
+                        enabled: room.enabled,
+                        entries: worldExitRewardEntries(exit, room: room)
+                    )
                 }
+                let choice = Hades2WorldExitChoice(room: room.id)
+                return .item(
+                    id: choice.id,
+                    label: worldExitChoiceItemLabel(worldActionRoomLabel(room.id), choice: choice, in: exit,
+                        enabled: room.enabled, reason: room.reason),
+                    enabled: room.enabled,
+                    selected: model.selectedWorldExitTarget == choice.id
+                )
             }
-        } label: {
-            Text(title)
+        } else {
+            entries = []
         }
-        .accessibilityLabel(text("hades2.worldActions.target"))
-        .accessibilityValue(title)
+        return TrainerNestedPopupButton(
+            title: title,
+            entries: entries,
+            accessibilityLabel: text("hades2.worldActions.target"),
+            accessibilityIdentifier: "hades2.worldActions.target"
+        ) { selectedID in
+            model.selectedWorldExitTarget = selectedID
+        }
     }
 
     private var worldExitPanel: some View {
@@ -1512,7 +1521,6 @@ struct Hades2TrainerView: View {
         } secondPicker: {
             worldExitTargetMenu(exit)
                 .trainerPicker(.layoutAllocated, state: model.canSelectWorldExitTarget ? .interactive : .unavailable)
-                .accessibilityIdentifier("hades2.worldActions.target")
         } shortcut: {
             TrainerShortcutBadgeSlot(text: model.shortcutText(.applyWorldExit))
         } action: {
@@ -1749,52 +1757,75 @@ struct Hades2TrainerView: View {
             acquisitionSettingsRow
         } rows: {
             VStack(alignment: .leading, spacing: 16) {
-                TrainerDualInlinePickerLayout(
-                    minimumPickerWidth: 144,
-                    maximumPickerWidth: theme.pickerActionMaxWidth,
-                    minimumShortcutWidth: theme.shortcutBadgeMinimumWidth,
-                    minimumActionWidth: theme.compactActionWidth
-                ) {
-                    exactBoonCaption("hades2.spawn.chaosBlessing")
-                    Picker(text("hades2.spawn.chaosBlessing"), selection: $model.selectedChaosBlessing) {
-                        if chaosBlessingOptions.isEmpty {
-                            Text(text("hades2.spawn.noItems")).tag("")
-                        }
-                        ForEach(chaosBlessingOptions) { option in
-                            Text(exactItemLabel(option)).tag(option.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .trainerPicker(.layoutAllocated, state: model.canAcquireChaosPair && !chaosBlessingOptions.isEmpty ? .interactive : .unavailable)
-
-                    exactBoonCaption("hades2.spawn.chaosCurse")
-                    Picker(text("hades2.spawn.chaosCurse"), selection: $model.selectedChaosCurse) {
-                        if chaosCurseOptions.isEmpty {
-                            Text(text("hades2.spawn.noItems")).tag("")
-                        }
-                        ForEach(chaosCurseOptions) { option in
-                            Text(exactItemLabel(option)).tag(option.id)
-                        }
-                    }
-                    .labelsHidden()
-                    .trainerPicker(.layoutAllocated, state: model.canAcquireChaosPair && !chaosCurseOptions.isEmpty ? .interactive : .unavailable)
-
-                    exactBoonShortcut(.acquireChaosPair)
-                    TrainerSecondaryActionButton(
-                        title: text("hades2.spawn.acquire"),
-                        enabled: model.canAcquireChaosPair
-                            && chaosBlessingOptions.contains(where: { $0.id == model.selectedChaosBlessing })
-                            && chaosCurseOptions.contains(where: { $0.id == model.selectedChaosCurse }),
-                        widthRole: .compactRow
+                VStack(alignment: .leading, spacing: 6) {
+                    TrainerDualInlinePickerLayout(
+                        minimumPickerWidth: 144,
+                        maximumPickerWidth: theme.pickerActionMaxWidth,
+                        minimumShortcutWidth: theme.shortcutBadgeMinimumWidth,
+                        minimumActionWidth: theme.compactActionWidth
                     ) {
-                        _ = model.acquireChaosPair(
-                            blessingReward: model.selectedChaosBlessing,
-                            curseReward: model.selectedChaosCurse
-                        )
+                        exactBoonCaption("hades2.spawn.chaosBlessing")
+                        Picker(text("hades2.spawn.chaosBlessing"), selection: $model.selectedChaosBlessing) {
+                            if chaosBlessingOptions.isEmpty {
+                                Text(text("hades2.spawn.noItems")).tag("")
+                            }
+                            ForEach(chaosBlessingOptions) { option in
+                                Text(exactItemLabel(option)).tag(option.id)
+                            }
+                        }
+                        .labelsHidden()
+                        .trainerPicker(.layoutAllocated, state: model.canAcquireChaosPair && !chaosBlessingOptions.isEmpty ? .interactive : .unavailable)
+
+                        exactBoonCaption("hades2.spawn.chaosCurse")
+                        Picker(text("hades2.spawn.chaosCurse"), selection: $model.selectedChaosCurse) {
+                            if chaosCurseOptions.isEmpty {
+                                Text(text("hades2.spawn.noItems")).tag("")
+                            }
+                            ForEach(chaosCurseOptions) { option in
+                                Text(exactItemLabel(option)).tag(option.id)
+                            }
+                        }
+                        .labelsHidden()
+                        .trainerPicker(.layoutAllocated, state: model.canAcquireChaosPair && !chaosCurseOptions.isEmpty ? .interactive : .unavailable)
+
+                        exactBoonShortcut(.acquireChaosPair)
+                        TrainerSecondaryActionButton(
+                            title: text("hades2.spawn.acquire"),
+                            enabled: model.canAcquireChaosPair
+                                && chaosBlessingOptions.contains(where: { $0.id == model.selectedChaosBlessing })
+                                && chaosCurseOptions.contains(where: { $0.id == model.selectedChaosCurse }),
+                            widthRole: .compactRow
+                        ) {
+                            _ = model.acquireChaosPair(
+                                blessingReward: model.selectedChaosBlessing,
+                                curseReward: model.selectedChaosCurse
+                            )
+                        }
+                    }
+                    .onAppear { repairChaosPairSelections() }
+                    .onChange(of: model.exactBoonOptions.map(\.id)) { _, _ in repairChaosPairSelections() }
+
+                    if model.acquisitionTarget == .chaos {
+                        HStack(spacing: 6) {
+                            Text(text("hades2.spawn.chaosEncounters"))
+                                .font(.caption).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: true, vertical: false)
+                            TrainerNumberField(
+                                text: $model.chaosEncounters,
+                                accessibilityLabel: text("hades2.spawn.chaosEncounters"),
+                                width: theme.inlineFieldWidth,
+                                enabled: model.canAcquireChaosPair,
+                                onCommit: { completion in
+                                    guard let count = Int(completion.text.trimmingCharacters(in: .whitespacesAndNewlines)),
+                                          (1...100).contains(count) else {
+                                        return completion.rejected(message: text("hades2.error.chaosEncountersRange"))
+                                    }
+                                    return String(count)
+                                }
+                            )
+                        }
                     }
                 }
-                .onAppear { repairChaosPairSelections() }
-                .onChange(of: model.exactBoonOptions.map(\.id)) { _, _ in repairChaosPairSelections() }
 
                 TrainerDualInlinePickerLayout(
                     minimumPickerWidth: 144,

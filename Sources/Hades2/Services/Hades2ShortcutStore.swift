@@ -5,7 +5,7 @@ import TrainerCore
 typealias Hades2ShortcutProfileApplyResult = TrainerShortcutProfileApplyResult
 
 struct Hades2ShortcutStore {
-    static let currentLayoutVersion = 8
+    static let currentLayoutVersion = 9
     private static let moduleNamespace = "hades2"
     static var layoutVersionKey: String { "\(moduleNamespace).shortcut.layoutVersion" }
     private static let legacyLayoutVersionKey = "shortcut.layoutVersion"
@@ -21,7 +21,9 @@ struct Hades2ShortcutStore {
     }()
 
     private static let retiredAndAliasSuffixes: [String] = Array(
-        Hades2CheatCatalog.catalog.retiredIDs.union(Hades2CheatCatalog.legacyAliases.keys)
+        Hades2CheatCatalog.catalog.retiredIDs
+            .union(Hades2CheatCatalog.legacyAliases.keys)
+            .union(["forceLegendary", "forceDuo"])
     ).sorted()
 
     private var core: TrainerShortcutStore<ShortcutAction>
@@ -158,9 +160,9 @@ struct Hades2ShortcutStore {
             return nil
         }
         let legacyVersion = defaults.integer(forKey: legacyLayoutVersionKey)
-        if storedVersion == 7 {
-            // Version 7 already promoted overrides to `hades2.shortcut.action.*`. Never let
-            // leftover unprefixed keys or stale v1-v5 markers overwrite or wipe committed v7 bindings.
+        if storedVersion >= 7 {
+            // Version 7+ already promoted overrides to `hades2.shortcut.action.*`. Never let
+            // leftover unprefixed keys or stale v1-v5 markers overwrite or wipe committed v7+ bindings.
             if legacyVersion >= 6 {
                 return migrateV6Unprefixed(defaults)
             }
@@ -197,7 +199,7 @@ struct Hades2ShortcutStore {
     private static func migrateV6Unprefixed(_ defaults: UserDefaults) -> [ShortcutAction: HotkeyChord] {
         var result: [ShortcutAction: HotkeyChord] = [:]
         var used = Set<String>()
-        let preservePartiallyMigratedV7 = defaults.integer(forKey: layoutVersionKey) == 7
+        let preservePartiallyMigratedV7 = defaults.integer(forKey: layoutVersionKey) >= 7
         for action in Hades2WorkbenchCatalog.orderedShortcutActions {
             let value = (preservePartiallyMigratedV7 ? namespacedObject(for: action, in: defaults) : nil)
                 ?? unprefixedObject(for: action, in: defaults)

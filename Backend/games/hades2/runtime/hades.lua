@@ -12368,7 +12368,7 @@ if __MacGamingTrainerV1 == nil then
       generate_chaos_gate = { "scopeToken" },
       generate_chamber_facility = { "facility", "scopeToken" },
       mature_garden = { "scopeToken" },
-      acquire_chaos_pair = { "blessing", "curse", "rarity", "level" },
+      acquire_chaos_pair = { "blessing", "curse", "rarity", "level", "encounters" },
       spawn_reward = { "reward", "rarity", "level" },
       apply_world_exit = { "doorToken", "room", "reward" },
       cancel_world_exit = { "doorToken", "leaseToken" },
@@ -12532,7 +12532,7 @@ if __MacGamingTrainerV1 == nil then
     -- eligible pool (SetTransformingTraitsOnLoot). The pair takes the caller's
     -- rarity, and its blessing the caller's level, so an unselected blessing is
     -- drawn only from blessings that accept both.
-    local function prepareChaos(blessingName, curseName, requirementLabel, acquisition)
+    local function prepareChaos(blessingName, curseName, requirementLabel, acquisition, encounters)
       local required = { "GetEligibleTransformingTrait", "GetProcessedTraitData", "AddTraitToHero" }
       if blessingName == nil or curseName == nil then required[#required + 1] = "GetRandomValue" end
       requireFunctions(requirementLabel or "exact Chaos acquisition", required)
@@ -12591,6 +12591,7 @@ if __MacGamingTrainerV1 == nil then
         blessings = blessings,
         curses = curses,
         acquisition = acquisition,
+        encounters = encounters,
       }
     end
 
@@ -12607,6 +12608,7 @@ if __MacGamingTrainerV1 == nil then
       if type(blessing) ~= "table" or type(curse) ~= "table" then
         error("Chaos exact acquisition failed")
       end
+      if plan.encounters ~= nil then curse.RemainingUses = plan.encounters end
       curse.OnExpire = curse.OnExpire or {}
       curse.OnExpire.TraitData = blessing
       curse.TraitTitle = "ChaosCombo_" .. curse.Name .. "_" .. blessing.Name
@@ -13022,10 +13024,19 @@ if __MacGamingTrainerV1 == nil then
             or type(params.curse) ~= "string" or params.curse == "" then
           error("Chaos exact acquisition is unavailable")
         end
+        local encounters = nil
+        if params.encounters ~= nil then
+          if type(params.encounters) ~= "number"
+              or params.encounters ~= math.floor(params.encounters)
+              or params.encounters < 1 or params.encounters > 100 then
+            error("Chaos encounter count must be a whole number from 1 to 100")
+          end
+          encounters = params.encounters
+        end
         local acquisition = requestedAcquisition(
           params, M.catalogProjection.acquisitionOptions("chaosBlessing", params.blessing))
         return {
-          chaosPlan = prepareChaos(params.blessing, params.curse, "exact Chaos pair acquisition", acquisition),
+          chaosPlan = prepareChaos(params.blessing, params.curse, "exact Chaos pair acquisition", acquisition, encounters),
         }
       end
       if command ~= "spawn_reward" then error("Unknown reward acquisition command") end

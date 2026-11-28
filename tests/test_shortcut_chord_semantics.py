@@ -297,7 +297,7 @@ let migratedFromV6 = Hades2ShortcutStore(defaults: migratedV6Preferences)
 precondition(migratedFromV6.chord(.disableAll) == disableAllDefault)
 precondition(migratedFromV6.chord(.invincibility) == custom)
 precondition(migratedFromV6.chord(.spawnPickup) == Hades2ShortcutStore.defaultLayout()[.spawnPickup])
-precondition(migratedV6Preferences.integer(forKey: "hades2.shortcut.layoutVersion") == 8)
+precondition(migratedV6Preferences.integer(forKey: "hades2.shortcut.layoutVersion") == Hades2ShortcutStore.currentLayoutVersion)
 precondition(migratedV6Preferences.object(forKey: "shortcut.layoutVersion") == nil)
 precondition(migratedV6Preferences.object(forKey: unprefixedShortcutKey(.invincibility)) == nil)
 precondition(migratedV6Preferences.object(forKey: shortcutKey(.invincibility)) != nil)
@@ -341,7 +341,7 @@ v7OrderedDefaults.set(custom.payload, forKey: legacyWorldExitKey)
 v7OrderedDefaults.events.removeAll()
 let v7Migrated = Hades2ShortcutStore(defaults: v7OrderedDefaults)
 precondition(v7Migrated.chord(.applyWorldExit) == custom)
-precondition(v7OrderedDefaults.integer(forKey: "hades2.shortcut.layoutVersion") == 8)
+precondition(v7OrderedDefaults.integer(forKey: "hades2.shortcut.layoutVersion") == Hades2ShortcutStore.currentLayoutVersion)
 precondition(v7OrderedDefaults.object(forKey: legacyWorldExitKey) == nil)
 let v7ToV8MarkerIndex = v7OrderedDefaults.events.firstIndex(of: "set:hades2.shortcut.layoutVersion")!
 let worldExitWriteIndex = v7OrderedDefaults.events.firstIndex(of: "set:hades2.shortcut.action.applyWorldExit")!
@@ -361,14 +361,14 @@ _ = futureVersionStoreFromDefaults.set(.invincibility, chord: seedCustom)
 precondition(futureVersionDefaults.object(forKey: shortcutKey(.invincibility)) == nil)
 
 let interruptedDefaults = makeDefaults()
-interruptedDefaults.set(8, forKey: "hades2.shortcut.layoutVersion")
+interruptedDefaults.set(Hades2ShortcutStore.currentLayoutVersion, forKey: "hades2.shortcut.layoutVersion")
 interruptedDefaults.set(custom.payload, forKey: shortcutKey(.invincibility))
 interruptedDefaults.set(6, forKey: "shortcut.layoutVersion")
 interruptedDefaults.set(seedCustom.payload, forKey: unprefixedShortcutKey(.invincibility))
 interruptedDefaults.set(seedCustom.payload, forKey: "shortcut.action.gardenQoL")
 let interruptedRecovered = Hades2ShortcutStore(defaults: interruptedDefaults)
 precondition(interruptedRecovered.chord(.invincibility) == custom)
-precondition(interruptedDefaults.integer(forKey: "hades2.shortcut.layoutVersion") == 8)
+precondition(interruptedDefaults.integer(forKey: "hades2.shortcut.layoutVersion") == Hades2ShortcutStore.currentLayoutVersion)
 precondition(interruptedDefaults.object(forKey: "shortcut.layoutVersion") == nil)
 precondition(interruptedDefaults.object(forKey: unprefixedShortcutKey(.invincibility)) == nil)
 precondition(interruptedDefaults.object(forKey: "shortcut.action.gardenQoL") == nil)
@@ -384,7 +384,7 @@ v7LeftoverDefaults.set(seedCustom.payload, forKey: "shortcut.action.gardenQoL")
 let v7LeftoverMigrated = Hades2ShortcutStore(defaults: v7LeftoverDefaults)
 precondition(v7LeftoverMigrated.chord(.invincibility) == custom)
 precondition(v7LeftoverMigrated.chord(.applyWorldExit) == v7WorldExitChord)
-precondition(v7LeftoverDefaults.integer(forKey: "hades2.shortcut.layoutVersion") == 8)
+precondition(v7LeftoverDefaults.integer(forKey: "hades2.shortcut.layoutVersion") == Hades2ShortcutStore.currentLayoutVersion)
 precondition(v7LeftoverDefaults.object(forKey: "shortcut.action.godMode") == nil)
 precondition(v7LeftoverDefaults.object(forKey: "shortcut.action.gardenQoL") == nil)
 precondition(v7LeftoverDefaults.object(forKey: legacyWorldExitKey) == nil)
@@ -397,7 +397,7 @@ v7WithStaleV5Defaults.set(5, forKey: "shortcut.layoutVersion")
 v7WithStaleV5Defaults.set(seedCustom.payload, forKey: "shortcut.action.godMode")
 let v7StaleV5Migrated = Hades2ShortcutStore(defaults: v7WithStaleV5Defaults)
 precondition(v7StaleV5Migrated.chord(.invincibility) == custom)
-precondition(v7WithStaleV5Defaults.integer(forKey: "hades2.shortcut.layoutVersion") == 8)
+precondition(v7WithStaleV5Defaults.integer(forKey: "hades2.shortcut.layoutVersion") == Hades2ShortcutStore.currentLayoutVersion)
 precondition(v7WithStaleV5Defaults.object(forKey: "shortcut.layoutVersion") == nil)
 precondition(v7WithStaleV5Defaults.object(forKey: "shortcut.action.godMode") == nil)
 
@@ -438,6 +438,44 @@ precondition(resetStore.applyProfile(["_layoutVersion": 1, "infiniteHealth": res
 precondition(resetStore.chord(.infiniteHealth) == resetChord)
 resetStore.resetToDefaults()
 precondition(matchesDerivedDefaults(resetStore))
+
+// Version 8 -> 9 migration preserves surviving custom overrides, retires forceLegendary
+// and forceDuo AFTER updating the layout version, shifts subsequent defaults cleanly,
+// and refuses v10+ schemas without overwriting.
+let v8Defaults = makeDefaults()
+v8Defaults.set(8, forKey: "hades2.shortcut.layoutVersion")
+let v8HealthChord = HotkeyChord(keyCode: 4, modifiers: HotkeyChord.commandModifier, keyLabel: "H")
+v8Defaults.set(v8HealthChord.payload, forKey: shortcutKey(.infiniteHealth))
+v8Defaults.set(HotkeyChord(keyCode: 11, modifiers: HotkeyChord.commandModifier, keyLabel: "B").payload,
+               forKey: "hades2.shortcut.action.forceLegendary")
+v8Defaults.set(HotkeyChord(keyCode: 8, modifiers: HotkeyChord.commandModifier, keyLabel: "C").payload,
+               forKey: "hades2.shortcut.action.forceDuo")
+let migratedV8 = Hades2ShortcutStore(defaults: v8Defaults)
+precondition(v8Defaults.integer(forKey: "hades2.shortcut.layoutVersion") == Hades2ShortcutStore.currentLayoutVersion)
+precondition(v8Defaults.object(forKey: "hades2.shortcut.action.forceLegendary") == nil)
+precondition(v8Defaults.object(forKey: "hades2.shortcut.action.forceDuo") == nil)
+precondition(migratedV8.chord(.infiniteHealth) == v8HealthChord)
+precondition(migratedV8.chord(.openSellTraits) == Hades2ShortcutStore.defaultLayout()[.openSellTraits])
+precondition(unique(migratedV8))
+let futureStoreDefaults = makeDefaults()
+futureStoreDefaults.set(Hades2ShortcutStore.currentLayoutVersion + 1, forKey: "hades2.shortcut.layoutVersion")
+futureStoreDefaults.set(v8HealthChord.payload, forKey: shortcutKey(.infiniteHealth))
+futureStoreDefaults.set(HotkeyChord(keyCode: 11, modifiers: HotkeyChord.commandModifier, keyLabel: "B").payload,
+                        forKey: "hades2.shortcut.action.forceLegendary")
+let _ = Hades2ShortcutStore(defaults: futureStoreDefaults)
+precondition(futureStoreDefaults.integer(forKey: "hades2.shortcut.layoutVersion") == Hades2ShortcutStore.currentLayoutVersion + 1)
+precondition(futureStoreDefaults.object(forKey: "hades2.shortcut.action.forceLegendary") != nil,
+             "future shortcut schema must not be modified or cleaned up")
+
+// Legacy Profiles containing retired forceLegendary/forceDuo keys still import cleanly.
+var retiredKeyProfileStore = Hades2ShortcutStore(defaults: makeDefaults())
+precondition(retiredKeyProfileStore.applyProfile([
+    "_layoutVersion": 1,
+    "forceLegendary": HotkeyChord(keyCode: 11, modifiers: HotkeyChord.commandModifier, keyLabel: "B").payload,
+    "forceDuo": HotkeyChord(keyCode: 8, modifiers: HotkeyChord.commandModifier, keyLabel: "C").payload,
+    "infiniteHealth": v8HealthChord.payload,
+]) == .applied)
+precondition(retiredKeyProfileStore.chord(.infiniteHealth) == v8HealthChord)
 
 // Generic Core TrainerShortcutStore<Action> works for non-game action enums with namespaced keys.
 enum SampleShortcutAction: String, CaseIterable, Hashable {

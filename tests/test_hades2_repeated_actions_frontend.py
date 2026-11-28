@@ -145,6 +145,10 @@ for line in sys.stdin:
             if enable_count == 3:
                 success = False
                 observed["desiredFeatures"] = {feature: False}
+    if request["command"] == "reset_desired":
+        observed["connected"] = False
+        observed["desiredFeatures"] = {"invincibility": False}
+        observed["gameSpeed"] = 1.0
     if request["command"] == "set_boon_rarity_desired":
         success = False
         observed["boonRarity"] = {
@@ -343,7 +347,7 @@ struct Main {
         check(!model.invincibility,
               "rejected enable retained an optimistic value against the backend's explicit state")
 
-        model.performShortcut(.forceLegendary)
+        model.setBoonRarity(target: model.boonRarityTarget, forceLegendary: true, forceDuo: model.boonForceDuo)
         waitForIdle(model, logURL: logURL, phase: "rejected boon rarity")
         check(!model.boonForceLegendary,
               "failed boon rarity edit retained an optimistic forced legendary value")
@@ -529,10 +533,19 @@ struct Main {
         check(acceptedDisable.count == 1,
               "idle Disable All should produce exactly one backend request")
 
-        // Disconnected state revokes both selection and Apply gates.
+        // Disconnected state revokes both selection and Apply gates, while
+        // offline Disable All stays available and resets desired settings via reset_desired.
         model.connected = false
         check(!model.canSelectWorldExit && !model.canSelectWorldExitTarget && !model.selectedWorldExitActionAvailable,
               "disconnected runtime left world exit gates enabled")
+        check(model.canDisableAll, "offline Disable All should stay enabled")
+        model.performShortcut(.disableAll)
+        waitForIdle(model, logURL: logURL, phase: "offline Disable All")
+        let offlineResets = loggedCommands(at: logURL).filter { ($0["command"] as? String) == "reset_desired" }
+        let totalDisableAlls = loggedCommands(at: logURL).filter { ($0["command"] as? String) == "disable_all" }
+        check(offlineResets.count == 1 && totalDisableAlls.count == 1
+              && model.noticeText.key == "hades2.disableAllPending",
+              "offline Disable All did not send reset_desired or present pending notice")
 
         // AGENTS.md hard rule 2: a lost Apply reply is an unknown outcome. It is
         // sent once, never replayed, and further changes wait for a restart.

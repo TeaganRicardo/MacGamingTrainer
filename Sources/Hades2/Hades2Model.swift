@@ -232,6 +232,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     /// natural-offer boon rarity, Preferences or Profiles.
     @Published var acquisitionRarity = "Heroic"
     @Published var acquisitionLevel = "1"
+    @Published var chaosEncounters = "3"
     @Published private(set) var acquisitionTarget: Hades2AcquisitionTarget = .exact
     @Published private(set) var acquisitionRarityAdjustment: TrainerOrderedOptionResolution.Adjustment = .none
     @Published private(set) var nativeRarityOrder: [String] = []
@@ -645,7 +646,26 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func launchGame() { send(.launch, title: "host.launchGame") }
     func prepareDebugging() { send(.prepare, title: "hades2.manage.prepareSigning") }
     func restoreOriginalSignature() { send(.restore, title: "hades2.manage.restoreSigning") }
-    func disableAll() { sendBarrier(.disableAll, title: "host.disableAll") }
+    var canDisableAll: Bool {
+        backendAvailable && protocolCompatible && !exiting && canAcceptRuntimeAction
+    }
+
+    func disableAll(completion: ((Bool) -> Void)? = nil) {
+        guard canDisableAll else {
+            completion?(false)
+            return
+        }
+        if connected {
+            sendBarrier(.disableAll, title: "host.disableAll", completion: completion)
+        } else {
+            sendBarrier(.resetDesired, title: "host.disableAll", announceSuccess: false) { [weak self] success in
+                if let self, success {
+                    self.noticeToken = self.presentation("hades2.disableAllPending")
+                }
+                completion?(success)
+            }
+        }
+    }
 
     func backendWillRestart() {
         invalidateTextEdits()
@@ -1895,6 +1915,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                   $0.id == curseReward && $0.acquisitionMode == "chaosCurse"
               }),
               !blessing.targetID.isEmpty, !curse.targetID.isEmpty else { return false }
+        guard let encounters = Int(chaosEncounters.trimmingCharacters(in: .whitespacesAndNewlines)),
+              (1...100).contains(encounters) else {
+            presentFeedback(presentation("hades2.error.chaosEncountersRange"), tone: .warning)
+            return false
+        }
         guard activateAcquisition(.chaos, confirmationRequired: true),
               let acquisition = acquisitionParameters(for: blessing) else { return false }
         send(
@@ -1902,7 +1927,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 blessing: blessing.targetID,
                 curse: curse.targetID,
                 rarity: acquisition.rarity,
-                level: blessing.supportsLevel ? acquisition.level : nil
+                level: blessing.supportsLevel ? acquisition.level : nil,
+                encounters: encounters
             ),
             title: "hades2.op.acquireChaosPair",
             completion: completion
@@ -2111,22 +2137,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    private func performBoonForceShortcutFeedback(targetEnabled: Bool, success: Bool) {
-        guard success else {
-            TrainerHotkeyFeedbackPlayer.play(.rejected)
-            return
-        }
-        let feedback: TrainerHotkeyFeedback
-        if !targetEnabled {
-            feedback = .disabled
-        } else if activeFeatures[Hades2FeatureKey.boonRarityEnabled.rawValue] == true {
-            feedback = .enabled
-        } else {
-            feedback = .deferred
-        }
-        TrainerHotkeyFeedbackPlayer.play(feedback)
-    }
-
     private func rejectShortcut(_ action: ShortcutAction) {
         appendLog("shortcut.rejected action=\(action.rawValue) reason=unavailable")
         presentFeedback(presentation("hades2.shortcut.unavailable"), tone: .warning)
@@ -2144,12 +2154,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if action == .disableAll {
             // Global disable remains an exclusive barrier. Rejected shortcuts
             // now sound distinct from a confirmed runtime mutation.
-            guard connected && backendAvailable && protocolCompatible
-                    && canAcceptRuntimeAction else {
+            guard canDisableAll else {
                 rejectShortcut(action)
                 return
             }
-            sendBarrier(.disableAll, title: "host.disableAll") { success in
+            disableAll { success in
                 TrainerHotkeyFeedbackPlayer.play(success ? .disabled : .rejected)
             }
             return
@@ -2166,32 +2175,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 return
             }
             performFeatureShortcut(key)
-        case .forceLegendary:
-            guard canEditDesired else {
-                rejectShortcut(action)
-                return
-            }
-            let targetEnabled = !boonForceLegendary
-            setBoonRarity(
-                target: boonRarityTarget,
-                forceLegendary: targetEnabled,
-                forceDuo: boonForceDuo
-            ) { [weak self] success in
-                self?.performBoonForceShortcutFeedback(targetEnabled: targetEnabled, success: success)
-            }
-        case .forceDuo:
-            guard canEditDesired else {
-                rejectShortcut(action)
-                return
-            }
-            let targetEnabled = !boonForceDuo
-            setBoonRarity(
-                target: boonRarityTarget,
-                forceLegendary: boonForceLegendary,
-                forceDuo: targetEnabled
-            ) { [weak self] success in
-                self?.performBoonForceShortcutFeedback(targetEnabled: targetEnabled, success: success)
-            }
         case .applyWorldExit:
             guard toggleSelectedWorldExit(completion: { success in
                 TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)

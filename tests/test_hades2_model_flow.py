@@ -391,6 +391,7 @@ struct Main {
             model.selectedChaosBlessing = chaosBlessing.id
             model.selectedChaosCurse = chaosCurse.id
             model.acquisitionRarity = "Epic"
+            model.chaosEncounters = "5"
             check(model.acquireChaosPair(
                 blessingReward: chaosBlessing.id,
                 curseReward: chaosCurse.id
@@ -406,6 +407,7 @@ struct Main {
         check(chaosParams["curse"] as? String == "ChaosDamageCurse", "Chaos curse identity drifted")
         check(chaosParams["rarity"] as? String == "Epic", "Chaos pair lost selected rarity")
         check(chaosParams["level"] == nil, "nonstackable Chaos pair forwarded a level")
+        check(chaosParams["encounters"] as? Int == 5, "Chaos pair did not forward requested encounters: \(chaosParams)")
 
         // The same Core level editor serves multiple native targets. A target
         // change resets its draft; unchanged observations retain the draft.
