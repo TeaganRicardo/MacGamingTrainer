@@ -93,7 +93,8 @@ for raw in sys.stdin:
     if req['command'] == 'open_sell_traits':
         outcomes = ['accepted', 'opened', 'completed', 'completed', 'failed', 'outcome_unknown']
         ack_loss = 'ack_loss_' in pathlib.Path(__file__).name
-        outcome = ('accepted' if 'accepted' in pathlib.Path(__file__).name else 'completed') if ack_loss else outcomes[count]
+        observation_failure = 'observation_failure_' in pathlib.Path(__file__).name
+        outcome = ('accepted' if 'accepted' in pathlib.Path(__file__).name else 'completed') if ack_loss or observation_failure else outcomes[count]
         count += 1
         payload['lastAction'] = {'requestId': req['id'], 'command': req['command'],
                                  'outcome': outcome, 'duplicate': False}
@@ -107,6 +108,10 @@ for raw in sys.stdin:
             reply['error'] = {'code': 'restart_required',
                               'presentation': 'hades2.error.commandResultConnectionLost'}
             payload.update(connected=False, status='restart_required', capabilities={'sellTraits': False})
+        if observation_failure:
+            reply['ok'] = False
+            reply['error'] = {'code': 'action_observation_failed',
+                              'presentation': 'hades2.error.actionObservationFailed'}
     elif req['command'] == 'status':
         status_count += 1
         if status_count == 1 and not issues_path.exists():
@@ -846,6 +851,27 @@ struct Main {
                   "dismissing ACK feedback erased the result or recovery evidence")
             ackSession.stop(suppressTerminationError: true)
         }
+        let observationWorker = temporary.appendingPathComponent("observation_failure_completed_worker.py")
+        try FileManager.default.copyItem(at: worker, to: observationWorker)
+        let observationSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(
+            executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10
+        )))
+        let observationModel = makeFixtureModel(Hades2GameModule.self, session: observationSession,
+            logSink: TrainerLogSink(url: temporary.appendingPathComponent("observation-failure.log")),
+            backendScriptURL: observationWorker) {
+            Hades2TrainerModel(services: $0, runLogDirectoryURL: temporary.appendingPathComponent("observation-game-log"),
+                shortcutDefaults: InMemoryDefaults())
+        }
+        wait { observationModel.backendAvailable && !observationModel.busy }
+        observationModel.openSellTraits()
+        wait(message: "known receipt suppressed the post-action observation notice") {
+            !observationModel.busy && observationModel.feedbackNotice?.text.key == "hades2.error.actionObservationFailed"
+        }
+        check(observationModel.currentIssues.contains { $0.id == "result" && $0.text.key == "hades2.receipt.completed" },
+              "observation failure erased the received action result")
+        check(observationModel.connected && observationModel.status == "ready" && observationModel.canOpenSellTraits,
+              "observation failure with a known result demanded an unnecessary restart")
+        observationSession.stop(suppressTerminationError: true)
         session.stop(suppressTerminationError: true)
         observation.cancel()
         print("viewport_feedback_ok")

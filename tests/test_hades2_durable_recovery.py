@@ -265,7 +265,7 @@ class DurableRecoveryTests(unittest.TestCase):
         self.assertTrue(any('observeBatch' in source for source in transport.calls))
         self.assertTrue(any('invincibility' in source for source in transport.calls))
         self.assertEqual(transport.speed.calls, [('set', 2.0)])
-        self.assertFalse(any('never-replay' in source or 'Money' in source and 'spawn_reward' in source.split('return __MacGamingTrainerV1.json')[-1]
+        self.assertFalse(any('never-replay' in source or '__MacGamingTrainerV1.observe("spawn_reward",' in source
                              for source in transport.calls))
         self.assertIn('recovery', recovered, 'full status snapshot did not clear the previous recovery notice')
         self.assertIsNone(recovered['recovery'])

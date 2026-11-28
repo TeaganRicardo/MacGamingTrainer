@@ -65,6 +65,7 @@
     "hades2.element.Fire": "火",
     "hades2.element.Water": "水",
     "hades2.element.generic": "{0}元素",
+    "hades2.error.actionObservationFailed": "已收到游戏的操作结果，但无法读取更新后的状态。请检查游戏后再决定是否重复操作。",
     "hades2.error.amountRange": "数量必须是 0–{0} 的整数。",
     "hades2.error.architectureRequired": "{0} 适配器需要 {1} 原生游戏。",
     "hades2.error.armorNoMaximum": "护甲仅提供当前值，不存在可编辑上限。",

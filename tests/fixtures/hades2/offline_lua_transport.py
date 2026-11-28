@@ -19,7 +19,7 @@ RESIDENT_FIXTURE = Path(__file__).resolve().parent / "offline_resident.lua"
 
 
 class OfflineLuaTransport:
-    def __init__(self):
+    def __init__(self, *, mailbox_receipts=False):
         self.pid, self.tainted, self.last_duration = 4242, False, 0.0
         self.last_expression_duration, self.last_attach_profile = 0.0, {}
         self.counter = 0
@@ -33,7 +33,8 @@ class OfflineLuaTransport:
             require_lua52("offline resident"), str(RESIDENT_FIXTURE),
             str(self.runtime_path), "1",
             os.environ.get("MGT_PROFILE_TRAITS", "32"), os.environ.get("MGT_PROFILE_CATALOG", "96"),
-            os.environ.get("MGT_PROFILE_RESOURCES", "32"), "serve",
+            os.environ.get("MGT_PROFILE_RESOURCES", "32"),
+            "serve-mailbox" if mailbox_receipts else "serve",
         ], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.events, text=True, bufsize=1)
 
     def alive(self):
