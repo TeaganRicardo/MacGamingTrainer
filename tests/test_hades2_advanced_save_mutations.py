@@ -93,6 +93,52 @@ class AdvancedSaveMutationTests(unittest.TestCase):
         self.assertEqual(saved["MetaUpgradeCostCache"], 0)
         self.assertIsNone(saved["MetaUpgradeState"]["LowManaDamageBonus"].get("Equipped"))
 
+    def test_arcana_keeps_ownership_of_a_cache_whose_projected_value_is_unchanged(self):
+        key = "MetaUpgradeMaxLevelCountCache"
+        self.workspace.document.lua_state["GameState"][key] = 1.0
+        cache_id = self.row(key, ("GameState",))["id"]
+        card_id = "card:LowManaDamageBonus:Level"
+        raw_action = (cache_id, "set", node("number", 7))
+        card_action = (card_id, "set", 3)
+        for first, second in ((raw_action, card_action), (card_action, raw_action)):
+            with self.subTest(first=first[0]):
+                self.workspace.cancel()
+                self.workspace.stage(*first)
+                with self.assertRaisesRegex(save_advanced.AdvancedMutationError, "same Lua path"):
+                    self.workspace.stage(*second)
+                review = self.workspace.review()
+                self.assertEqual([action["entryId"] for action in review["actions"]], [first[0]])
+                self.assertNotIn(key, {row["rawId"] for row in review["changes"] if row["id"].startswith("linked:")})
+
+        self.workspace.cancel()
+        self.workspace.stage(*raw_action)
+        self.assertTrue(self.workspace.apply()["applied"])
+        self.assertEqual(Hades2SaveDocument.load(self.path).lua_state["GameState"][key], 7)
+        self.workspace.stage(card_id, "set", 3)
+        self.workspace.stage(self.row("Number")["id"], "set", 4)
+        self.assertTrue(self.workspace.apply()["applied"])
+        saved = Hades2SaveDocument.load(self.path).lua_state["GameState"]
+        self.assertEqual(saved[key], 1)
+        self.assertEqual(saved["MetaUpgradeState"]["LowManaDamageBonus"]["Level"], 3)
+        self.assertEqual(saved["Raw"]["Number"], 4)
+
+    def test_arcana_reset_owns_an_unchanged_card_field_but_allows_independent_siblings(self):
+        name = "LowManaDamageBonus"
+        card_path = ("GameState", "MetaUpgradeState", name)
+        card = self.workspace.document.lua_state["GameState"]["MetaUpgradeState"][name]
+        card["Level"], card["UnknownNote"] = 1.0, "old"
+        self.workspace.stage(f"card:{name}:Unlocked", "set", False)
+        raw_level = self.row("Level", card_path)["id"]
+        with self.assertRaisesRegex(save_advanced.AdvancedMutationError, "same Lua path"):
+            self.workspace.stage(raw_level, "set", 3)
+        raw_sibling = self.row("UnknownNote", card_path)["id"]
+        self.workspace.stage(raw_sibling, "set", "new")
+        self.assertTrue(self.workspace.apply()["applied"])
+        saved = Hades2SaveDocument.load(self.path).lua_state["GameState"]["MetaUpgradeState"][name]
+        self.assertIsNone(saved.get("Unlocked"))
+        self.assertEqual(saved["Level"], 1)
+        self.assertEqual(saved["UnknownNote"], "new")
+
     def test_members_have_independent_revisable_actions_and_real_key_types(self):
         members = self.row("Members")
         self.workspace.stage(members["id"], "addMembership", {"key": node("string", "New"), "value": node("number", 8)})

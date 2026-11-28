@@ -348,7 +348,7 @@ def validate(descriptor_value, operation, value):
         )
 
 
-def apply_intent(root, intent):
+def apply_intent(root, intent, *, arcana_paths=None):
     if intent["id"].startswith("gift:"):
         return save_relationships.apply_intent(root, intent)
     state = _state(root)
@@ -367,7 +367,7 @@ def apply_intent(root, intent):
             owner[name] = after
         return
     if entry_id.startswith("card:"):
-        return save_arcana.apply_intent(root, intent)
+        return save_arcana.apply_intent(root, intent, owned_paths=arcana_paths)
     if entry_id.startswith("objective:"):
         name = entry_id[len("objective:"):]
         owner = lua_owner(root, ["GameState", "ObjectivesCompleted"], create=True)
@@ -389,8 +389,8 @@ def linked_changes(root, intents):
     return save_arcana.linked_changes(root, intents) + save_relationships.linked_changes(root, intents)
 
 
-def finalize_batch(root, intents, source=None):
-    save_arcana.finalize_batch(root, intents, source=source)
+def finalize_batch(root, intents, source=None, *, arcana_paths=None):
+    save_arcana.finalize_batch(root, intents, source=source, owned_paths=arcana_paths)
 
 
 def validate_batch(root, intents):

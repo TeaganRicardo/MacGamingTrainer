@@ -271,7 +271,7 @@ def responsibility(intent):
     return kind, path
 
 
-def validate_overlaps(source, intents, semantic_candidate):
+def validate_overlaps(source, intents, semantic_candidate, *, owned_paths=()):
     raw = [intent for intent in intents if intent["domain"] == "advanced"]
     for index, left in enumerate(raw):
         owner, path = responsibility(left)
@@ -280,9 +280,14 @@ def validate_overlaps(source, intents, semantic_candidate):
             if owner == other and save_advanced.paths_overlap(path, other_path):
                 raise save_advanced.AdvancedMutationError("Save Editor Advanced actions overlap; revise or remove the existing action first.", conflict=True)
     main = [intent for intent in raw if responsibility(intent)[0] == "main"]
+    if not main:
+        return
+    # A semantic owner may write the source value again. This is still a
+    # conflicting write even when the review has no linked effect to show.
+    semantic_paths = (*owned_paths, *save_advanced.changed_paths(source, semantic_candidate))
     for intent in main:
         path = responsibility(intent)[1]
-        if any(save_advanced.paths_overlap(path, changed) for changed in save_advanced.changed_paths(source, semantic_candidate)):
+        if any(save_advanced.paths_overlap(path, owned) for owned in semantic_paths):
             raise save_advanced.AdvancedMutationError("Save Editor Advanced and semantic actions affect the same Lua path; revise or remove one action.", conflict=True)
 
 
