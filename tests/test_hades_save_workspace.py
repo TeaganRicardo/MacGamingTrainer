@@ -252,6 +252,37 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-journeys-') as tempora
     assert closed_review['error']['presentation'] == 'hades.saveEditor.error.notOpen'
     assert 'arguments' not in closed_review['error']
 
+    # A mixed pair already matches one part of the semantic request. Its
+    # unchanged member still conflicts with an opposite physical edit.
+    for semantic_first in (True, False):
+        mirror_saves, mirror_service = environment(base / f'mirror-{semantic_first}')
+        initial = root_state()
+        initial['GameState']['MetaUpgradesUnlocked']['BackstabMetaUpgrade'] = True
+        mirror_source = mirror_saves / 'Profile1.sav'
+        mirror_target = mirror_saves / 'Profile2.sav'
+        mirror_source.write_bytes(build_save(state=initial))
+        source_before, target_before = mirror_source.read_bytes(), mirror_target.read_bytes()
+        mirror = HadesSaveWorkspace.open(mirror_service, source=source, target=target)
+        raw = entry(mirror, ('GameState', 'MetaUpgradesUnlocked', 'BackstabMetaUpgrade'))
+        actions = [('mirror:1', scalar(True)), (raw, scalar(False))]
+        if not semantic_first:
+            actions.reverse()
+        first, second = actions
+        pending = stage(mirror, first[0], 'set', first[1])
+        conflict = rejects(PresentableError, lambda: stage(mirror, second[0], 'set', second[1]))
+        assert conflict.presentation == 'hades.saveEditor.error.overlappingActions'
+        assert mirror.review() == pending and pending['count'] == 1
+        assert mirror_target.read_bytes() == target_before
+        if semantic_first:
+            assert len(pending['actions'][0]['effects']) == 1
+            matching = entry(mirror, ('GameState', 'MetaUpgradesUnlocked', 'FirstStrikeMetaUpgrade'))
+            assert stage(mirror, matching, 'set', scalar(True))['count'] == 2
+        assert apply(mirror)['verified']
+        unlocked = state(mirror_target)['MetaUpgradesUnlocked']
+        assert unlocked['BackstabMetaUpgrade'] is semantic_first
+        assert unlocked['FirstStrikeMetaUpgrade'] is semantic_first
+        assert mirror_source.read_bytes() == source_before
+
     precision_saves, precision_service = environment(base / 'precision')
     precision_state = root_state()
     precision_state['GameState']['UnknownFutureField']['Precise'] = 1.0
