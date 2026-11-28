@@ -1654,8 +1654,9 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
         intents = tuple(sorted(intents, key=save_container.intent_sort_key))
         semantic = tuple(intent for intent in intents if intent["domain"] != "advanced")
         if any(intent["domain"] == "advanced" for intent in intents):
-            semantic_root = self._project_intent_batch_root(semantic)
-            save_container.validate_overlaps(self.document.lua_state, intents, semantic_root)
+            arcana_paths = set()
+            semantic_root = self._project_intent_batch_root(semantic, arcana_paths=arcana_paths)
+            save_container.validate_overlaps(self.document.lua_state, intents, semantic_root, owned_paths=arcana_paths)
         for intent in intents:
             # Resolve mutation authority only from the pinned source document.
             # The candidate is a derived validation/apply projection; it never
@@ -1806,26 +1807,27 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
         self.clear_pending()
         return self.review(language=language)
 
-    def _project_intent_batch_root(self, intents):
+    def _project_intent_batch_root(self, intents, *, arcana_paths=None):
         # Batch planners may include header, extra-payload or whole-root edits.
         # Project a complete document and return its resulting root: an in-place
         # Lua-only callback loses both container state and root replacements.
         intents = tuple(intents)
         candidate = Hades2SaveDocument.from_bytes(self.document.to_bytes())
-        self._apply_intent_batch(candidate, intents)
-        save_long_term.finalize_batch(candidate.lua_state, intents, source=self.document.lua_state)
+        self._apply_intent_batch(candidate, intents, arcana_paths=arcana_paths)
+        save_long_term.finalize_batch(candidate.lua_state, intents, source=self.document.lua_state,
+                                      arcana_paths=arcana_paths)
         save_container.finalize_batch(candidate, intents)
         return candidate.lua_state
 
-    def _apply_intent_batch(self, document, intents):
+    def _apply_intent_batch(self, document, intents, *, arcana_paths=None):
         for intent in intents:
             if not intent["id"].startswith(("gift:", "questClaim:")):
-                self._apply_intent(document, intent)
+                self._apply_intent(document, intent, arcana_paths=arcana_paths)
         save_relationships.apply_batch(document.lua_state, intents)
         save_quest_rewards.apply_batch(document.lua_state, intents)
 
     @staticmethod
-    def _apply_intent(document, intent):
+    def _apply_intent(document, intent, *, arcana_paths=None):
         if intent["domain"] == "questRewards":
             save_quest_rewards.apply_batch(document.lua_state, (intent,))
             return
@@ -1842,7 +1844,7 @@ class Hades2SaveWorkspace(CoreSaveWorkspace):
             save_equipment.apply_intent(document.lua_state, intent)
             return
         if intent["id"].startswith(("interaction:", "specialInteraction:", "gift:", "card:", "objective:")):
-            save_long_term.apply_intent(document.lua_state, intent)
+            save_long_term.apply_intent(document.lua_state, intent, arcana_paths=arcana_paths)
             return
         if intent["domain"] in ("flags", "dialogue", "progression", "questObservation", "speechHistory"):
             save_narrative.apply_intent(document.lua_state, intent)

@@ -37,6 +37,7 @@ CARDS = {
     "EpicRarityBoost": (0, "otherRowOrColumn"), "CardDraw": (0, "oneToThree"),
 }
 _MAX = 9_007_199_254_740_991
+_REMOVE_FIELD = object()
 _CACHE_LABELS = {
     "MetaUpgradeUnlockedCountCache": ("Arcana unlocked count", "阿卡那牌已解锁数量"),
     "MetaUpgradeMaxLevelCountCache": ("Arcana maximum-level count", "阿卡那牌满级数量"),
@@ -65,6 +66,16 @@ def _table(owner, key, *, create=False):
     if not isinstance(value, LuaTable):
         raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor semantic owner is unsupported.")
     return value
+
+
+def _write_fields(owner, path, values, owned_paths):
+    for field, value in values.items():
+        if value is _REMOVE_FIELD:
+            owner.pop(field, None)
+        else:
+            owner[field] = value
+        if owned_paths is not None:
+            owned_paths.add((*path, field))
 
 
 def _number(value):
@@ -163,43 +174,43 @@ def rows(root, language="zh-CN", game_path=None, *, include_absent=False):
     return result
 
 
-def apply_intent(root, intent):
+def apply_intent(root, intent, *, owned_paths=None):
     _, name, field = intent["id"].split(":", 2)
     cards = _table(root["GameState"], "MetaUpgradeState", create=True)
     if name not in CARDS and name not in cards:
         raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor Arcana card identity is invalid.")
     card = _table(cards, name, create=True)
+    path = ("GameState", "MetaUpgradeState", name)
     after = intent["after"]
     if name not in CARDS:
         # The physical fields are writable, but unknown native metadata cannot
         # authorize invented unlocks, costs or runtime effects.
-        card[field] = after
+        _write_fields(card, path, {field: after}, owned_paths)
         return
     if field == "Unlocked" and not after:
-        card.pop("Unlocked", None)
-        card.pop("Equipped", None)
-        card["Level"] = 1
+        _write_fields(card, path, {"Unlocked": _REMOVE_FIELD, "Equipped": _REMOVE_FIELD, "Level": 1},
+                      owned_paths)
     elif field in ("Unlocked", "Equipped"):
         if after:
-            card[field] = card["Unlocked"] = True
+            _write_fields(card, path, {field: True, "Unlocked": True}, owned_paths)
         else:
-            card.pop(field, None)
+            _write_fields(card, path, {field: _REMOVE_FIELD}, owned_paths)
     elif field == "Level":
-        card[field] = after
+        _write_fields(card, path, {field: after}, owned_paths)
         if after > 1:
-            card["Unlocked"] = True
+            _write_fields(card, path, {"Unlocked": True}, owned_paths)
     else:
         raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor Arcana field is not editable.")
     if card.get("Level") is None:
-        card["Level"] = 1
+        _write_fields(card, path, {"Level": 1}, owned_paths)
 
 
-def _layout(state):
+def _layout(state, owned_paths):
     value = state.get("MetaUpgradeCardLayout")
     if value is None:
         value = LuaTable(5, 0, [(index, LuaTable(5, 0, list(enumerate(row, 1))))
                                for index, row in enumerate(LAYOUT, 1)])
-        state["MetaUpgradeCardLayout"] = value
+        _write_fields(state, ("GameState",), {"MetaUpgradeCardLayout": value}, owned_paths)
     if not isinstance(value, LuaTable):
         raise Hades2ValueError("hades2.saveEditor.error.invalidMutation", "Save Editor semantic owner is unsupported.")
     result, seen = [], set()
@@ -327,7 +338,7 @@ def _choose_manual(cards, layout, own, manual):
     raise SaveBatchValidationError("hades2.saveEditor.error.arcanaChangesConflict", "Save Editor Arcana changes conflict.", "arcana")
 
 
-def finalize_batch(root, intents, source=None):
+def finalize_batch(root, intents, source=None, *, owned_paths=None):
     own = [intent for intent in intents if intent["id"].startswith("card:")
            and intent["id"].split(":")[1] in CARDS]
     if not own:
@@ -342,24 +353,24 @@ def finalize_batch(root, intents, source=None):
         loadout_change = any(intent["after"] > 1 and not _truth(
             _table(original, intent["id"].split(":")[1]).get("Unlocked")) for intent in own)
     if loadout_change:
-        layout = _layout(state)
+        layout = _layout(state, owned_paths)
         manual, equipped = _choose_manual(cards, layout, own, manual)
         for name in manual:
             if name in CARDS:
                 card = _table(cards, name, create=True)
-                card["Unlocked"] = True
+                path = ("GameState", "MetaUpgradeState", name)
+                _write_fields(card, path, {"Unlocked": True}, owned_paths)
                 if card.get("Level") is None:
-                    card["Level"] = 1
+                    _write_fields(card, path, {"Level": 1}, owned_paths)
         for name, card in cards.entries():
             if name not in CARDS or not isinstance(card, LuaTable):
                 continue
-            if name in equipped:
-                card["Equipped"] = True
-            else:
-                card.pop("Equipped", None)
+            path = ("GameState", "MetaUpgradeState", name)
+            _write_fields(card, path, {"Equipped": True if name in equipped else _REMOVE_FIELD}, owned_paths)
             bonuses = card.get("AdjacencyBonuses")
             if isinstance(bonuses, LuaTable):
-                bonuses.pop("CustomMultiplier", None)
+                _write_fields(bonuses, (*path, "AdjacencyBonuses"), {"CustomMultiplier": _REMOVE_FIELD},
+                              owned_paths)
     else:
         equipped = manual | {name for name in CARDS if CARDS[name][1]
                              and isinstance(cards.get(name), LuaTable) and _truth(cards[name].get("Equipped"))}
@@ -371,14 +382,18 @@ def finalize_batch(root, intents, source=None):
         level += 1
     if loadout_change and capacity(level) < cost:
         raise SaveBatchValidationError("hades2.saveEditor.error.arcanaChangesConflict", "Save Editor Arcana changes conflict.", "arcana")
+    values = {}
     if level or "MetaUpgradeLimitLevel" in state:
-        state["MetaUpgradeLimitLevel"] = level
-    state["MaxMetaUpgradeCostCache"] = capacity(level)
-    state["MetaUpgradeCostCache"] = cost
-    state["MetaUpgradeUnlockedCountCache"] = sum(
-        isinstance(cards.get(name), LuaTable) and _truth(cards[name].get("Unlocked")) for name in CARDS)
-    state["MetaUpgradeMaxLevelCountCache"] = sum(
-        isinstance(cards.get(name), LuaTable) and _level(cards[name]) >= 3 for name in CARDS)
+        values["MetaUpgradeLimitLevel"] = level
+    values.update({
+        "MaxMetaUpgradeCostCache": capacity(level),
+        "MetaUpgradeCostCache": cost,
+        "MetaUpgradeUnlockedCountCache": sum(
+            isinstance(cards.get(name), LuaTable) and _truth(cards[name].get("Unlocked")) for name in CARDS),
+        "MetaUpgradeMaxLevelCountCache": sum(
+            isinstance(cards.get(name), LuaTable) and _level(cards[name]) >= 3 for name in CARDS),
+    })
+    _write_fields(state, ("GameState",), values, owned_paths)
 
 
 def validate_batch(root, intents):
