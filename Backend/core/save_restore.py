@@ -1,20 +1,56 @@
+import ctypes
 import hashlib
 import json
 import logging
 import os
 import shutil
 import stat
+import sys
 import tempfile
 import time
 import uuid
 from contextlib import ExitStack
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 from .errors import CoreSaveError
-from .persistence import atomic_write_text
+from .persistence import atomic_write_text, fsync_directory
 from .save_resolution import ResolvedSaveFile
 from .save_metadata import copy_owned_save_file, copy_save_metadata, remove_owned_save_tree
 from .save_snapshots import SaveSnapshotError, _safe_relative, _sha256
+
+
+def _rename_hot(source, destination, directory_fd, *, exchange=False):
+    # Both variants leave an existing destination intact, either by exchanging
+    # it with source or by refusing to rename. A normal rename may discard it.
+    libc = ctypes.CDLL(None, use_errno=True)
+    if sys.platform == 'darwin':
+        rename = libc.renameatx_np
+        flags = 2 if exchange else 4  # RENAME_SWAP / RENAME_EXCL
+    else:
+        rename = libc.renameat2
+        flags = 2 if exchange else 1  # RENAME_EXCHANGE / RENAME_NOREPLACE
+    rename.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
+    rename.restype = ctypes.c_int
+    if rename(directory_fd, os.fsencode(source), directory_fd, os.fsencode(destination), flags) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), destination)
+
+
+def _hot_identity_and_hash(name, directory_fd):
+    try:
+        descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+    except FileNotFoundError:
+        return None, None
+    with os.fdopen(descriptor, 'rb') as handle:
+        metadata = os.fstat(handle.fileno())
+        if not stat.S_ISREG(metadata.st_mode):
+            raise SaveRestoreError('Save mutation target is not a regular file.')
+        digest = hashlib.sha256()
+        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+            digest.update(chunk)
+        return metadata.st_ino, digest.hexdigest()
 
 
 class SaveBusyError(CoreSaveError):
@@ -41,6 +77,56 @@ class SaveRollbackError(SaveRestoreError):
 
 class SaveRestorePreparationInterrupted(KeyboardInterrupt):
     """Rollback capture was interrupted before any save mutation began."""
+
+
+@dataclass
+class _HotSaveChange:
+    destination: Path
+    directory_fd: int
+    before: str
+    baseline_digest: Optional[str]
+    installed_digest: Optional[str]
+    installed_inode: Optional[int] = None
+
+    @property
+    def name(self):
+        return self.destination.name
+
+    def verify_displaced(self):
+        if self.baseline_digest is not None:
+            _, digest = _hot_identity_and_hash(self.before, self.directory_fd)
+            if digest != self.baseline_digest:
+                raise SaveRestoreError('Game saved new data just before the hot save mutation.')
+
+    def rollback(self):
+        # Check whether the mutation ran before an interruption. For a
+        # replacement, the incoming inode still occupies the holding name
+        # until the exchange. A deletion has no staged incoming inode.
+        before_inode, before_digest = _hot_identity_and_hash(self.before, self.directory_fd)
+        if before_inode == self.installed_inode:
+            return False, None
+
+        live_inode, live_digest = _hot_identity_and_hash(self.name, self.directory_fd)
+        if (live_inode, live_digest) != (self.installed_inode, self.installed_digest):
+            # An independent writer has already published another version.
+            # Leave it in place. A displaced version that lacks a verified
+            # pre-write copy must remain available too.
+            if self.baseline_digest is not None and before_digest != self.baseline_digest:
+                raise SaveRestoreError('Two independently written hot save versions were preserved.')
+            return False, None
+
+        if self.baseline_digest is None:
+            _rename_hot(self.name, self.before, self.directory_fd)
+        else:
+            _rename_hot(self.before, self.name, self.directory_fd, exchange=self.installed_digest is not None)
+        os.fsync(self.directory_fd)
+        if self.installed_inode is not None:
+            # A writer can publish after the read above and before rollback
+            # itself. The inverse rename retains its exact bytes in this case.
+            peer = _hot_identity_and_hash(self.before, self.directory_fd)
+            if peer != (self.installed_inode, self.installed_digest):
+                raise SaveRestoreError('Game saved concurrently with rollback; its bytes were preserved.')
+        return True, before_digest
 
 
 class SaveRestoreTransaction:
@@ -273,11 +359,10 @@ class SaveRestoreTransaction:
             raise SaveRestoreError('Save destination escaped its declared root.') from error
         return destination
 
-    def _replace_file(self, source, destination, digest, *, directory_fd, progress=None, key=None):
-        temporary = '.trainer-save-' + uuid.uuid4().hex
-        fd = os.open(temporary, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory_fd)
+    def _stage_file(self, source, temporary, digest, directory_fd):
+        descriptor = os.open(temporary, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory_fd)
         try:
-            with os.fdopen(fd, 'w+b') as staged, Path(source).open('rb') as original:
+            with os.fdopen(descriptor, 'w+b') as staged, Path(source).open('rb') as original:
                 shutil.copyfileobj(original, staged)
                 staged.flush()
                 staged.seek(0)
@@ -288,6 +373,15 @@ class SaveRestoreTransaction:
                     raise SaveRestoreError('Staged save file failed integrity verification.')
                 copy_save_metadata(original.fileno(), staged.fileno())
                 os.fsync(staged.fileno())
+                return os.fstat(staged.fileno()).st_ino
+        except BaseException:
+            os.unlink(temporary, dir_fd=directory_fd)
+            raise
+
+    def _replace_file(self, source, destination, digest, *, directory_fd, progress=None, key=None):
+        temporary = '.trainer-save-' + uuid.uuid4().hex
+        self._stage_file(source, temporary, digest, directory_fd)
+        try:
             # Both names are relative to the captured directory descriptor.
             # Renaming or redirecting its pathname cannot redirect mutation.
             if progress is not None:
@@ -364,6 +458,73 @@ class SaveRestoreTransaction:
                 raise
             os.fsync(descriptor)
 
+    def _hot_changes(self, destinations, baseline_hashes, target_hashes):
+        changes = {}
+        for key, (destination, directory_fd) in destinations.items():
+            temporary = '.trainer-save-' + uuid.uuid4().hex
+            changes[key] = _HotSaveChange(
+                destination,
+                directory_fd,
+                temporary,
+                baseline_hashes.get(key),
+                target_hashes.get(key),
+            )
+        return changes
+
+    @staticmethod
+    def _write_hot_recovery_note(rollback_root, changes, reason):
+        atomic_write_text(
+            rollback_root / 'hot-files.json',
+            json.dumps(
+                {
+                    'reason': reason,
+                    'files': [
+                        {
+                            'target': str(change.destination),
+                            'holdingPath': str(change.destination.with_name(change.before)),
+                        }
+                        for change in changes.values()
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+        )
+
+    def _install_hot_changes(self, changes, target_entries, progress):
+        sources = {key: source for key, source, _ in target_entries}
+        keys = list(sources) + sorted(changes.keys() - sources.keys())
+        for key in keys:
+            change = changes[key]
+            if change.installed_digest is not None:
+                change.installed_inode = self._stage_file(
+                    sources[key], change.before, change.installed_digest, change.directory_fd
+                )
+            progress.add(key)
+            try:
+                if change.installed_digest is None:
+                    _rename_hot(change.name, change.before, change.directory_fd)
+                else:
+                    _rename_hot(
+                        change.before,
+                        change.name,
+                        change.directory_fd,
+                        exchange=change.baseline_digest is not None,
+                    )
+            except OSError:
+                progress.remove(key)
+                raise
+            os.fsync(change.directory_fd)
+            change.verify_displaced()
+
+    @staticmethod
+    def _clean_hot_changes(changes):
+        for change in changes.values():
+            try:
+                os.unlink(change.before, dir_fd=change.directory_fd)
+            except FileNotFoundError:
+                continue
+            os.fsync(change.directory_fd)
+
     def _apply_captured(
         self,
         rollback_root,
@@ -393,6 +554,7 @@ class SaveRestoreTransaction:
         previous_snapshot_id = None
         mutated = set()
         cleanup_rollback = True
+        hot_changes = {}
         destination_stack = ExitStack()
         result = None
 
@@ -423,8 +585,20 @@ class SaveRestoreTransaction:
             self._verify_destinations(destinations)
             recovery_marker = self._target_marker(baseline_hashes, target_hashes)
             self._write_target_marker(rollback_root, recovery_marker)
-            self._install_entries(target_entries, destinations, progress=mutated)
-            self._delete_keys(set(baseline_hashes) - set(target_hashes), destinations, progress=mutated)
+            if target_running:
+                hot_changes = self._hot_changes(destinations, baseline_hashes, target_hashes)
+                # Keep the names of the exact inodes reachable if this process
+                # exits between the atomic operation and rollback.
+                self._write_hot_recovery_note(
+                    rollback_root,
+                    hot_changes,
+                    'An interrupted hot transaction may leave staged or displaced save data at these holding paths.',
+                )
+                fsync_directory(rollback_root.parent)
+                self._install_hot_changes(hot_changes, target_entries, mutated)
+            else:
+                self._install_entries(target_entries, destinations, progress=mutated)
+                self._delete_keys(set(baseline_hashes) - set(target_hashes), destinations, progress=mutated)
             self._verify_destinations(destinations)
 
             if not self._verify_state(target_hashes, owned_keys):
@@ -437,6 +611,8 @@ class SaveRestoreTransaction:
                 time.sleep(0.05)
                 if not self._verify_state(target_hashes, owned_keys):
                     raise SaveRestoreError('Game rewrote save files immediately after hot restore.')
+                for change in hot_changes.values():
+                    change.verify_displaced()
 
             self._verify_destinations(destinations)
             result = {
@@ -462,16 +638,35 @@ class SaveRestoreTransaction:
             # before returning or allowing process termination. Keep the
             # recovery copy until rollback has completed and verified.
             cleanup_rollback = False
+            newer_live_preserved = False
             try:
                 rollback_destinations = {key: destinations[key] for key in mutated}
-                rollback_hashes = {key: baseline_hashes[key] for key in mutated & baseline_hashes.keys()}
-                entries = []
-                for row in rollback_rows:
-                    key = self._key(row)
-                    if key in rollback_hashes:
-                        entries.append((key, row.source_path, rollback_hashes[key]))
-                self._install_entries(entries, rollback_destinations)
-                self._delete_keys(mutated - rollback_hashes.keys(), rollback_destinations)
+                if target_running:
+                    rollback_hashes = {}
+                    hot_rollback_error = None
+                    for key in sorted(mutated, reverse=True):
+                        try:
+                            restored, digest = hot_changes[key].rollback()
+                        except Exception as revert_error:
+                            hot_rollback_error = revert_error
+                            continue
+                        if restored:
+                            rollback_hashes[key] = digest
+                        else:
+                            del rollback_destinations[key]
+                        if not restored or digest != baseline_hashes.get(key):
+                            newer_live_preserved = True
+                    if hot_rollback_error is not None:
+                        raise hot_rollback_error
+                else:
+                    rollback_hashes = {key: baseline_hashes[key] for key in mutated & baseline_hashes.keys()}
+                    entries = []
+                    for row in rollback_rows:
+                        key = self._key(row)
+                        if key in rollback_hashes:
+                            entries.append((key, row.source_path, rollback_hashes[key]))
+                    self._install_entries(entries, rollback_destinations)
+                    self._delete_keys(mutated - rollback_hashes.keys(), rollback_destinations)
                 self._verify_destinations(rollback_destinations)
                 if not all(
                     self._target_matches_baseline(destination, rollback_hashes.get(key))
@@ -489,8 +684,10 @@ class SaveRestoreTransaction:
                 ]
                 try:
                     self._write_target_marker(rollback_root, recovery_marker)
+                    if target_running:
+                        self._write_hot_recovery_note(rollback_root, hot_changes, str(rollback_error))
                 except OSError:
-                    logging.exception('Save rollback marker could not be narrowed: %s', rollback_root)
+                    logging.exception('Save rollback evidence could not be updated: %s', rollback_root)
                 if not isinstance(rollback_error, Exception):
                     raise
                 raise SaveRollbackError(
@@ -502,11 +699,13 @@ class SaveRestoreTransaction:
             cleanup_rollback = True
             if not isinstance(error, Exception):
                 raise
+            if newer_live_preserved:
+                raise SaveRestoreError('{} failed; a newer live save was preserved.'.format(operation_name)) from error
             raise SaveRestoreError('{} failed; previous saves were rolled back.'.format(operation_name)) from error
         finally:
-            destination_stack.close()
             if cleanup_rollback:
                 try:
+                    self._clean_hot_changes(hot_changes)
                     remove_owned_save_tree(rollback_root)
                 except OSError:
                     logging.exception('Verified save transaction cleanup failed: %s', rollback_root)
@@ -523,6 +722,10 @@ class SaveRestoreTransaction:
                             logging.exception(
                                 'Completed save transaction marker could not be updated: %s', rollback_root
                             )
+                finally:
+                    destination_stack.close()
+            else:
+                destination_stack.close()
 
     def _replacement_entries(self, replacements):
         if not isinstance(replacements, (list, tuple)) or not replacements:
