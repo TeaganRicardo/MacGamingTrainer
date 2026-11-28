@@ -1294,7 +1294,15 @@ local function closeTraitMenu()
   if command and command.executionThread == coroutine.running() then command.menu = nil end
   return true
 end
-local function equipOwnedTrait(unit, name, source, rarity, level)
+local function selectedTrait(unit, id)
+  for _, group in ipairs(traitGroups(unit)) do
+    if group.instanceId == id then
+      return group
+    end
+  end
+  error("hades.error.staleTrait")
+end
+local function equipOwnedTrait(unit, name, source, rarity, level, expectedId)
   assert(level == 1, "hades.error.invalidValue")
   local assist = source.Slot == "Assist"
   local ownerKey = assist and "LastAssistTrait" or "LastAwardTrait"
@@ -1330,7 +1338,11 @@ local function equipOwnedTrait(unit, name, source, rarity, level)
   end
   if previous and previous.Name == name and previous.Rarity == rarity
       and GameState[ownerKey] == name and rank == currentRank then return end
-  closeTraitMenu()
+  if closeTraitMenu() and expectedId then
+    local group = selectedTrait(unit, expectedId)
+    assert(group.canEdit, "hades.error.unsupportedTrait")
+    assert(group.trait == previous, "hades.error.staleTrait")
+  end
   beginTraitMutation()
   suspendProperties(unit)
   runtime.propertyDepth = runtime.propertyDepth + 1
@@ -1398,14 +1410,6 @@ function runtime.add_trait(name, rarity, level)
   mount(unit, false)
   return runtime.status()
 end
-local function selectedTrait(unit, id)
-  for _, group in ipairs(traitGroups(unit)) do
-    if group.instanceId == id then
-      return group
-    end
-  end
-  error("hades.error.staleTrait")
-end
 local function cancelGroup(unit, group, expire)
   if group.trait.Slot == "Keepsake" or group.trait.Slot == "Assist" then
     local assist = group.trait.Slot == "Assist"
@@ -1443,7 +1447,7 @@ function runtime.update_trait(id, rarity, level)
   local trait = group.trait
   local source = validateTrait(unit, trait.Name, rarity, level)
   if source.Slot == "Keepsake" or source.Slot == "Assist" then
-    equipOwnedTrait(unit, trait.Name, source, rarity, level)
+    equipOwnedTrait(unit, trait.Name, source, rarity, level, id)
   else
     if closeTraitMenu() then
       group = selectedTrait(unit, id)
