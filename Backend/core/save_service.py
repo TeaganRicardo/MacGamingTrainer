@@ -152,7 +152,8 @@ class CoreSaveService:
         running = self._running()
         if running and not allow_running:
             raise SaveBusyError('Game must be stopped before applying a save edit.')
-        result = self._transaction().replace_files(
+        transaction = self._transaction()
+        result = transaction.replace_files(
             replacements,
             expected_hashes,
             post_install_verify=post_install_verify,
@@ -167,7 +168,8 @@ class CoreSaveService:
             result['retention'] = self.retention.after_successful_edit(
                 result['previousSnapshotId'],
                 pinned,
-                recovery_pending=bool(self._recovery_paths()) or bool(pending and pending.get('indeterminate')),
+                recovery_pending=bool(pending and pending.get('indeterminate'))
+                or transaction.has_unresolved_recovery(),
             )
         except Exception:
             logging.exception('Automatic backup checkpoint failed after a confirmed save edit')

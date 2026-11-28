@@ -31,10 +31,10 @@ class BackupRetentionTests(unittest.TestCase):
         )
         self.service = CoreSaveService('fixture', self.spec, self.folder / 'data', lambda: self.running)
 
-    def edit(self, value, verifier=None):
+    def edit(self, value, verifier=None, *, target='Profile1.sav'):
         source = self.folder / 'replacement.sav'
         source.write_bytes(value)
-        return self.service.replace_files((ResolvedSaveFile('main', 'Profile1.sav', source),),
+        return self.service.replace_files((ResolvedSaveFile('main', target, source),),
                                           post_install_verify=verifier)
 
     def rows(self):
@@ -136,11 +136,16 @@ class BackupRetentionTests(unittest.TestCase):
 
     def test_interruption_and_rollback_failure_preserve_recovery(self):
         self.configure()
+        peer = self.saves / 'Profile2.sav'
+        peer.write_bytes(b'peer')
+
         def interrupted():
             raise KeyboardInterrupt()
+
         with self.assertRaises(KeyboardInterrupt):
             self.edit(b'interrupted', interrupted)
         interrupted_id = next(iter(self.rows()))
+        prior_id = self.edit(b'previous')['previousSnapshotId']
         transaction = self.service._transaction()
         install = transaction._install_entries
         attempts = []
@@ -163,14 +168,23 @@ class BackupRetentionTests(unittest.TestCase):
         before = set(self.rows())
         with self.assertRaises(SaveRollbackError):
             self.edit(b'blocked')
+
+        peer_result = self.edit(b'updated peer', target=peer.name)
+        self.assertTrue(peer_result['replaced'])
+        self.assertEqual(peer_result['retention']['warning'], 'recovery_pending')
+        self.assertEqual(self.target.read_bytes(), b'failed')
+        self.assertEqual(peer.read_bytes(), b'updated peer')
+        self.assertTrue(before <= set(self.rows()))
+
         baseline = Path(recovery[0]) / 'files/main/Profile1.sav'
         self.target.write_bytes(baseline.read_bytes())
         result = self.edit(b'success')
         self.assertTrue(result['replaced'])
-        self.assertEqual(result['retention']['warning'], 'recovery_pending')
-        self.assertTrue(before <= set(self.rows()))
+        self.assertEqual(result['retention']['warning'], '')
+        self.assertEqual(set(result['retention']['deletedIds']), {prior_id, peer_result['previousSnapshotId']})
         self.assertIn(interrupted_id, self.rows())
         self.assertEqual(self.service._recovery_paths(), recovery)
+        self.assertEqual(baseline.read_bytes(), b'previous')
 
     def test_cleanup_failure_does_not_fail_or_roll_back_successful_apply(self):
         self.configure()
@@ -186,30 +200,42 @@ class BackupRetentionTests(unittest.TestCase):
 
     def test_legacy_recovery_stays_resolved_after_later_edits(self):
         # Pre-marker rollback copies need durable resolution when upgrading.
+        self.configure()
         recovery, _, _ = self.service._transaction()._capture_rollback(False)
         baseline = recovery / 'files/main/Profile1.sav'
         self.target.write_bytes(b'unresolved legacy replacement')
         with self.assertRaises(SaveRollbackError):
             self.edit(b'blocked')
         self.target.write_bytes(baseline.read_bytes())
-        self.assertTrue(self.edit(b'first recovered edit')['replaced'])
+        first = self.edit(b'first recovered edit')
+        self.assertTrue(first['replaced'])
         self.service = CoreSaveService('fixture', self.spec, self.folder / 'data', lambda: False)
-        self.assertTrue(self.edit(b'second recovered edit')['replaced'])
+        second = self.edit(b'second recovered edit')
+        self.assertTrue(second['replaced'])
+        self.assertEqual(second['retention'], {'deletedIds': [first['previousSnapshotId']], 'warning': ''})
         self.assertEqual(self.target.read_bytes(), b'second recovered edit')
         self.assertEqual(baseline.read_bytes(), b'original')
 
     def test_completed_transaction_cleanup_failure_does_not_fence_next_edit(self):
+        self.configure()
         with mock.patch('core.save_restore.remove_owned_save_tree', side_effect=OSError('cleanup unavailable')), \
              self.assertLogs(level='ERROR'):
             result = self.edit(b'verified replacement')
         self.assertTrue(result['replaced'])
         self.assertEqual(result['maintenanceWarning'], 'rollback_cleanup_failed')
+        self.assertEqual(result['retention']['warning'], '')
         recovery = self.service._recovery_paths()
         self.assertTrue(recovery)
         self.service = CoreSaveService('fixture', self.spec, self.folder / 'data', lambda: False)
-        self.assertTrue(self.edit(b'next verified replacement')['replaced'])
+        next_result = self.edit(b'next verified replacement')
+        self.assertTrue(next_result['replaced'])
+        self.assertEqual(next_result['retention'], {'deletedIds': [result['previousSnapshotId']], 'warning': ''})
         self.assertEqual(self.target.read_bytes(), b'next verified replacement')
-        self.assertEqual(self.service._recovery_paths(), recovery)
+        state = self.service.list_state()
+        self.assertEqual(state['recoveryPaths'], recovery)
+        self.assertEqual(state['storageUsage']['recoveryCount'], 1)
+        self.assertFalse(state['retention']['overBudget'])
+        self.assertEqual((Path(recovery[0]) / 'files/main/Profile1.sav').read_bytes(), b'original')
 
     def test_unverified_replacement_cannot_authorize_eviction(self):
         self.configure()

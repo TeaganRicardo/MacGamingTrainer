@@ -208,6 +208,9 @@ class SaveRestoreTransaction:
                 unresolved.append((None, recovery_root))
         return unresolved
 
+    def has_unresolved_recovery(self):
+        return bool(self._unresolved_recovery_targets())
+
     def _require_targets_recovered(self, keys, *, exclude_root=None):
         requested = {self._physical_target_path(key) for key in keys}
         for unresolved_path, recovery_root in self._unresolved_recovery_targets(exclude_root=exclude_root):
