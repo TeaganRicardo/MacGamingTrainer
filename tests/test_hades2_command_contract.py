@@ -260,6 +260,22 @@ assert params == {
     "curse": "ChaosDamageCurse",
     "requestId": "chaos-id",
 }
+_, params = dispatch_runtime(
+    "acquire_chaos_pair",
+    {"blessing": "ChaosHealthBlessing", "curse": "ChaosDamageCurse", "encounters": 5},
+    "chaos-id-encounters",
+)
+assert params == {
+    "blessing": "ChaosHealthBlessing",
+    "curse": "ChaosDamageCurse",
+    "encounters": 5,
+    "requestId": "chaos-id-encounters",
+}
+expect_error(
+    "acquire_chaos_pair",
+    {"blessing": "ChaosHealthBlessing", "curse": "ChaosDamageCurse", "encounters": 0},
+    "遭遇战次数必须是 1–100 的整数。",
+)
 expect_error(
     "acquire_chaos_pair",
     {"blessing": "ChaosHealthBlessing"},

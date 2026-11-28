@@ -535,7 +535,7 @@ struct Main {
             show: { managementModel.shortcutSettingsPresented = true }, isPresented: { managementModel.shortcutSettingsPresented },
             chord: { managementModel.shortcutText(.invincibility) }, commands: { commands(at: commandLog) })
         managementModel.connected = false; managementModel.pid = nil
-        managementCheck(menuCatalog.disableAll?.isEnabled == false && menuCatalog.additionalMaintenance.allSatisfy(\.isEnabled)
+        managementCheck(menuCatalog.disableAll?.isEnabled == true && menuCatalog.additionalMaintenance.allSatisfy(\.isEnabled)
                         && menuCatalog.saveManagement?.isEnabled == true,
                         "detached Hades II command eligibility changed")
         managementModel.pid = 99
@@ -547,6 +547,7 @@ struct Main {
         menuCatalog.additionalMaintenance.forEach { $0.perform() }
         pump(0.10)
         managementCheck(commands(at: commandLog).count == afterExit
+                        && menuCatalog.disableAll?.isEnabled == false
                         && !managementModel.profilesPresented && !managementModel.diagnosticsPresented
                         && !managementModel.shortcutSettingsPresented
                         && menuCatalog.saveManagement?.isEnabled == false,
@@ -738,9 +739,8 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
         return nil
     }
     func exitPicker() -> NativeAccessibilityControl? { control(["AXPopUpButton"], "hades2.worldActions.currentExit") }
-    // A SwiftUI Menu is a native pull-down: AXMenuButton (or AXPopUpButton).
     func targetMenu() -> NativeAccessibilityControl? {
-        control(["AXMenuButton", "AXPopUpButton"], "hades2.worldActions.target")
+        control(["AXPopUpButton"], "hades2.worldActions.target")
     }
     func applyButton() -> NativeAccessibilityControl? { control(["AXButton"], "hades2.worldActions.apply") }
     func revealWorldExitPanel() {
@@ -774,22 +774,50 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
         fail("worldExitPanel initial button label expected \(applyTitle), got \(applyButton()?.label ?? "nil")")
     }
 
+    func checkMutedWarningStyling(_ attributed: NSAttributedString?, primaryPrefix: String, warningText: String, context: String) {
+        guard let attributed else { fail("\(context): missing attributedTitle") }
+        let full = attributed.string as NSString
+        let primaryRange = full.range(of: primaryPrefix)
+        let warningRange = full.range(of: warningText)
+        guard primaryRange.location != NSNotFound, warningRange.location != NSNotFound else {
+            fail("\(context): missing primary '\(primaryPrefix)' or warning '\(warningText)' in '\(attributed.string)'")
+        }
+        let primaryColor = attributed.attribute(.foregroundColor, at: primaryRange.location, effectiveRange: nil) as? NSColor
+        let warningColor = attributed.attribute(.foregroundColor, at: warningRange.location, effectiveRange: nil) as? NSColor
+        guard primaryColor != NSColor.secondaryLabelColor, warningColor == NSColor.secondaryLabelColor else {
+            fail("\(context): expected muted gray warning vs primary text (primary=\(String(describing: primaryColor)), warning=\(String(describing: warningColor)))")
+        }
+    }
+    func findPopupButton(in view: NSView, identifier: String) -> NSPopUpButton? {
+        if let popup = view as? NSPopUpButton, popup.accessibilityIdentifier() == identifier { return popup }
+        return view.subviews.lazy.compactMap { findPopupButton(in: $0, identifier: identifier) }.first
+    }
+    func allTextFields(in view: NSView) -> [NSTextField] {
+        (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(allTextFields)
+    }
+
     let combat = string("hades2.worldActions.route.combat")
     let health = string("hades2.reward.MaxHealthDrop")
-    let inPlaceTitle = combat + " · " + health + warn + string("hades2.worldActions.unavailable.room_no_reward")
+    let inPlaceWarn = warn + string("hades2.worldActions.unavailable.room_no_reward")
+    let inPlaceTitle = combat + " · " + health + inPlaceWarn
     guard targetMenu()?.valueText == inPlaceTitle else {
         fail("in-place selected summary lost its room reward warning: \(targetMenu()?.valueText ?? "nil")")
     }
+    let popupButton = findPopupButton(in: host, identifier: "hades2.worldActions.target")
+    checkMutedWarningStyling((popupButton?.cell as? NSPopUpButtonCell)?.menuItem?.attributedTitle,
+        primaryPrefix: combat + " · " + health, warningText: inPlaceWarn, context: "closed target summary")
     let anyReward = string("hades2.worldActions.anyReward")
     let routedAny = anyReward + warn + string("hades2.worldActions.unavailable.door_forced_destination")
     withOpenNestedMenu(targetMenu()!, in: window) { menu in
         guard let submenu = visibleItems(menu).first(where: { $0.title == combat })?.submenu,
               let anyIndex = submenu.items.firstIndex(where: { $0.title == routedAny }),
-              submenu.items.contains(where: {
+              let healthItem = submenu.items.first(where: {
                   $0.title == health + warn + string("hades2.worldActions.unavailable.room_no_reward")
               }) else {
             fail("own-type choices did not distinguish routing from in-place reward warnings")
         }
+        checkMutedWarningStyling(healthItem.attributedTitle, primaryPrefix: health, warningText: inPlaceWarn,
+            context: "nested reward menu item")
         submenu.performActionForItem(at: anyIndex)
     }
     nativePickerWait("own-type Any Reward summary keeps routing warning") {
@@ -1018,6 +1046,79 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
         }
         guard labels == expected else {
             fail("bridge exits lost their reported Story/Shop distinction: \(labels), expected \(expected)")
+        }
+    }
+
+    model.activateAcquisition(.exact)
+    nativePickerWait("Chaos encounters available before selecting Chaos") {
+        host.layoutSubtreeIfNeeded()
+        return model.acquisitionTarget == .exact && allTextFields(in: host).contains {
+            $0.accessibilityIdentifier() == "hades2.spawn.chaosEncounters"
+        }
+    }
+
+    // 9. Verify Boon Rarity Control single-row layout (widths 760/900/1050 EN/ZH),
+    // Exact Boons Row 1 alignment right next to search box, and unclipped Default placeholders.
+    for width in [CGFloat(760), CGFloat(900), CGFloat(1050)] {
+        for language in [TrainerPresentationLanguage.en, .zhCN] {
+            localization.language = language
+            host.frame = NSRect(x: 0, y: 0, width: width, height: viewportHeight)
+            window.setContentSize(NSSize(width: width, height: viewportHeight))
+            host.layoutSubtreeIfNeeded()
+            nativePickerPump()
+            guard let legendary = control(["AXCheckBox"], "hades2.feature.forceLegendary"),
+                  let duo = control(["AXCheckBox"], "hades2.feature.forceDuo") else {
+                fail("Force Legendary / Force Duo checkboxes missing (lang=\(language), width=\(width))")
+            }
+            guard abs(legendary.frame.midY - duo.frame.midY) < 2,
+                  duo.frame.minX >= legendary.frame.maxX - 1,
+                  legendary.frame.height < 28, duo.frame.height < 28 else {
+                fail("Force checkboxes wrapped or stacked at width=\(width) lang=\(language): leg=\(legendary.frame) duo=\(duo.frame)")
+            }
+            let exactTitle = string("hades2.spawn.exactBoons")
+            let exactSearchPlaceholder = string("hades2.spawn.search")
+            if let levelField = allTextFields(in: host).first(where: { $0.accessibilityIdentifier() == "hades2.acquisition.level" }),
+               let exactSearch = allTextFields(in: host).first(where: { $0.placeholderString == exactSearchPlaceholder }) {
+                let levelScreen = window.convertToScreen(levelField.convert(levelField.bounds, to: nil))
+                let searchScreen = window.convertToScreen(exactSearch.convert(exactSearch.bounds, to: nil))
+                let rarityLabel = string("hades2.traits.targetRarity")
+                if let rarityPicker = nativeAccessibilityControls(host).first(where: {
+                    $0.role == "AXPopUpButton" && ($0.label == rarityLabel || $0.identifier == "hades2.traits.targetRarity")
+                        && abs($0.frame.midY - levelScreen.midY) < 20
+                }) {
+                    guard searchScreen.minX - rarityPicker.frame.maxX <= 68 else {
+                        fail("Exact Boons Row 1 controls not right-aligned next to search (search=\(searchScreen), rarity=\(rarityPicker.frame))")
+                    }
+                }
+                if width >= 1000,
+                   let titleNode = nativeAccessibilityControls(host).first(where: {
+                       $0.role == "AXStaticText" && $0.text == exactTitle && abs($0.frame.midY - levelScreen.midY) < 20
+                   }) {
+                    guard levelScreen.minX - titleNode.frame.maxX >= 40 else {
+                        fail("Exact Boons Row 1 controls stayed left-aligned next to title (title=\(titleNode.frame), level=\(levelScreen))")
+                    }
+                }
+                guard abs(levelScreen.midY - searchScreen.midY) < 20, levelScreen.maxX < searchScreen.minX else {
+                    fail("Exact Boons Row 1 level field misaligned with search: level=\(levelScreen) search=\(searchScreen)")
+                }
+            }
+            let defaultPlaceholder = string("hades2.gathering.native")
+            guard defaultPlaceholder == (language == .en ? "Default" : "默认") else {
+                fail("Expected gathering placeholder 'Default'/'默认', got '\(defaultPlaceholder)'")
+            }
+            let nativeProbFields = allTextFields(in: host).filter { $0.placeholderString == defaultPlaceholder }
+            guard !nativeProbFields.isEmpty else {
+                fail("Missing probability fields with placeholder '\(defaultPlaceholder)'")
+            }
+            for field in nativeProbFields {
+                let neededWidth = field.placeholderAttributedString?.size().width
+                    ?? ((field.placeholderString ?? "") as NSString).size(
+                        withAttributes: [.font: field.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)]
+                    ).width
+                guard neededWidth <= field.bounds.width else {
+                    fail("Probability placeholder '\(defaultPlaceholder)' (\(neededWidth)pt) clipped inside \(field.bounds.width)pt field")
+                }
+            }
         }
     }
     print("hades2_world_exit_module_journey_ok")

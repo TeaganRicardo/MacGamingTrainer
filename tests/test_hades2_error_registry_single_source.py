@@ -60,6 +60,7 @@ CASES = (
     ("advance_trait_lifecycle", "Chaos lifecycle transition failed", "hades2.error.chaosLifecycleFailed", ()),
     ("spawn_reward", "Chaos exact acquisition is unavailable", "hades2.error.chaosExactUnavailable", ()),
     ("spawn_reward", "Chaos exact acquisition failed", "hades2.error.chaosExactFailed", ()),
+    ("acquire_chaos_pair", "Chaos encounter count must be a whole number from 1 to 100", "hades2.error.chaosEncountersRange", ()),
     ("spawn_reward", "Selene spell target is unavailable", "hades2.error.exactNotEligible", ()),
     ("spawn_reward", "Selene talent is unavailable for the current Path of Stars", "hades2.error.exactNotEligible", ()),
     ("spawn_reward", "Selene talent is no longer available in the current Path of Stars", "hades2.error.exactNotEligible", ()),

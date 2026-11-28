@@ -10,25 +10,23 @@ struct Hades2BoonRarityPanel: View {
         localization.string(key)
     }
 
-    @ViewBuilder private var forceOptions: some View {
+    private var forceOptions: some View {
         let enabled = model.canEditDesired && model.boonRarityEnabled
-        HStack(spacing: 8) {
+        return HStack(spacing: 8) {
             TrainerCheckboxControl(
                 title: text("hades2.rarity.legendary"), isOn: model.boonForceLegendary, enabled: enabled,
                 onChange: { model.setBoonRarity(target: model.boonRarityTarget,
                     forceLegendary: $0, forceDuo: model.boonForceDuo) }
             )
-            .fixedSize()
-            TrainerShortcutBadge(text: model.shortcutText(.forceLegendary))
-        }
-        HStack(spacing: 8) {
+            .fixedSize(horizontal: true, vertical: false)
+            .accessibilityIdentifier("hades2.feature.forceLegendary")
             TrainerCheckboxControl(
                 title: text("hades2.rarity.duo"), isOn: model.boonForceDuo, enabled: enabled,
                 onChange: { model.setBoonRarity(target: model.boonRarityTarget,
                     forceLegendary: model.boonForceLegendary, forceDuo: $0) }
             )
-            .fixedSize()
-            TrainerShortcutBadge(text: model.shortcutText(.forceDuo))
+            .fixedSize(horizontal: true, vertical: false)
+            .accessibilityIdentifier("hades2.feature.forceDuo")
         }
     }
 
@@ -41,12 +39,7 @@ struct Hades2BoonRarityPanel: View {
             title: title, icon: definition.icon,
             tint: state.indicatorColor, emphasized: state.isOn, opacity: state.opacity
         ) {
-            // Side by side when the row has room; stacked in the same row at
-            // narrow widths, so neither label wraps.
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 18) { forceOptions }
-                VStack(alignment: .leading, spacing: 4) { forceOptions }
-            }
+            forceOptions
             Picker(text("hades2.rarity.minimum"), selection: Binding(
                 get: { model.boonRarityTarget },
                 set: { model.setBoonRarity(target: $0,

@@ -156,7 +156,7 @@ def _build_catalog() -> CheatCatalog:
             kind="toggle",
             label=label("hades2.feature.forceLegendary"),
             action=CheatBackendAction("set_boon_rarity_desired", value_param="forceLegendary"),
-            shortcut_id="forceLegendary",
+            shortcut_id=None,
             default_value=False,
         ),
         CheatDefinition(
@@ -164,7 +164,7 @@ def _build_catalog() -> CheatCatalog:
             kind="toggle",
             label=label("hades2.feature.forceDuo"),
             action=CheatBackendAction("set_boon_rarity_desired", value_param="forceDuo"),
-            shortcut_id="forceDuo",
+            shortcut_id=None,
             default_value=False,
         ),
         CheatDefinition(

@@ -173,8 +173,6 @@ enum Hades2WorkbenchCatalog {
         .decreaseGameSpeed,
         .increaseGameSpeed,
         .boonRarityEnabled,
-        .forceLegendary,
-        .forceDuo,
         .openSellTraits,
         .acquireChaosPair,
         .acquireExactBoon,
@@ -219,6 +217,7 @@ enum Hades2WorkbenchCatalog {
                       "hades2.traits.remainingUses", "hades2.traits.expireNow", "hades2.traits.temporary.cancel",
                       "hades2.traits.remove", "hades2.traits.removeAllMatching",
                       "hades2.traits.chaos.advance", "hades2.traits.chaos.cancelPair",
+                      "hades2.feature.forceLegendary", "hades2.feature.forceDuo",
                       "hades2.rarity.minimum", "hades2.section.elements", "hades2.spawn.exactBoons"]),
             (.resources, Hades2GatheringFamily.allCases.map(\.titleKey)
                 + ["hades2.resource.materials", "hades2.gathering.title", "hades2.gathering.restoreNative"]),
@@ -247,7 +246,7 @@ enum Hades2WorkbenchCatalog {
         case .invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney, .infiniteRerolls,
              .forceEnableRerolls, .instantCastCooldown, .hexAlwaysReady, .infiniteAmmo, .autoMiniGames,
              .decreaseGameSpeed, .increaseGameSpeed: .common
-        case .boonRarityEnabled, .forceLegendary, .forceDuo, .acquireChaosPair, .acquireExactBoon, .openSellTraits: .boons
+        case .boonRarityEnabled, .acquireChaosPair, .acquireExactBoon, .openSellTraits: .boons
         case .moneyMultiplierEnabled, .resourceMultiplierEnabled, .generateFlora, .generateMining,
              .generateDigging, .generateShades, .generateFishing, .matureGarden: .resources
         case .spawnOlympian, .spawnPickup, .spawnSpecial, .applyWorldExit, .applyNextOccurrence,
