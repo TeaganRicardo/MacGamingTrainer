@@ -1,3 +1,4 @@
+import errno
 import json
 import os
 import stat
@@ -11,18 +12,18 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core import save_restore
-from core.save_resolution import ResolvedSaveFile
+from core.save_resolution import HOT_SAVE_HOLDING_PREFIX, ResolvedSaveFile
 from core.save_restore import SaveBusyError, SaveRestoreError, SaveRollbackError
 from core.save_service import CoreSaveService
 
 
-def make_service(folder, running_probe):
+def make_service(folder, running_probe, include=("*.sav",)):
     saves = folder / "saves"
     saves.mkdir()
     current = saves / "Profile1.sav"
     current.write_bytes(b"current")
     spec = SaveManagementSpec(
-        roots=(SaveRootSpec("main", str(saves), ("*.sav",)),),
+        roots=(SaveRootSpec("main", str(saves), include),),
         provider=None,
         hot_backup=True,
         restore_policy="hotPreferred",
@@ -239,7 +240,21 @@ for action in ("apply", "restore", "restore delete", "restore create"):
         assert sibling.stat().st_ino == sibling_inode
         assert sibling.read_bytes() == b"unselected"
         assert not service.recovery_paths()
-        assert not list(incoming.parent.glob(".trainer-save-*"))
+        assert not list(incoming.parent.glob(HOT_SAVE_HOLDING_PREFIX + "*"))
+
+
+# A wildcard module does not classify a hot transaction's retained inode as
+# another game save during verification, backup, or recovery.
+with tempfile.TemporaryDirectory(prefix="mgt-core-hot-wildcard-") as temporary:
+    service, current = make_service(Path(temporary), lambda: True, include=("**/*",))
+    lookalike = current.with_name(HOT_SAVE_HOLDING_PREFIX + "notes")
+    lookalike.write_bytes(b"ordinary file")
+    snapshot_id = service.backup()["id"]
+    current.write_bytes(b"changed")
+    result = service.restore(snapshot_id)
+    assert result["restored"] and result["hot"]
+    assert current.read_bytes() == b"current"
+    assert {row.source_path for row in service.resolved_files()} == {current, lookalike}
 
 
 # If the game publishes again in the final rollback window, its bytes are
@@ -275,6 +290,98 @@ with tempfile.TemporaryDirectory(prefix="mgt-core-hot-rollback-displaced-") as t
     (held,) = evidence["files"]
     assert held["target"] == str(current.resolve())
     assert Path(held["holdingPath"]).read_bytes() == b"pre-rollback-save"
+
+# A post-install game save must not erase the original when the player did
+# not ask to keep a separate pre-restore snapshot.
+with tempfile.TemporaryDirectory(prefix="mgt-core-hot-original-recovery-") as temporary:
+    folder = Path(temporary)
+    service, current = make_service(folder, lambda: True)
+    snapshot_id = service.backup()["id"]
+    current.write_bytes(b"before-restore")
+    native = save_restore._rename_hot
+    published = []
+
+    def game_saves_after_exchange(source, destination, directory_fd, *, exchange=False):
+        result = native(source, destination, directory_fd, exchange=exchange)
+        if exchange and destination == current.name:
+            published.append(True)
+            side = current.with_name("native.autosave")
+            side.write_bytes(b"new-game-save")
+            os.replace(side, current)
+        return result
+
+    with patch.object(save_restore, "_rename_hot", side_effect=game_saves_after_exchange):
+        try:
+            service.restore(snapshot_id, preserve_current=False)
+        except SaveRollbackError as error:
+            recovery = Path(error.recovery_path)
+        else:
+            raise AssertionError("failed hot Restore discarded its only pre-write recovery copy")
+    assert published == [True]
+    assert current.read_bytes() == b"new-game-save"
+    assert service.recovery_paths() == (str(recovery),)
+    assert (recovery / "files/main/Profile1.sav").read_bytes() == b"before-restore"
+    evidence = json.loads((recovery / "hot-files.json").read_text())
+    assert "original save was preserved" in evidence["reason"]
+    (held,) = evidence["files"]
+    assert Path(held["holdingPath"]).read_bytes() == b"before-restore"
+    assert [row["id"] for row in service.list_state()["snapshots"]] == [snapshot_id]
+
+# A live-directory rename invalidates the original textual holding path. Use
+# the captured directory descriptor to ensure recovery still exposes bytes.
+with tempfile.TemporaryDirectory(prefix="mgt-core-hot-redirected-recovery-") as temporary:
+    folder = Path(temporary)
+    service, current = make_service(folder, lambda: True)
+    row = replacement(folder)
+    native = save_restore._rename_hot
+    moved = folder / "moved"
+
+    def redirect_directory(source, destination, directory_fd, *, exchange=False):
+        independent = current.with_name("native.autosave")
+        independent.write_bytes(b"before-commit-save")
+        os.replace(independent, current)
+        native(source, destination, directory_fd, exchange=exchange)
+        current.parent.rename(moved)
+        current.parent.mkdir()
+        current.write_bytes(b"unrelated-live-directory")
+        independent = moved / "native.autosave"
+        independent.write_bytes(b"after-commit-save")
+        os.replace(independent, moved / current.name)
+
+    with patch.object(save_restore, "_rename_hot", side_effect=redirect_directory):
+        try:
+            service.replace_files((row,), allow_running=True)
+        except SaveRollbackError as error:
+            recovery = Path(error.recovery_path)
+        else:
+            raise AssertionError("redirected save directory lost recovery evidence")
+    evidence = json.loads((recovery / "hot-files.json").read_text())
+    (held,) = evidence["files"]
+    assert not Path(held["holdingPath"]).exists()
+    assert Path(held["recoveryCopyPath"]).read_bytes() == b"before-commit-save"
+    assert (moved / current.name).read_bytes() == b"after-commit-save"
+    assert current.read_bytes() == b"unrelated-live-directory"
+
+# Filesystems without exchange support are handled by the existing
+# close-game or staged-Restore behavior before any live mutation.
+with tempfile.TemporaryDirectory(prefix="mgt-core-hot-no-exchange-") as temporary:
+    folder = Path(temporary)
+    service, current = make_service(folder, lambda: True)
+    row = replacement(folder)
+    snapshot_id = service.backup()["id"]
+    current.write_bytes(b"new-live-save")
+    with patch.object(save_restore, "_rename_hot", side_effect=OSError(errno.ENOTSUP, "exchange unsupported")):
+        try:
+            service.replace_files((row,), allow_running=True)
+        except SaveBusyError as error:
+            assert "filesystem" in str(error)
+        else:
+            raise AssertionError("hot Apply could not safely exchange on this filesystem")
+        assert service.restore(snapshot_id)["staged"]
+    assert current.read_bytes() == b"new-live-save"
+    assert service.pending_restore()["snapshotId"] == snapshot_id
+    assert service.recovery_paths() == ()
+    assert not list(current.parent.glob(HOT_SAVE_HOLDING_PREFIX + "*"))
 
 
 print("core_save_hot_replace_ok")

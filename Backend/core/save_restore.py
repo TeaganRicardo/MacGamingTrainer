@@ -1,4 +1,5 @@
 import ctypes
+import errno
 import hashlib
 import json
 import logging
@@ -16,7 +17,7 @@ from typing import Optional
 
 from .errors import CoreSaveError
 from .persistence import atomic_write_text, fsync_directory
-from .save_resolution import ResolvedSaveFile
+from .save_resolution import HOT_SAVE_HOLDING_PREFIX, ResolvedSaveFile
 from .save_metadata import copy_owned_save_file, copy_save_metadata, remove_owned_save_tree
 from .save_snapshots import SaveSnapshotError, _safe_relative, _sha256
 
@@ -98,7 +99,7 @@ class _HotSaveChange:
             if digest != self.baseline_digest:
                 raise SaveRestoreError('Game saved new data just before the hot save mutation.')
 
-    def rollback(self):
+    def rollback(self, has_checkpoint):
         # Check whether the mutation ran before an interruption. For a
         # replacement, the incoming inode still occupies the holding name
         # until the exchange. A deletion has no staged incoming inode.
@@ -111,8 +112,11 @@ class _HotSaveChange:
             # An independent writer has already published another version.
             # Leave it in place. A displaced version that lacks a verified
             # pre-write copy must remain available too.
-            if self.baseline_digest is not None and before_digest != self.baseline_digest:
-                raise SaveRestoreError('Two independently written hot save versions were preserved.')
+            if self.baseline_digest is not None:
+                if before_digest != self.baseline_digest:
+                    raise SaveRestoreError('Two independently written hot save versions were preserved.')
+                if not has_checkpoint:
+                    raise SaveRestoreError('A new live save prevented rollback; the original save was preserved.')
             return False, None
 
         if self.baseline_digest is None:
@@ -461,7 +465,7 @@ class SaveRestoreTransaction:
     def _hot_changes(self, destinations, baseline_hashes, target_hashes):
         changes = {}
         for key, (destination, directory_fd) in destinations.items():
-            temporary = '.trainer-save-' + uuid.uuid4().hex
+            temporary = HOT_SAVE_HOLDING_PREFIX + uuid.uuid4().hex
             changes[key] = _HotSaveChange(
                 destination,
                 directory_fd,
@@ -472,23 +476,52 @@ class SaveRestoreTransaction:
         return changes
 
     @staticmethod
-    def _write_hot_recovery_note(rollback_root, changes, reason):
+    def _write_hot_recovery_note(rollback_root, changes, reason, recovered=None):
+        files = []
+        for key, change in changes.items():
+            file = {
+                'target': str(change.destination),
+                'holdingPath': str(change.destination.with_name(change.before)),
+            }
+            if recovered and key in recovered:
+                file['recoveryCopyPath'] = str(recovered[key])
+            files.append(file)
         atomic_write_text(
             rollback_root / 'hot-files.json',
-            json.dumps(
-                {
-                    'reason': reason,
-                    'files': [
-                        {
-                            'target': str(change.destination),
-                            'holdingPath': str(change.destination.with_name(change.before)),
-                        }
-                        for change in changes.values()
-                    ],
-                },
-                ensure_ascii=False,
-            ),
+            json.dumps({'reason': reason, 'files': files}, ensure_ascii=False),
         )
+
+    @staticmethod
+    def _preserve_redirected_hot_files(rollback_root, changes, mutated):
+        recovered = {}
+        for key in mutated:
+            change = changes[key]
+            captured = os.fstat(change.directory_fd)
+            try:
+                current = change.destination.parent.stat()
+                if os.path.samestat(captured, current):
+                    continue
+            except FileNotFoundError:
+                pass
+            try:
+                descriptor = os.open(
+                    change.before, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=change.directory_fd
+                )
+            except FileNotFoundError:
+                continue
+            with os.fdopen(descriptor, 'rb') as original:
+                if not stat.S_ISREG(os.fstat(original.fileno()).st_mode):
+                    continue
+                destination = rollback_root / 'hot-displaced' / key[0] / _safe_relative(key[1])
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with destination.open('xb') as copy:
+                    shutil.copyfileobj(original, copy)
+                    copy.flush()
+                    copy_save_metadata(original.fileno(), copy.fileno())
+                    os.fsync(copy.fileno())
+                fsync_directory(destination.parent)
+                recovered[key] = destination
+        return recovered
 
     def _install_hot_changes(self, changes, target_entries, progress):
         sources = {key: source for key, source, _ in target_entries}
@@ -510,8 +543,10 @@ class SaveRestoreTransaction:
                         change.directory_fd,
                         exchange=change.baseline_digest is not None,
                     )
-            except OSError:
+            except OSError as error:
                 progress.remove(key)
+                if error.errno == errno.ENOTSUP and not progress:
+                    raise SaveBusyError('The filesystem cannot safely mutate saves while the game runs.') from error
                 raise
             os.fsync(change.directory_fd)
             change.verify_displaced()
@@ -646,7 +681,7 @@ class SaveRestoreTransaction:
                     hot_rollback_error = None
                     for key in sorted(mutated, reverse=True):
                         try:
-                            restored, digest = hot_changes[key].rollback()
+                            restored, digest = hot_changes[key].rollback(previous_snapshot_id is not None)
                         except Exception as revert_error:
                             hot_rollback_error = revert_error
                             continue
@@ -685,7 +720,8 @@ class SaveRestoreTransaction:
                 try:
                     self._write_target_marker(rollback_root, recovery_marker)
                     if target_running:
-                        self._write_hot_recovery_note(rollback_root, hot_changes, str(rollback_error))
+                        recovered = self._preserve_redirected_hot_files(rollback_root, hot_changes, mutated)
+                        self._write_hot_recovery_note(rollback_root, hot_changes, str(rollback_error), recovered)
                 except OSError:
                     logging.exception('Save rollback evidence could not be updated: %s', rollback_root)
                 if not isinstance(rollback_error, Exception):

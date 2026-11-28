@@ -1,4 +1,5 @@
 import os
+import re
 import stat
 from contextlib import ExitStack
 from dataclasses import dataclass
@@ -8,6 +9,9 @@ from typing import Callable, Dict, Iterable, List, Mapping, Optional, Protocol, 
 
 from .errors import CoreSaveError
 from .module_manifest import SaveManagementSpec
+
+HOT_SAVE_HOLDING_PREFIX = '.trainer-hot-save-'
+_HOT_SAVE_HOLDING_NAME = re.compile(re.escape(HOT_SAVE_HOLDING_PREFIX) + '[0-9a-f]{32}')
 
 
 class SaveResolutionError(CoreSaveError):
@@ -168,7 +172,7 @@ def resolve_save_files(
             raise SaveResolutionError('存档根路径不是目录。')
         for pattern in root_spec.include:
             for candidate in root.glob(pattern):
-                if candidate.is_dir():
+                if _HOT_SAVE_HOLDING_NAME.fullmatch(candidate.name) or candidate.is_dir():
                     continue
                 relative = candidate.relative_to(root).as_posix()
                 declared.append(_validate_file(root_spec.id, root, relative))
