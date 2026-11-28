@@ -217,7 +217,7 @@ class SaveRestoreTransaction:
                     recovery_root,
                 )
 
-    def _target_marker(self, baseline_hashes, target_hashes, *, resolved=False):
+    def _target_marker(self, baseline_hashes, target_hashes):
         keys = set(baseline_hashes) | set(target_hashes)
         targets = []
         for key in sorted(keys):
@@ -227,13 +227,13 @@ class SaveRestoreTransaction:
                     'relativePath': key[1],
                     'path': str(self._physical_target_path(key)),
                     'sha256': baseline_hashes.get(key),
-                    'resolved': resolved,
+                    'resolved': False,
                 }
             )
         return {'schemaVersion': 1, 'targets': targets}
 
-    def _write_unresolved_target_marker(self, rollback_root, baseline_hashes, target_hashes, *, resolved=False):
-        payload = self._target_marker(baseline_hashes, target_hashes, resolved=resolved)
+    @staticmethod
+    def _write_target_marker(rollback_root, payload):
         atomic_write_text(
             Path(rollback_root) / 'unresolved-targets.json',
             json.dumps(payload, ensure_ascii=False, allow_nan=False),
@@ -364,13 +364,6 @@ class SaveRestoreTransaction:
                 raise
             os.fsync(descriptor)
 
-    def _rollback_entries(self, rollback_rows, hashes):
-        entries = []
-        for row in rollback_rows:
-            key = self._key(row)
-            entries.append((key, row.source_path, hashes[key]))
-        return entries
-
     def _apply_captured(
         self,
         rollback_root,
@@ -428,7 +421,8 @@ class SaveRestoreTransaction:
 
             self._verify_target_paths(expected_paths)
             self._verify_destinations(destinations)
-            self._write_unresolved_target_marker(rollback_root, baseline_hashes, target_hashes)
+            recovery_marker = self._target_marker(baseline_hashes, target_hashes)
+            self._write_target_marker(rollback_root, recovery_marker)
             self._install_entries(target_entries, destinations, progress=mutated)
             self._delete_keys(set(baseline_hashes) - set(target_hashes), destinations, progress=mutated)
             self._verify_destinations(destinations)
@@ -469,13 +463,34 @@ class SaveRestoreTransaction:
             # recovery copy until rollback has completed and verified.
             cleanup_rollback = False
             try:
-                self._install_entries(self._rollback_entries(rollback_rows, baseline_hashes), destinations)
-                self._delete_keys(set(target_hashes) - set(baseline_hashes), destinations)
-                self._verify_destinations(destinations)
-                if not self._verify_state(baseline_hashes, owned_keys):
+                rollback_destinations = {key: destinations[key] for key in mutated}
+                rollback_hashes = {key: baseline_hashes[key] for key in mutated & baseline_hashes.keys()}
+                entries = []
+                for row in rollback_rows:
+                    key = self._key(row)
+                    if key in rollback_hashes:
+                        entries.append((key, row.source_path, rollback_hashes[key]))
+                self._install_entries(entries, rollback_destinations)
+                self._delete_keys(mutated - rollback_hashes.keys(), rollback_destinations)
+                self._verify_destinations(rollback_destinations)
+                if not all(
+                    self._target_matches_baseline(destination, rollback_hashes.get(key))
+                    for key, (destination, _) in rollback_destinations.items()
+                ):
                     raise SaveRestoreError('Rollback verification failed.')
-                self._verify_destinations(destinations)
+                self._verify_destinations(rollback_destinations)
             except BaseException as rollback_error:
+                # A process that reached rollback knows more than the crash
+                # marker written before the first possible mutation.
+                recovery_marker['targets'] = [
+                    target
+                    for target in recovery_marker['targets']
+                    if (target['rootId'], target['relativePath']) in mutated
+                ]
+                try:
+                    self._write_target_marker(rollback_root, recovery_marker)
+                except OSError:
+                    logging.exception('Save rollback marker could not be narrowed: %s', rollback_root)
                 if not isinstance(rollback_error, Exception):
                     raise
                 raise SaveRollbackError(
@@ -497,13 +512,13 @@ class SaveRestoreTransaction:
                     logging.exception('Verified save transaction cleanup failed: %s', rollback_root)
                     if result is not None:
                         result['maintenanceWarning'] = 'rollback_cleanup_failed'
-                        # The installed result was verified. A retained cleanup
-                        # copy must not later masquerade as a failed rollback.
-                        # Failure to record that fact cannot undo this success.
+                    if result is not None or mutated:
+                        # A verified install or rollback may leave cleanup
+                        # residue, but its recorded targets are resolved.
+                        for target in recovery_marker['targets']:
+                            target['resolved'] = True
                         try:
-                            self._write_unresolved_target_marker(
-                                rollback_root, baseline_hashes, target_hashes, resolved=True
-                            )
+                            self._write_target_marker(rollback_root, recovery_marker)
                         except OSError:
                             logging.exception(
                                 'Completed save transaction marker could not be updated: %s', rollback_root
