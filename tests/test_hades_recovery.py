@@ -12,6 +12,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 from core.adapter import AdapterError, GameAdapterContext
+from core.protocol import JsonlRequestRouter
 from core.sidecar import JsonLineSidecarClient, SidecarTerminalError
 from games.hades.adapter import HadesAdapter
 from games.hades.client import HadesRuntimeClient
@@ -553,3 +554,97 @@ with tempfile.TemporaryDirectory(prefix='hades-adapter-recovery-') as directory:
     assert unavailable['recovery'] == {'outcome': 'unavailable', 'presentation': 'hades.error.recoveryFailed'}
     assert unavailable['status'] == 'restart_required'
 print('hades_adapter_recovery_visibility_ok')
+
+# Rejected requests keep the same live observation. Actual transport loss
+# still removes mutation authority and an unknown outcome still requires restart.
+with tempfile.TemporaryDirectory(prefix='hades-rejected-request-') as directory:
+    root = Path(directory)
+    journal = HadesRecoveryJournal(root / 'journal.json')
+
+    class CommandSidecar(Sidecar):
+        disconnected = False
+        hero = 'run:hero:current'
+
+        def request(self, method, params, **options):
+            if self.lose:
+                return super().request(method, params, **options)
+            self.calls.append((method, params))
+            if method == 'set_value':
+                if self.disconnected:
+                    return {'error': {'code': 'not_connected', 'presentation': 'hades.error.notConnected'}}
+                if params['target']['heroId'] != self.hero:
+                    return {'error': {'code': 'stale_target', 'presentation': 'hades.error.staleTarget'}}
+            return {'result': {
+                'connected': True, 'heroReady': True, 'pid': 42, 'gameSpeed': 1.0,
+                'target': {'heroId': self.hero}, 'money': params.get('value', 0),
+            }}
+
+    sidecar = CommandSidecar()
+    client = HadesRuntimeClient(sidecar, recovery=journal, identity=lambda _pid: 'birth-A')
+    ctx = GameAdapterContext('hades', 'Hades', 2, ROOT / 'Backend/games/hades', {}, home=root)
+    install = root / 'Game.macOS'
+    adapter = HadesAdapter(ctx, runtime=client, locate_process=lambda: (42, str(install)))
+    router = JsonlRequestRouter(adapter, save_data_root=root / 'data', target_running_probe=lambda: False)
+
+    def request(identifier, command, params=None):
+        return router.handle({'id': identifier, 'command': command, 'params': params or {}})
+
+    assert request('connect', 'connect')['result']['connected']
+    assert request('save-profile', 'save_profile', {'name': 'Removed'})['ok']
+    assert request('delete-profile', 'delete_profile', {'name': 'Removed'})['ok']
+    valid = {'field': 'money', 'value': 250, 'target': {'heroId': sidecar.hero}}
+    assert request('valid-before-error', 'set_value', valid)['result']['money'] == 250
+
+    with patch.object(adapter, 'locate_process', side_effect=AssertionError('error projection probed the game')):
+        for command, params, expected, calls in (
+            ('set_value', {**valid, 'value': -1}, 'invalid_value', 0),
+            ('set_value', {**valid, 'target': {'heroId': 'run:hero:stale'}}, 'stale_target', 1),
+            ('load_profile', {'name': 'Removed'}, 'profile_read_failed', 0),
+        ):
+            before = len(sidecar.calls)
+            rejected = request(expected, command, params)
+            assert not rejected['ok'] and rejected['error']['code'] == expected
+            observed = rejected['state']
+            assert observed['connected'] and observed['heroReady'] and observed['pid'] == 42
+            assert observed['target']['heroId'] == sidecar.hero and observed['money'] == 250
+            assert adapter.connected and client.connected and journal.describe() is None
+            assert len(sidecar.calls) == before + calls
+            assert request(f'valid-after-{expected}', 'set_value', valid)['ok']
+            assert len(sidecar.calls) == before + calls + 1
+
+        pending = journal.begin(42, 'birth-A', 'set_value')
+        before = len(sidecar.calls)
+        blocked = request('pending', 'set_value', valid)
+        assert blocked['error']['code'] == 'restart_required'
+        assert not blocked['state']['connected'] and blocked['state']['status'] == 'restart_required'
+        assert blocked['state']['recovery']['outcome'] == 'unknown' and journal.path.is_file()
+        assert len(sidecar.calls) == before
+        journal.complete(pending)
+
+        journal.path.write_text('{corrupt')
+        blocked = request('unavailable', 'set_value', valid)
+        assert not blocked['state']['connected'] and blocked['state']['status'] == 'restart_required'
+        assert blocked['state']['recovery']['outcome'] == 'unavailable'
+        assert len(sidecar.calls) == before and journal.path.read_text() == '{corrupt'
+        journal.path.unlink()
+
+        sidecar.disconnected = True
+        lost = request('lost', 'set_value', valid)
+        assert lost['error']['code'] == 'not_connected'
+        assert not lost['state']['connected'] and lost['state']['status'] == 'disconnected'
+        assert journal.describe() is None and not adapter.connected
+        before = len(sidecar.calls)
+        assert request('after-loss', 'set_value', valid)['error']['code'] == 'not_connected'
+        assert len(sidecar.calls) == before
+
+    sidecar.disconnected = False
+    assert request('reconnect', 'connect')['result']['connected']
+    sidecar.lose = True
+    unknown = request('unknown', 'set_value', valid)
+    assert unknown['error']['code'] == 'outcome_unknown'
+    assert not unknown['state']['connected'] and unknown['state']['status'] == 'restart_required'
+    assert unknown['state']['recovery']['outcome'] == 'unknown' and journal.path.is_file()
+    before = len(sidecar.calls)
+    assert request('same-lifetime', 'connect')['error']['code'] == 'restart_required'
+    assert len(sidecar.calls) == before and journal.path.is_file()
+print('hades_request_errors_preserve_observed_connection_ok')
