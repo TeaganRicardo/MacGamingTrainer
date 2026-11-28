@@ -30,9 +30,9 @@ def _set_flags(descriptor, flags):
         raise OSError(error, os.strerror(error))
 
 
-def copy_save_metadata(source_fd, destination_fd):
+def copy_save_metadata(source_fd, destination_fd, *, mode=None):
     metadata = os.fstat(source_fd)
-    os.fchmod(destination_fd, stat.S_IMODE(metadata.st_mode))
+    os.fchmod(destination_fd, stat.S_IMODE(metadata.st_mode) if mode is None else mode)
     os.utime(destination_fd, ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
     if hasattr(os, 'listxattr'):
         ignored = {errno.ENOTSUP, errno.ENODATA, errno.EINVAL, errno.EPERM}

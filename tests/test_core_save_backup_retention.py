@@ -150,12 +150,12 @@ class BackupRetentionTests(unittest.TestCase):
         install = transaction._install_entries
         attempts = []
 
-        def replace_then_fail_rollback(entries, destinations, progress=None):
+        def replace_then_fail_rollback(entries, destinations, progress=None, **options):
             # The real replacement lands, then the transaction fails and its
             # rollback cannot reinstall the baseline: a genuine rollback failure.
             attempts.append(len(entries))
             if len(attempts) == 1:
-                install(entries, destinations, progress=progress)
+                install(entries, destinations, progress=progress, **options)
                 raise OSError('synthetic disk failure after replacement')
             raise OSError('synthetic rollback failure')
 

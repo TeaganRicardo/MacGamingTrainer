@@ -402,7 +402,7 @@ class SaveRestoreTransaction:
             raise SaveRestoreError('Save destination escaped its declared root.') from error
         return destination
 
-    def _stage_file(self, source, temporary, digest, directory_fd):
+    def _stage_file(self, source, temporary, digest, directory_fd, *, mode=None):
         descriptor = os.open(temporary, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory_fd)
         try:
             with os.fdopen(descriptor, 'w+b') as staged, Path(source).open('rb') as original:
@@ -414,16 +414,16 @@ class SaveRestoreTransaction:
                     actual.update(chunk)
                 if actual.hexdigest() != digest:
                     raise SaveRestoreError('Staged save file failed integrity verification.')
-                copy_save_metadata(original.fileno(), staged.fileno())
+                copy_save_metadata(original.fileno(), staged.fileno(), mode=mode)
                 os.fsync(staged.fileno())
                 return os.fstat(staged.fileno()).st_ino
         except BaseException:
             os.unlink(temporary, dir_fd=directory_fd)
             raise
 
-    def _replace_file(self, source, destination, digest, *, directory_fd, progress=None, key=None):
+    def _replace_file(self, source, destination, digest, *, directory_fd, progress=None, key=None, mode=None):
         temporary = '.trainer-save-' + uuid.uuid4().hex
-        self._stage_file(source, temporary, digest, directory_fd)
+        self._stage_file(source, temporary, digest, directory_fd, mode=mode)
         try:
             # Both names are relative to the captured directory descriptor.
             # Renaming or redirecting its pathname cannot redirect mutation.
@@ -477,10 +477,18 @@ class SaveRestoreTransaction:
             if current != destination or (before.st_dev, before.st_ino) != (now.st_dev, now.st_ino):
                 raise SaveRestoreError('Save transaction physical directory changed.')
 
-    def _install_entries(self, entries, destinations, progress=None):
+    def _install_entries(self, entries, destinations, progress=None, *, modes=None):
         for key, source, digest in entries:
             destination, descriptor = destinations[key]
-            self._replace_file(source, destination, digest, directory_fd=descriptor, progress=progress, key=key)
+            self._replace_file(
+                source,
+                destination,
+                digest,
+                directory_fd=descriptor,
+                progress=progress,
+                key=key,
+                mode=modes.get(key) if modes is not None else None,
+            )
 
     def _delete_keys(self, keys, destinations, progress=None):
         for key in keys:
@@ -551,14 +559,14 @@ class SaveRestoreTransaction:
                     logging.exception('Relocated hot save could not be copied: %s', destination)
         return recovered
 
-    def _install_hot_changes(self, changes, target_entries, progress):
+    def _install_hot_changes(self, changes, target_entries, progress, *, modes):
         sources = {key: source for key, source, _ in target_entries}
         keys = list(sources) + sorted(changes.keys() - sources.keys())
         for key in keys:
             change = changes[key]
             if change.installed_digest is not None:
                 change.installed_inode = self._stage_file(
-                    sources[key], change.before, change.installed_digest, change.directory_fd
+                    sources[key], change.before, change.installed_digest, change.directory_fd, mode=modes.get(key)
                 )
             progress.add(key)
             try:
@@ -622,6 +630,13 @@ class SaveRestoreTransaction:
         result = None
 
         try:
+            # Editor output supplies replacement bytes. The verified pre-write
+            # copy supplies the edited file's mode. A Restore uses snapshot metadata.
+            modes = (
+                {self._key(row): stat.S_IMODE(row.source_path.stat().st_mode) for row in rollback_rows}
+                if owned_keys is not None
+                else {}
+            )
             self._require_targets_recovered(set(baseline_hashes) | set(target_hashes), exclude_root=rollback_root)
             destinations = self._capture_destinations(set(baseline_hashes) | set(target_hashes), destination_stack)
             if preserve_current and snapshot_rows:
@@ -658,9 +673,9 @@ class SaveRestoreTransaction:
                     'An interrupted hot transaction may leave staged or displaced save data at these holding paths.',
                 )
                 fsync_directory(rollback_root.parent)
-                self._install_hot_changes(hot_changes, target_entries, mutated)
+                self._install_hot_changes(hot_changes, target_entries, mutated, modes=modes)
             else:
-                self._install_entries(target_entries, destinations, progress=mutated)
+                self._install_entries(target_entries, destinations, progress=mutated, modes=modes)
                 self._delete_keys(set(baseline_hashes) - set(target_hashes), destinations, progress=mutated)
             self._verify_destinations(destinations)
 

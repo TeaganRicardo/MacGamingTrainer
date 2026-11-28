@@ -1,3 +1,4 @@
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -35,10 +36,12 @@ def resolved():
 
 
 (save_root / 'Profile1.sav').write_bytes(b'target-profile')
+(save_root / 'Profile1.sav').chmod(0o640)
 (save_root / 'restored-only.sav').write_bytes(b'target-restored-only')
 target = store.create_snapshot(resolved, hot=False, display_name='Target')
 
 (save_root / 'Profile1.sav').write_bytes(b'current-profile')
+(save_root / 'Profile1.sav').chmod(0o600)
 (save_root / 'restored-only.sav').unlink()
 (save_root / 'obsolete.sav').write_bytes(b'obsolete')
 (save_root / 'settings.json').write_bytes(b'unrelated')
@@ -49,6 +52,7 @@ assert result['restored'] is True
 assert result['hot'] is False
 assert result['previousSnapshotId'] is not None
 assert (save_root / 'Profile1.sav').read_bytes() == b'target-profile'
+assert stat.S_IMODE((save_root / 'Profile1.sav').stat().st_mode) == 0o640
 assert (save_root / 'restored-only.sav').read_bytes() == b'target-restored-only'
 assert not (save_root / 'obsolete.sav').exists()
 assert (save_root / 'settings.json').read_bytes() == b'unrelated'
@@ -58,10 +62,12 @@ assert (previous['root'] / 'files/main/Profile1.sav').read_bytes() == b'current-
 assert (previous['root'] / 'files/main/obsolete.sav').read_bytes() == b'obsolete'
 
 (save_root / 'Profile1.sav').write_bytes(b'live-current')
+(save_root / 'Profile1.sav').chmod(0o600)
 (save_root / 'restored-only.sav').write_bytes(b'live-current-extra')
 live = transaction.restore(target['id'], preserve_current=False, target_running=True)
 assert live['restored'] is True and live['hot'] is True
 assert (save_root / 'Profile1.sav').read_bytes() == b'target-profile'
+assert stat.S_IMODE((save_root / 'Profile1.sav').stat().st_mode) == 0o640
 
 (save_root / 'Profile1.sav').write_bytes(b'busy-current')
 blocked = SaveRestoreTransaction(store, spec, resolved, busy_probe=lambda files: True)
