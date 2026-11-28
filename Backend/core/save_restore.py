@@ -93,6 +93,13 @@ class _HotSaveChange:
     def name(self):
         return self.destination.name
 
+    def directory_is_current(self):
+        captured = os.fstat(self.directory_fd)
+        try:
+            return os.path.samestat(captured, self.destination.parent.stat())
+        except OSError:
+            return False
+
     def verify_displaced(self):
         if self.baseline_digest is not None:
             _, digest = _hot_identity_and_hash(self.before, self.directory_fd)
@@ -100,6 +107,8 @@ class _HotSaveChange:
                 raise SaveRestoreError('Game saved new data just before the hot save mutation.')
 
     def rollback(self, has_checkpoint):
+        if not self.directory_is_current():
+            raise SaveRestoreError('The save directory changed before hot rollback.')
         # Check whether the mutation ran before an interruption. For a
         # replacement, the incoming inode still occupies the holding name
         # until the exchange. A deletion has no staged incoming inode.
@@ -129,8 +138,35 @@ class _HotSaveChange:
             # itself. The inverse rename retains its exact bytes in this case.
             peer = _hot_identity_and_hash(self.before, self.directory_fd)
             if peer != (self.installed_inode, self.installed_digest):
+                if self.baseline_digest is None and self.directory_is_current():
+                    # Undo a removal of a game-created file when the live
+                    # name is still free. Another save keeps both versions.
+                    try:
+                        _rename_hot(self.before, self.name, self.directory_fd)
+                    except FileExistsError:
+                        pass
+                    else:
+                        os.fsync(self.directory_fd)
+                        return False, None
                 raise SaveRestoreError('Game saved concurrently with rollback; its bytes were preserved.')
         return True, before_digest
+
+    def copy_recovery_file(self, name, destination):
+        try:
+            descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.directory_fd)
+        except FileNotFoundError:
+            return False
+        with os.fdopen(descriptor, 'rb') as original:
+            if not stat.S_ISREG(os.fstat(original.fileno()).st_mode):
+                return False
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with destination.open('xb') as copy:
+                shutil.copyfileobj(original, copy)
+                copy.flush()
+                copy_save_metadata(original.fileno(), copy.fileno())
+                os.fsync(copy.fileno())
+        fsync_directory(destination.parent)
+        return True
 
 
 class SaveRestoreTransaction:
@@ -484,7 +520,7 @@ class SaveRestoreTransaction:
                 'holdingPath': str(change.destination.with_name(change.before)),
             }
             if recovered and key in recovered:
-                file['recoveryCopyPath'] = str(recovered[key])
+                file.update(recovered[key])
             files.append(file)
         atomic_write_text(
             rollback_root / 'hot-files.json',
@@ -496,31 +532,20 @@ class SaveRestoreTransaction:
         recovered = {}
         for key in mutated:
             change = changes[key]
-            captured = os.fstat(change.directory_fd)
-            try:
-                current = change.destination.parent.stat()
-                if os.path.samestat(captured, current):
-                    continue
-            except FileNotFoundError:
-                pass
-            try:
-                descriptor = os.open(
-                    change.before, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=change.directory_fd
-                )
-            except FileNotFoundError:
+            if change.directory_is_current():
                 continue
-            with os.fdopen(descriptor, 'rb') as original:
-                if not stat.S_ISREG(os.fstat(original.fileno()).st_mode):
-                    continue
-                destination = rollback_root / 'hot-displaced' / key[0] / _safe_relative(key[1])
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                with destination.open('xb') as copy:
-                    shutil.copyfileobj(original, copy)
-                    copy.flush()
-                    copy_save_metadata(original.fileno(), copy.fileno())
-                    os.fsync(copy.fileno())
-                fsync_directory(destination.parent)
-                recovered[key] = destination
+            # The move can happen during the inverse exchange. Read both
+            # entries through the captured directory to retain either result.
+            for name, subfolder, evidence_key in (
+                (change.before, 'hot-displaced', 'recoveryCopyPath'),
+                (change.name, 'hot-relocated-live', 'relocatedLiveCopyPath'),
+            ):
+                destination = rollback_root / subfolder / key[0] / _safe_relative(key[1])
+                try:
+                    if change.copy_recovery_file(name, destination):
+                        recovered.setdefault(key, {})[evidence_key] = str(destination)
+                except OSError:
+                    logging.exception('Relocated hot save could not be copied: %s', destination)
         return recovered
 
     def _install_hot_changes(self, changes, target_entries, progress):
@@ -687,25 +712,23 @@ class SaveRestoreTransaction:
                             continue
                         if restored:
                             rollback_hashes[key] = digest
-                        else:
-                            del rollback_destinations[key]
                         if not restored or digest != baseline_hashes.get(key):
                             newer_live_preserved = True
                     if hot_rollback_error is not None:
                         raise hot_rollback_error
                 else:
-                    rollback_hashes = {key: baseline_hashes[key] for key in mutated & baseline_hashes.keys()}
+                    rollback_hashes = {key: baseline_hashes.get(key) for key in mutated}
                     entries = []
                     for row in rollback_rows:
                         key = self._key(row)
                         if key in rollback_hashes:
                             entries.append((key, row.source_path, rollback_hashes[key]))
                     self._install_entries(entries, rollback_destinations)
-                    self._delete_keys(mutated - rollback_hashes.keys(), rollback_destinations)
+                    self._delete_keys(mutated - baseline_hashes.keys(), rollback_destinations)
                 self._verify_destinations(rollback_destinations)
                 if not all(
-                    self._target_matches_baseline(destination, rollback_hashes.get(key))
-                    for key, (destination, _) in rollback_destinations.items()
+                    self._target_matches_baseline(rollback_destinations[key][0], digest)
+                    for key, digest in rollback_hashes.items()
                 ):
                     raise SaveRestoreError('Rollback verification failed.')
                 self._verify_destinations(rollback_destinations)

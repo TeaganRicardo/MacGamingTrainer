@@ -327,40 +327,106 @@ with tempfile.TemporaryDirectory(prefix="mgt-core-hot-original-recovery-") as te
     assert Path(held["holdingPath"]).read_bytes() == b"before-restore"
     assert [row["id"] for row in service.list_state()["snapshots"]] == [snapshot_id]
 
-# A live-directory rename invalidates the original textual holding path. Use
-# the captured directory descriptor to ensure recovery still exposes bytes.
-with tempfile.TemporaryDirectory(prefix="mgt-core-hot-redirected-recovery-") as temporary:
-    folder = Path(temporary)
-    service, current = make_service(folder, lambda: True)
-    row = replacement(folder)
-    native = save_restore._rename_hot
-    moved = folder / "moved"
+# A directory rename invalidates the textual holding path. The last-minute
+# game save can be at either name in the captured directory, depending on
+# whether the inverse exchange had already taken place when it moved.
+for move_after_exchange, second_save, held_bytes, relocated_live_bytes in (
+    (1, False, b"before-commit-save", b"edited"),
+    (1, True, b"before-commit-save", b"after-commit-save"),
+    (2, False, b"edited", b"before-commit-save"),
+):
+    with tempfile.TemporaryDirectory(prefix="mgt-core-hot-redirected-recovery-") as temporary:
+        folder = Path(temporary)
+        service, current = make_service(folder, lambda: True)
+        row = replacement(folder)
+        native = save_restore._rename_hot
+        moved = folder / "moved"
+        exchanges = []
 
-    def redirect_directory(source, destination, directory_fd, *, exchange=False):
-        independent = current.with_name("native.autosave")
-        independent.write_bytes(b"before-commit-save")
-        os.replace(independent, current)
-        native(source, destination, directory_fd, exchange=exchange)
-        current.parent.rename(moved)
-        current.parent.mkdir()
-        current.write_bytes(b"unrelated-live-directory")
-        independent = moved / "native.autosave"
-        independent.write_bytes(b"after-commit-save")
-        os.replace(independent, moved / current.name)
+        def redirect_directory(source, destination, directory_fd, *, exchange=False):
+            exchanges.append(exchange)
+            if len(exchanges) == 1:
+                independent = current.with_name("native.autosave")
+                independent.write_bytes(b"before-commit-save")
+                os.replace(independent, current)
+            native(source, destination, directory_fd, exchange=exchange)
+            if len(exchanges) == move_after_exchange:
+                current.parent.rename(moved)
+                current.parent.mkdir()
+                current.write_bytes(b"unrelated-live-directory")
+                if second_save:
+                    independent = moved / "native.autosave"
+                    independent.write_bytes(b"after-commit-save")
+                    os.replace(independent, moved / current.name)
 
-    with patch.object(save_restore, "_rename_hot", side_effect=redirect_directory):
-        try:
-            service.replace_files((row,), allow_running=True)
-        except SaveRollbackError as error:
-            recovery = Path(error.recovery_path)
+        with patch.object(save_restore, "_rename_hot", side_effect=redirect_directory):
+            try:
+                service.replace_files((row,), allow_running=True)
+            except SaveRollbackError as error:
+                recovery = Path(error.recovery_path)
+            else:
+                raise AssertionError("redirected save directory lost recovery evidence")
+        evidence = json.loads((recovery / "hot-files.json").read_text())
+        (held,) = evidence["files"]
+        assert not Path(held["holdingPath"]).exists()
+        assert Path(held["recoveryCopyPath"]).read_bytes() == held_bytes
+        assert Path(held["relocatedLiveCopyPath"]).read_bytes() == relocated_live_bytes
+        assert (moved / current.name).read_bytes() == relocated_live_bytes
+        assert current.read_bytes() == b"unrelated-live-directory"
+        assert exchanges == [True] * move_after_exchange
+
+# During rollback of a newly created slot, a writer can replace our file
+# immediately before the inverse rename. Its save belongs back at the live
+# name if it is still free. A later save at that name must keep both versions.
+for second_save in (False, True):
+    with tempfile.TemporaryDirectory(prefix="mgt-core-hot-created-slot-recovery-") as temporary:
+        folder = Path(temporary)
+        service, current = make_service(folder, lambda: True)
+        added = current.with_name("new-slot.sav")
+        added.write_bytes(b"snapshot-slot")
+        snapshot_id = service.backup()["id"]
+        added.unlink()
+        removed = current.with_name("unwanted.sav")
+        removed.write_bytes(b"before-restore")
+        native = save_restore._rename_hot
+        writes = []
+
+        def publish(target, payload):
+            side = current.with_name("native.autosave")
+            side.write_bytes(payload)
+            os.replace(side, target)
+            writes.append(payload)
+
+        def game_saves_around_inverse(source, destination, directory_fd, *, exchange=False):
+            if source == removed.name:
+                publish(removed, b"removed-slot-save")
+            elif source == added.name:
+                publish(added, b"created-slot-save")
+            elif destination == added.name and second_save and len(writes) == 2:
+                publish(added, b"later-created-slot-save")
+            return native(source, destination, directory_fd, exchange=exchange)
+
+        with patch.object(save_restore, "_rename_hot", side_effect=game_saves_around_inverse):
+            try:
+                service.restore(snapshot_id)
+            except SaveRestoreError as error:
+                assert isinstance(error, SaveRollbackError) is second_save, str(error)
+                if second_save:
+                    recovery = Path(error.recovery_path)
+            else:
+                raise AssertionError("hot Restore did not detect a change during deletion")
+        assert writes[:2] == [b"removed-slot-save", b"created-slot-save"]
+        assert removed.read_bytes() == b"removed-slot-save"
+        if second_save:
+            assert writes[2:] == [b"later-created-slot-save"]
+            assert added.read_bytes() == b"later-created-slot-save"
+            evidence = json.loads((recovery / "hot-files.json").read_text())
+            held = next(file for file in evidence["files"] if Path(file["target"]) == added.resolve())
+            assert Path(held["holdingPath"]).read_bytes() == b"created-slot-save"
         else:
-            raise AssertionError("redirected save directory lost recovery evidence")
-    evidence = json.loads((recovery / "hot-files.json").read_text())
-    (held,) = evidence["files"]
-    assert not Path(held["holdingPath"]).exists()
-    assert Path(held["recoveryCopyPath"]).read_bytes() == b"before-commit-save"
-    assert (moved / current.name).read_bytes() == b"after-commit-save"
-    assert current.read_bytes() == b"unrelated-live-directory"
+            assert writes[2:] == []
+            assert added.read_bytes() == b"created-slot-save"
+            assert service.recovery_paths() == ()
 
 # Filesystems without exchange support are handled by the existing
 # close-game or staged-Restore behavior before any live mutation.
