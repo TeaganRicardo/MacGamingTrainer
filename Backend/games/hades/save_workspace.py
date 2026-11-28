@@ -181,6 +181,49 @@ def _address(document, keys):
         except KeyError: continue
 
 
+def _native_header_source(document, keys):
+    # luabins loads entries in order with lua_rawset. Preserve physical
+    # duplicates in Advanced while using the value the game actually reads.
+    node, path = document.lua_state, (0,)
+    for key in keys:
+        if not isinstance(node, LuaTable):
+            return None, None
+        entries = node.entries()
+        for index in reversed(range(len(entries))):
+            entry_key, value = entries[index]
+            if isinstance(entry_key, str) and entry_key == key:
+                node, path = value, path + (2 * index + 1,)
+                break
+        else:
+            return None, None
+    return node, path
+
+
+def _projection_action(writes, before_path, candidate_path):
+    # Mutations are written in descending physical order. Undo those index
+    # shifts to identify the candidate occurrence in the original edit paths.
+    for write in reversed(writes):
+        removed = write['path']
+        depth = len(removed) - 1
+        if (write['operation'] == 'unset' and depth > 0 and len(candidate_path) > depth
+                and candidate_path[:depth] == removed[:-1]
+                and candidate_path[depth] // 2 >= removed[-1] // 2):
+            candidate_path = candidate_path[:depth] + (candidate_path[depth] + 2,) + candidate_path[depth + 1:]
+
+    # The surviving value's edit takes precedence. If it was exposed by
+    # removing or renaming a different occurrence, credit that original owner.
+    for source in (candidate_path, before_path):
+        if source is None:
+            continue
+        for write in writes:
+            path = write['path']
+            depth = len(path) - 1
+            if (len(source) > depth and source[:depth] == path[:-1]
+                    and (source[depth] == path[-1] or depth > 0 and source[depth] - 1 == path[-1])):
+                return write['action']
+    return None
+
+
 class HadesSaveWorkspace(CoreSaveWorkspace):
     def __init__(self, session):
         super().__init__(session)
@@ -547,14 +590,6 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
                 before = values.resolve(self.document, path)
                 after = values.from_typed(wire) if operation == 'set' else None
                 add(intent, path, before, after, row['name'], path=path, operation=operation, wire=wire)
-                keys = self._logical_keys(path)
-                if operation == 'set' and path[-1] % 2 == 1 and len(keys) == 2 and keys[0] == 'GameState' and keys[1] in _HEADER_PROJECTIONS:
-                    field = _HEADER_PROJECTIONS[keys[1]]
-                    # This is the proven non-overflowing native double->int32
-                    # projection. Other encoded Lua types stay editable with
-                    # the ordinary unknown-impact warning.
-                    if type(after) is not bool and isinstance(after, (int, float)) and math.isfinite(after) and 0 <= after <= 0x7fffffff and int(after) == after:
-                        add(intent, ('header', field), getattr(self.document.header, field), int(after), label(field, language), header=field)
             elif identifier.startswith('h:'):
                 field = identifier[2:]
                 if field not in {item.name for item in fields(self.document.header)}:
@@ -656,7 +691,9 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
         unique = [write for write in unique if write['effect'] is not None]
         # Descending original occurrence paths preserve sibling identities when
         # a batch removes entries. Semantic additions follow existing entries.
-        for write in sorted((item for item in unique if item['path'] is not None), key=lambda item: item['path'], reverse=True):
+        physical_writes = sorted((item for item in unique if item['path'] is not None),
+                                 key=lambda item: item['path'], reverse=True)
+        for write in physical_writes:
             values.mutate(candidate, write['path'], write['operation'], write['wire'])
         for write in unique:
             if write['logical'] is not None: _logical_set(candidate, write['logical'], write['after'])
@@ -682,10 +719,8 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
         projections = [(('GameState', key), field) for key, field in _HEADER_PROJECTIONS.items()]
         projections.append((('GameState', 'Flags', 'HardMode'), 'hard_mode'))
         for keys, field in projections:
-            try: before = logical(self.document, keys)
-            except (KeyError, ValueError): before = None
-            try: after = logical(candidate, keys)
-            except (KeyError, ValueError): continue
+            before, before_path = _native_header_source(self.document, keys)
+            after, candidate_path = _native_header_source(candidate, keys)
             if values.equal(before, after): continue
             if field == 'hard_mode':
                 if type(after) is not bool: continue
@@ -694,11 +729,6 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
                 if (type(after) is bool or not isinstance(after, (int, float)) or not math.isfinite(after)
                         or int(after) != after or not 0 <= after <= 0x7fffffff): continue
                 projected = int(after)
-            address = _address(self.document, keys)
-            owners = [write for write in unique if write['header'] is None and
-                      (write['address'][:len(address)] == address or address[:len(write['address'])] == write['address'])]
-            if not owners: continue
-            owner = owners[0]['action']
             existing = next((write for write in unique if write['header'] == field), None)
             if existing is not None:
                 if int(existing['after']) != projected:
@@ -710,9 +740,11 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
             old_header = getattr(candidate.header, field)
             setattr(candidate.header, field, projected)
             if old_header != projected:
-                action = next(action for action in actions if action['id'] == owner)
-                action['effects'].append({'id': 'h:' + field, 'name': label(field, language),
-                    'before': str(old_header), 'after': str(projected)})
+                owner = _projection_action(physical_writes, before_path, candidate_path)
+                if owner is not None:
+                    action = next(action for action in actions if action['id'] == owner)
+                    action['effects'].append({'id': 'h:' + field, 'name': label(field, language),
+                        'before': str(old_header), 'after': str(projected)})
         HadesSaveDocument.from_bytes(candidate.to_bytes())
         return candidate, {'baselineGeneration': self.baseline_generation, 'actions': actions, 'count': len(actions),
                            'effectCount': sum(len(action['effects']) for action in actions)}
