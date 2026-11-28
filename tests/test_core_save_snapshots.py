@@ -1,5 +1,6 @@
 import json
 import os
+import stat
 import sys
 import tempfile
 import time
@@ -20,6 +21,7 @@ source = base / 'source'
 source.mkdir()
 (source / 'Profile1.sav').write_bytes(b'profile-one')
 (source / 'activeProfile').write_bytes(b'Profile1')
+(source / 'activeProfile').chmod(0o400)
 (source / 'settings.json').write_bytes(b'not-save')
 
 
@@ -42,7 +44,7 @@ def tracked_path_open(path, mode='r', *args, **kwargs):
     if path.name == 'manifest.json' and 'w' in mode:
         fsync_events.append('manifest-open')
         opened_files[handle.fileno()] = 'manifest'
-    elif mode == 'rb+' and path.name in ('Profile1.sav', 'activeProfile'):
+    elif mode == 'xb' and path.name in ('Profile1.sav', 'activeProfile'):
         opened_files[handle.fileno()] = 'payload'
     return handle
 
@@ -72,6 +74,7 @@ snapshot = Path(created['path'])
 assert snapshot.parent.resolve() == (base / 'data' / 'example' / 'saves' / 'snapshots').resolve()
 assert (snapshot / 'files/main/Profile1.sav').read_bytes() == b'profile-one'
 assert (snapshot / 'files/main/activeProfile').read_bytes() == b'Profile1'
+assert stat.S_IMODE((snapshot / 'files/main/activeProfile').stat().st_mode) == 0o400
 assert not (snapshot / 'files/main/settings.json').exists()
 
 manifest = json.loads((snapshot / 'manifest.json').read_text(encoding='utf-8'))

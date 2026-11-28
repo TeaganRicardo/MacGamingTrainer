@@ -74,7 +74,8 @@ class SaveMetadataTests(unittest.TestCase):
             os.chflags(protected, stat.UF_IMMUTABLE)
             stages = []
 
-            def swap_stage(_source, destination):
+            def swap_stage(_source, destination, *, sync):
+                self.assertTrue(sync)
                 stage = next(path for path in destination.parents if path.name.startswith(".snapshot-"))
                 stage.rename(base / "original-stage")
                 stage.symlink_to(outside, target_is_directory=True)
