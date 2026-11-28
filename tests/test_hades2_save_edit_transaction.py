@@ -294,8 +294,7 @@ assert state_after_write_failure["recoveryPaths"] == []
 
 # Reopen validation is not the end of the transaction. If another writer
 # changes the profile immediately after the validator reads it, the final Core
-# state verification must notice the race and roll back instead of reporting
-# success.
+# state verification rejects the edit and leaves the newer game version live.
 service, save_path, original, _state, _spec, _data_root = make_environment(
     "post-verify-race",
     running=True,
@@ -321,7 +320,11 @@ try:
         post_verify_race_blocked = True
 finally:
     Hades2SaveDocument.load = load_descriptor
-post_verify_race_rolled_back = save_path.read_bytes() == original
+post_verify_race_preserved = save_path.read_bytes() == foreign_after_verify
+(previous,) = service.list_state()["snapshots"]
+pre_write = service.store.load_verified_snapshot(previous["id"])
+assert (pre_write["root"] / "files/main/Profile1.sav").read_bytes() == original
+assert service.recovery_paths() == ()
 
 # If target mutation fails and rollback also fails, the contained rollback
 # directory remains discoverable through the existing Core Save state instead
@@ -421,6 +424,6 @@ assert (recovery_path / "files/main/Profile1.sav").read_bytes() == original
 assert raw_surface_rejected, "Save Editor accepted a non-document raw-byte writer"
 assert provider_busy_rejected, "Save Editor ignored provider-declared save busy state"
 assert post_verify_race_blocked, "Save Editor reported success after post-validation file replacement"
-assert post_verify_race_rolled_back, "post-validation race did not restore the original save"
+assert post_verify_race_preserved, "post-validation race discarded the newer save"
 
 print("hades2_save_edit_transaction_ok")
