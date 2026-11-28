@@ -552,6 +552,9 @@ class Hades2LuaTransport:
                     'incompatible','hades2.error.nativeQueryUnavailable',
                     diagnostic=f'Native query registration status={status}: '+text,
                 )
+            if status in (100, 101):
+                self.tainted=True
+                raise TransportError('outcome_unknown', 'hades2.error.outcomeUnknownUnreadable')
             if status!=0:
                 marker='MGT_OUTCOME_UNKNOWN:'
                 if marker in text:

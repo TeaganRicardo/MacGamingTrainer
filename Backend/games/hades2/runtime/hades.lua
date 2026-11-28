@@ -233,8 +233,10 @@ if __MacGamingTrainerV1 == nil then
       if not catalogsReady then params.includeCatalogs = true end
       begin(command == "status" or params.includeCatalogs == true, acknowledgedRevision)
       local ok, result = pcall(M.dispatch, command, params)
-      local retainedDomains = finish(ok)
+      local observed = ok and result.__trainerActionObservationError == nil
+      local retainedDomains = finish(observed)
       if not ok then error(result) end
+      if not observed then return result end
       return project(result, retainedDomains)
     end
     local function runBatch(calls, includeCatalogs, nonce, acknowledgedRevision)
@@ -12472,6 +12474,38 @@ if __MacGamingTrainerV1 == nil then
         end
       end
     end
+    local function addResultFields(result, record, duplicate)
+      result.requestId, result.duplicate = record.requestId, duplicate
+      result.actionOutcome = record.status
+      result.applied = record.status == "completed" or record.status == "opened"
+      result.actionError = record.error
+      result.lootObjectId = record.lootObjectId
+      return result
+    end
+    local function receiptOnly(record, duplicate, message)
+      return addResultFields({
+        __trainerActionObservationError = type(message) == "string" and message or "Action observation failed",
+        lastAction = actionReceipt(record, record.requestId, duplicate),
+        runtimeOutcomeUnknown = not not M.terminalActionUnknown,
+      }, record, duplicate)
+    end
+    local function observeResult(record, duplicate, includeCatalogs)
+      local ok, result = pcall(state, includeCatalogs)
+      if not ok then return receiptOnly(record, duplicate, result) end
+      return addResultFields(result, record, duplicate)
+    end
+    local function encodeObservation(result)
+      local ok, payload = pcall(M.json, result)
+      if ok then return payload end
+      local record = M.requests[result.requestId]
+      if record == nil then error(payload) end
+      -- Once action work has a receipt, unrelated state must not mask it.
+      if result.__trainerActionObservationError == nil then
+        ok, payload = pcall(M.json, receiptOnly(record, result.duplicate, payload))
+        if ok then return payload end
+      end
+      error(nativeOperations.taint("Action receipt could not be encoded"))
+    end
     local function action(command, params, work, preflight)
       local requestId = params.requestId
       if type(requestId) ~= "string" or #requestId == 0 or #requestId > 128 then
@@ -12486,14 +12520,7 @@ if __MacGamingTrainerV1 == nil then
         if not knownActionStatuses[prior.status] then
           error("MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry")
         end
-        local result = state(params.includeCatalogs)
-        local receipt = actionReceipt(prior, requestId, true)
-        result.requestId, result.duplicate = requestId, true
-        result.actionOutcome = receipt.outcome
-        result.applied = receipt.outcome == "completed" or receipt.outcome == "opened"
-        if receipt.error then result.actionError = receipt.error end
-        if prior.lootObjectId then result.lootObjectId = prior.lootObjectId end
-        return result
+        return observeResult(prior, true, params.includeCatalogs)
       end
       -- Deterministic validation belongs after request-id deduplication. A
       -- duplicate successful mutation must return its prior receipt even though
@@ -12516,21 +12543,16 @@ if __MacGamingTrainerV1 == nil then
       if record.status == "outcome_unknown" and record.error == nil then record.status = outcome or "completed" end
       record.lootObjectId = value
       publishActionReceipt(record)
-      local result = state(params.includeCatalogs)
-      local receipt = actionReceipt(record, requestId, false)
-      result.requestId, result.duplicate = requestId, false
-      result.actionOutcome = receipt.outcome
-      result.applied = receipt.outcome == "completed" or receipt.outcome == "opened"
-      if receipt.error then result.actionError = receipt.error end
-      if record.lootObjectId then result.lootObjectId = record.lootObjectId end
-      return result
+      return observeResult(record, false, params.includeCatalogs)
     end
     return {
       run = action,
       publish = publishActionReceipt,
+      encodeObservation = encodeObservation,
       latestReceipt = function() return M.lastActionReceipt end,
     }
   end)()
+  M.encodeObservation = actionLedger.encodeObservation
 
   local rewardAcquisition = (function()
     local function listContains(list, wanted)

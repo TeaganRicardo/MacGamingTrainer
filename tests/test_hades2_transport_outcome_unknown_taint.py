@@ -254,6 +254,21 @@ else:
 assert resident.tainted is True, 'resident outcome-unknown marker left transport reusable'
 assert resident.target.deleted == [1], 'resident unknown outcome leaked its synchronization breakpoint'
 
+for unreadable_status in (100, 101):
+    unreadable = Transport.__new__(Transport)
+    unreadable.tainted = False
+    unreadable.process = SuccessfulProcess()
+    unreadable.target = FakeTarget()
+    unreadable.boundary = lambda: (FakeThread(unreadable_status), 0x2000, FakeBreakpoint())
+    unreadable.address = lambda name: 0x3000
+    unreadable.alive = lambda: False
+    try:
+        unreadable.execute('return true')
+    except FakeTransportError as error:
+        assert error.code == 'outcome_unknown' and unreadable.tainted
+    else:
+        raise AssertionError('unreadable LLDB result was treated as a proved refusal')
+
 # A host decode failure after Lua returned is an unknown outcome, even for
 # status: the read-only flag suppresses host adoption but status may perform
 # resident maintenance. Transport-side failures retain their own semantics.

@@ -1022,6 +1022,14 @@ class Hades2Adapter(GameAdapter):
         # runtime values. Only expensive catalogs may be omitted. Profile/Save
         # command patches bypass this seam and retain Swift's absence semantics.
         decoded=dict(reply.payload) if isinstance(reply.payload,dict) else {}
+        for key in ACTION_RESULT_FIELDS:
+            self.state.pop(key,None)
+        if reply.observation_error is not None:
+            # Keep the previous observation and publish only the confirmed action fields.
+            self.state.update({
+                key: decoded[key] for key in (*ACTION_RESULT_FIELDS, 'lastAction') if key in decoded
+            })
+            return decoded
         # The native status projection establishes the new observation baseline.
         if 'status' in decoded:
             self._target_observations_retired = False
@@ -1038,8 +1046,6 @@ class Hades2Adapter(GameAdapter):
         capabilities=dict(capabilities)
         capabilities['hotBackup']=True;capabilities['hotRestore']=False
         decoded['capabilities']=capabilities
-        for key in ACTION_RESULT_FIELDS:
-            self.state.pop(key,None)
         self.state.update(decoded,connected=True,pid=self.runtime.pid)
         self.state.pop('error',None)
         return decoded
@@ -1127,7 +1133,8 @@ class Hades2Adapter(GameAdapter):
             asynchronous_unknown=reply.outcome_unknown
             decoded=self._merge_resident_reply(reply)
             log_world_action_target_diagnostics(command,raw_decoded)
-            if not asynchronous_unknown and not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:
+            if (not asynchronous_unknown and reply.observation_error is None and not host_observation_only
+                    and not self.preference_initialized and not self.preference_write_blocked):
                 self._adopt_lua_preferences(raw_decoded)
             # Runtime observation skips durable Hades desired-state projection,
             # but Core-owned Process Time Warp remains observable Host state.
@@ -1139,11 +1146,20 @@ class Hades2Adapter(GameAdapter):
                     'hades2.error.outcomeUnknownGeneric',
                     diagnostic='游戏调用结果不明，未自动重试；请检查游戏并重启。',
                 )
-            if not host_observation_only and command not in ('status',) and command not in _PREPERSISTED_RUNTIME_COMMANDS:
+            if (not host_observation_only and command != 'status' and command not in _PREPERSISTED_RUNTIME_COMMANDS
+                    and (reply.observation_error is None
+                         or raw_decoded.get('applied') is True and raw_decoded.get('duplicate') is False)):
                 if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,raw_decoded):
                     self._save_preferences()
             if reply.connection_error is not None:
                 raise reply.connection_error
+            if reply.observation_error is not None:
+                raise ResidentSessionError(
+                    'action_observation_failed',
+                    'hades2.error.actionObservationFailed',
+                    reply.metrics,
+                    diagnostic=reply.observation_error,
+                )
             if command == 'status':
                 self._verified_runtime_ready(decoded)
             self._observe_game_speed()

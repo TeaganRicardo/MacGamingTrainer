@@ -7,7 +7,8 @@ local samples = assert(tonumber(arg[2]))
 local traitCount = assert(tonumber(arg[3] or "0"))
 local catalogTraitCount = assert(tonumber(arg[4] or "96"))
 local resourceCount = assert(tonumber(arg[5] or "32"))
-local serve = arg[6] == "serve"
+local mailboxReceipts = arg[6] == "serve-mailbox"
+local serve = arg[6] == "serve" or mailboxReceipts
 assert(_VERSION == "Lua 5.2", "profiling requires the supported Lua 5.2 ABI")
 
 SessionState = {}; SessionMapState = {}
@@ -145,7 +146,14 @@ if serve then
     local id, name, literal = line:match("^([^\t]+)\t([^\t]+)\t(.*)$")
     identity, command = assert(id), assert(name)
     local source = assert(load("return " .. literal, "fixture source literal", "t", _G))()
-    local result = assert(load(source, "offline resident operation", "t", _G))()
+    local chunk = assert(load(source, "offline resident operation", "t", _G))
+    local result
+    if mailboxReceipts then
+      local ok, value = pcall(chunk)
+      result = originalJSON({ ok = ok, text = ok and value or tostring(value) })
+    else
+      result = chunk()
+    end
     -- A cold bootstrap can replace the resident table. Reinstall probe wrappers
     -- only after that request, avoiding changes to the production Lua source.
     if M ~= __MacGamingTrainerV1 then M = __MacGamingTrainerV1; originalJSON = M.json; if os.getenv("MGT_PROFILE_OPERATIONS") == "1" then installProbes() end end

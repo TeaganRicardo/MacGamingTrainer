@@ -65,6 +65,7 @@
     "hades2.element.Fire": "Fire",
     "hades2.element.Water": "Water",
     "hades2.element.generic": "{0} Elements",
+    "hades2.error.actionObservationFailed": "The game returned an action result, but its updated state could not be read. Check the game before repeating the action.",
     "hades2.error.amountRange": "The amount must be an integer between 0 and {0}.",
     "hades2.error.architectureRequired": "The {0} adapter requires a native {1} game.",
     "hades2.error.armorNoMaximum": "Armor only has a current value; there is no editable maximum.",

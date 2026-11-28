@@ -1098,6 +1098,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         receiptPresentedDuringReply = true
         services.feedback.suppressNextStatus(error: true) { status in
             status.error != "hades2.error.commandResultConnectionLost"
+                && status.error != "hades2.error.actionObservationFailed"
         }
 
         switch receipt.outcome {
@@ -1131,12 +1132,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if status.busy { receiptPresentedDuringReply = false }
         let hasReceiptFeedback = receiptPresentedDuringReply
         if !status.busy { receiptPresentedDuringReply = false }
-        let resultConnectionLost = status.error == "hades2.error.commandResultConnectionLost"
-        if resultConnectionLost {
+        let resultWithFollowupError = status.error == "hades2.error.commandResultConnectionLost"
+            || status.error == "hades2.error.actionObservationFailed"
+        if resultWithFollowupError {
             if hasReceiptFeedback {
-                // The action outcome and its failed receipt release are two
-                // known facts from one reply. Retain the outcome for details
-                // while showing the immediate game-restart guidance.
+                // Keep the separately acknowledged action outcome in the details.
                 receivedActionResultText = noticeText.key.isEmpty ? errorText : noticeText
             }
         } else {

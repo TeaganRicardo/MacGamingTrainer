@@ -27,6 +27,7 @@ from .operation_budgets import REPLAY_EXPRESSION_TIMEOUT_SECONDS, TRAIT_TRAY_HAN
 TransportError = AdapterError
 
 _TRAIT_TRAY_HANDOFF_KEY = "__trainerTraitTrayHandoff"
+_ACTION_OBSERVATION_ERROR_KEY = "__trainerActionObservationError"
 _TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS = TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS
 _TRAIT_TRAY_HANDOFF_POLL_SECONDS = 0.05
 _REPLAY_EXPRESSION_TIMEOUT_SECONDS = REPLAY_EXPRESSION_TIMEOUT_SECONDS
@@ -62,6 +63,7 @@ class ResidentReply:
     outcome_unknown: bool = False
     connection_error: Optional["ResidentConnectionError"] = None
     recovery_request: object = None
+    observation_error: Optional[str] = None
 
 
 class ResidentSessionError(AdapterError):
@@ -322,9 +324,10 @@ class Hades2ResidentSession:
                     diagnostic="游戏内祝福菜单未能及时关闭，修改尚未执行。",
                 )
 
-            dispatch = self._dispatch_source(command, runtime_params, batch)
+            observation = self._observation_source(command, runtime_params, batch)
             if command != "status":
-                dispatch = self._mutation_handoff_source(dispatch)
+                observation = self._mutation_handoff_source(observation)
+            dispatch = "return __MacGamingTrainerV1.encodeObservation(" + observation + ")"
             code = self._bootstrap + "\n" + dispatch if not self._generation_ready else dispatch
 
             boundary_started = time.monotonic()
@@ -432,7 +435,7 @@ class Hades2ResidentSession:
         connection_error = self._acknowledge_result(reply)
         return replace(reply, connection_error=connection_error) if connection_error else reply
 
-    def _dispatch_source(self, command, params, batch):
+    def _observation_source(self, command, params, batch):
         install_nonce = lua_value(uuid.uuid4().hex)
         acknowledged_revision = lua_value(self._observation_revision)
         if batch is None:
@@ -458,7 +461,7 @@ class Hades2ResidentSession:
             dispatch_value = ("__MacGamingTrainerV1.observeBatch({" + ",".join(calls) + "},"
                               + lua_value(params.get("includeCatalogs") is True) + "," + install_nonce
                               + "," + acknowledged_revision + ")")
-        return "return __MacGamingTrainerV1.json(" + dispatch_value + ")"
+        return dispatch_value
 
     def _localize_observation(self, payload):
         # The Trait Tray handoff is a control marker, not an observation.
@@ -512,9 +515,9 @@ class Hades2ResidentSession:
         return payload, generation_reset
 
     @staticmethod
-    def _mutation_handoff_source(dispatch):
+    def _mutation_handoff_source(observation):
         return (
-            'return __MacGamingTrainerV1.json((function() '
+            '(function() '
             'local __mgtScreen=(type(ActiveScreens)=="table") and ActiveScreens.TraitTrayScreen or nil;'
             'if __mgtScreen~=nil then '
             'if type(thread)~="function" or type(TraitTrayScreenClose)~="function" then '
@@ -525,8 +528,7 @@ class Hades2ResidentSession:
             'return {["'
             + _TRAIT_TRAY_HANDOFF_KEY
             + '"]="closing"} end;'
-            + 'return ' + dispatch[len("return __MacGamingTrainerV1.json("):-1]
-            + " end)())"
+            + 'return ' + observation + ' end)()'
         )
 
     def _cross(self, command, source, *, replay, read_only, expression_timeout_seconds, request_id=None):
@@ -536,6 +538,7 @@ class Hades2ResidentSession:
         json_duration = 0.0
         localize_duration = 0.0
         generation_reset = False
+        observation_error = None
         try:
             if expression_timeout_seconds is None:
                 raw = self._transport.execute(source)
@@ -559,7 +562,23 @@ class Hades2ResidentSession:
             if correlation() is not None:
                 record("resident.json_decode", json_duration, reply_bytes=len(raw.encode("utf-8")))
             phase = time.monotonic()
-            payload, generation_reset = self._localize_observation(payload)
+            if _ACTION_OBSERVATION_ERROR_KEY in payload:
+                observation_error = payload.pop(_ACTION_OBSERVATION_ERROR_KEY)
+                receipt = payload.get("lastAction")
+                outcome = payload.get("actionOutcome")
+                if (not isinstance(observation_error, str) or not isinstance(request_id, str)
+                        or not isinstance(receipt, dict) or receipt.get("command") != command
+                        or receipt.get("requestId") != request_id or payload.get("requestId") != request_id
+                        or outcome not in ("completed", "opened", "accepted", "failed", "outcome_unknown")
+                        or receipt.get("outcome") != outcome
+                        or payload.get("applied") is not (outcome in ("completed", "opened"))):
+                    raise ValueError("Invalid action receipt without a resident observation")
+                # The action is known, but no observation revision was consumed.
+                # Request fresh state (including catalogs) on the next boundary.
+                self._observation_revision = None
+                self._catalog_ready = False
+            else:
+                payload, generation_reset = self._localize_observation(payload)
             localize_duration = time.monotonic() - phase
             record("resident.localization", localize_duration, response_kind="marker" if _TRAIT_TRAY_HANDOFF_KEY in payload else "full")
         except Exception as error:
@@ -627,4 +646,4 @@ class Hades2ResidentSession:
             metrics.expression_duration,
         )
         return ResidentReply(payload=payload, metrics=metrics, generation_reset=generation_reset,
-                             recovery_request=recovery_request)
+                             recovery_request=recovery_request, observation_error=observation_error)
