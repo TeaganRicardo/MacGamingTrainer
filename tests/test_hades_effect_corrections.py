@@ -111,6 +111,66 @@ assert(actual("ForceZeusBoonTrait").Uses == 0 and actual("ForceZeusBoonTrait").C
   "rank edit refreshed a consumed force-boon use or lost its room owner")
 runtime.remove_trait(selected("ForceZeusBoonTrait").instanceId)
 
+-- The native tray close can yield while the game replaces the mounted trait.
+-- The deferred update owns the selected physical instance across that wait.
+runtime.add_trait("PoseidonTrait", "Common", 1)
+local unrelated = actual("PoseidonTrait")
+local nativeEquip, nativeUnequip = EquipKeepsake, UnequipKeepsake
+local equipCount, unequipCount = 0, 0
+function EquipKeepsake(...)
+  equipCount = equipCount + 1
+  return nativeEquip(...)
+end
+function UnequipKeepsake(...)
+  unequipCount = unequipCount + 1
+  return nativeUnequip(...)
+end
+for _, replace in ipairs({false, true}) do
+  local name = "ForceZeusBoonTrait"
+  runtime.add_trait(name, "Common", 1)
+  local previous = actual(name)
+  previous.Uses, previous.CurrentRoom = 0, 7
+  local progress = GameState.KeepsakeChambers[name]
+  local beforeEquip, beforeUnequip = equipCount, unequipCount
+  local identifier = selected(name).instanceId
+  local request = replace and "keepsake-stale" or "keepsake-stable"
+  ScreenAnchors = { TraitTrayScreen = { CanClose = true } }
+  function CloseAdvancedTooltipScreen()
+    coroutine.yield("closing-trait-tray")
+    ScreenAnchors.TraitTrayScreen = nil
+  end
+  _threads = {}
+  assert(runtime.submit_trait_command(request, "update_trait", table.pack(identifier, "Rare", 1)).state == "pending")
+  local scheduled = _threads[1].thread
+  local resumed, event = coroutine.resume(scheduled)
+  assert(resumed and event == "closing-trait-tray")
+  local replacement
+  if replace then
+    replacement = { Name = name, Slot = "Keepsake", Rarity = "Common", Uses = 1, CurrentRoom = 8 }
+    for index, trait in ipairs(unit.Traits) do
+      if trait == previous then unit.Traits[index] = replacement end
+    end
+    assert(selected(name).instanceId ~= identifier)
+  end
+  assert(coroutine.resume(scheduled))
+  local receipt = runtime.trait_command_result(request)
+  if replace then
+    assert(receipt.state == "error" and not receipt.mutationStarted and receipt.error:find("staleTrait"),
+      "expected a pre-mutation stale trait receipt, got " .. receipt.state)
+    assert(actual(name) == replacement and replacement.Uses == 1 and replacement.CurrentRoom == 8)
+    assert(equipCount == beforeEquip and unequipCount == beforeUnequip)
+    assert(GameState.KeepsakeChambers[name] == progress)
+  else
+    assert(receipt.state == "complete" and receipt.mutationStarted and receipt.result.heroReady)
+    assert(actual(name).Rarity == "Rare" and actual(name).Uses == 0 and actual(name).CurrentRoom == 7)
+    assert(equipCount == beforeEquip + 1 and unequipCount == beforeUnequip + 1)
+  end
+  assert(GameState.LastAwardTrait == name and actual("PoseidonTrait") == unrelated)
+end
+EquipKeepsake, UnequipKeepsake = nativeEquip, nativeUnequip
+runtime.remove_trait(selected("ForceZeusBoonTrait").instanceId)
+runtime.remove_trait(selected("PoseidonTrait").instanceId)
+
 runtime.add_trait("FuryAssistTrait", "Rare", 1)
 actual("FuryAssistTrait").RemainingUses = 1 -- one of two native charges consumed
 runtime.update_trait(selected("FuryAssistTrait").instanceId, "Epic", 1)
