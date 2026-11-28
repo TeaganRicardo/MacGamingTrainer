@@ -519,9 +519,14 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
         writes, actions = [], []
 
         def add(intent, address, before, after, name, *, path=None, logical_keys=None, header=None, operation='set', wire=None):
-            if operation == 'set' and values.equal(before, after): return
-            effect = {'id': ('h:' + header if header else self._identifier(path) if path else 'linked:' + repr(logical_keys)),
-                      'name': name, 'before': values.display(before), 'after': values.display(after)}
+            effect = None
+            if operation != 'set' or not values.equal(before, after):
+                effect = {'id': ('h:' + header if header else self._identifier(path) if path else 'linked:' + repr(logical_keys)),
+                          'name': name, 'before': values.display(before), 'after': values.display(after)}
+            elif logical_keys is None:
+                return
+            # A linked operation owns its complete write set, even when part
+            # of it already has the requested value.
             writes.append({'action': intent['id'], 'address': address, 'before': before, 'after': after,
                            'path': path, 'logical': logical_keys, 'header': header, 'operation': operation,
                            'wire': wire, 'effect': effect})
@@ -610,7 +615,10 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
                     linked(intent, ('GameState', 'LastInteractedWeaponUpgrade', 'ItemIndex'), index, label('Index', language))
             else:
                 raise HadesSaveValueError('hades.saveEditor.error.invalidMutation', 'Unknown staged editor identity.')
-            if len(writes) == start: continue
+            effects = [write['effect'] for write in writes[start:] if write['effect'] is not None]
+            if not effects:
+                del writes[start:]
+                continue
             actions.append({'id': identifier, 'name': row['name'], 'before': row['displayValue'],
                 'after': (values.display(values.from_typed(wire)) if operation == 'set' else '∅' if operation == 'unset' else
                           '+ ' + values.display(values.from_typed(wire['key'])) + ': ' + values.display(values.from_typed(wire['value']))),
@@ -621,8 +629,8 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
                 **({'warning': row['warning']} if row.get('warning') else {}),
                 'typedValue': wire['value'] if operation == 'append' else wire,
                 **({'typedKey': wire['key']} if operation == 'append' else {}),
-                'effects': [write['effect'] for write in writes[start:] if write['effect']['id'] != identifier
-                            and not (identifier.startswith(('resource:', 'aspectRank:')) and write['effect']['name'] == row['name'])]})
+                'effects': [effect for effect in effects if effect['id'] != identifier
+                            and not (identifier.startswith(('resource:', 'aspectRank:')) and effect['name'] == row['name'])]})
 
         unique = []
         for write in writes:
@@ -645,6 +653,7 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
             else:
                 unique.append(write)
 
+        unique = [write for write in unique if write['effect'] is not None]
         # Descending original occurrence paths preserve sibling identities when
         # a batch removes entries. Semantic additions follow existing entries.
         for write in sorted((item for item in unique if item['path'] is not None), key=lambda item: item['path'], reverse=True):
