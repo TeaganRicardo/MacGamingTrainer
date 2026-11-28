@@ -11174,6 +11174,45 @@ if __MacGamingTrainerV1 == nil then
       return false
     end
 
+    local function prepareFallbackEncounter(run, target)
+      if type(target) ~= "table" or target.Encounter ~= nil
+          or target.Encounters ~= nil or target.MultipleEncountersData ~= nil then
+        return false
+      end
+      if ForceNextEncounter ~= nil or run.ForceNextEncounterData ~= nil then
+        return false
+      end
+      if type(target.LegalEncounters) ~= "table" or type(EncounterData) ~= "table"
+          or type(IsEncounterEligible) ~= "function" or type(SetupEncounter) ~= "function" then
+        return false
+      end
+      local candidates, probed = {}, {}
+      for _, encounterName in ipairs(target.LegalEncounters) do
+        local data = type(encounterName) == "string" and EncounterData[encounterName] or nil
+        if type(data) == "table" then
+          candidates[#candidates + 1] = data
+          if probed[encounterName] == nil then
+            local probe = {}
+            for key, value in pairs(data) do probe[key] = value end
+            local ok, eligible, usedRandom = pcall(
+              nativeProbeWithoutRNG, IsEncounterEligible, run, target, probe
+            )
+            if not ok or usedRandom or eligible then
+              return false
+            end
+            probed[encounterName] = true
+          end
+        end
+      end
+      if #candidates == 0 then return false end
+      local chosen = GetRandomValue(candidates)
+      if type(chosen) ~= "table" then error("World exit route encounter setup failed") end
+      local encounter = SetupEncounter(chosen, target)
+      if type(encounter) ~= "table" then error("World exit route encounter setup failed") end
+      target.Encounter = encounter
+      return true
+    end
+
     local function materializeRoute(run, door, lease)
       local routes = routeCandidates(door)
       local candidates = routeRooms(type(routes) == "table" and routes[lease.target] or nil)
@@ -11276,11 +11315,12 @@ if __MacGamingTrainerV1 == nil then
       if target.UseOptionalOverrides and type(target.OptionalOverrides) == "table" then
         for key, value in pairs(target.OptionalOverrides) do target[key] = value end
       end
+      local usedFallbackEncounter = prepareFallbackEncounter(run, target)
       -- Assign is the only native graph write. The LeaveRoom owner will
       -- release leases after this succeeds, or restore the exact native
       -- graph if assignment/preparation throws after the door was paid for.
       AssignRoomToExitDoor(door, target)
-      return target
+      return target, usedFallbackEncounter
     end
 
     local function installRouteHooks()
@@ -11316,11 +11356,12 @@ if __MacGamingTrainerV1 == nil then
             local exitRooms = snapshotDoorMap(source, "ExitDoorRooms", door.ObjectId)
             local allowReroll = snapshotField(door, "AllowReroll")
             local canReroll = snapshotField(door, "CanBeRerolled")
+            local materializedRoom, usedFallbackEncounter = nil, false
             local ok, reason = pcall(function()
               if run ~= CurrentRun or lease.run ~= run or lease.sourceRoom ~= source then
                 error("World exit route lost its native owner")
               end
-              materializeRoute(run, door, lease)
+              materializedRoom, usedFallbackEncounter = materializeRoute(run, door, lease)
             end)
             if not ok then
               -- CreateRoom and reward setup can consume native RNG/counts.
@@ -11336,6 +11377,18 @@ if __MacGamingTrainerV1 == nil then
                 pcall(DebugPrint, { Text = "MGT World Actions route fallback: " .. tostring(reason) })
               end
             else
+              if type(materializedRoom) == "table" and materializedRoom.CloseDoorsOnUse
+                  and type(materializedRoom.Name) == "string" and materializedRoom.Name ~= ""
+                  and materializedRoom.Name ~= "N_Hub"
+                  and (type(source) ~= "table" or materializedRoom.Name ~= source.Name)
+                  and type(run.ClosedDoors) == "table" then
+                run.ClosedDoors[materializedRoom.Name] = nil
+              end
+              if usedFallbackEncounter and type(materializedRoom) == "table"
+                  and type(materializedRoom.Encounter) == "table"
+                  and type(RecordEncounter) == "function" then
+                RecordEncounter(run, materializedRoom.Encounter)
+              end
               M.featureErrors.worldActions = nil
             end
           end
