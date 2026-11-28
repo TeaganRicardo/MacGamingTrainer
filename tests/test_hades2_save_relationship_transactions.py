@@ -44,7 +44,9 @@ class SaveTransactionFixture(unittest.TestCase):
 
     def open(self):
         target = {"rootId": "main", "relativePath": "Profile1.sav"}
-        return Hades2SaveWorkspace.open(self.service, source=target, target=target)
+        return Hades2SaveWorkspace.open(
+            self.service, source=target, target=target, game_path=self.base / "AbsentHades2.app"
+        )
 
 
 class GiftTransactionTests(SaveTransactionFixture):
