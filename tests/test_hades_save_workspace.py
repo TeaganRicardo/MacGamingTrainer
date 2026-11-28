@@ -2,6 +2,7 @@
 import hashlib
 import json
 from pathlib import Path
+import stat
 import sys
 import tempfile
 
@@ -115,12 +116,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-journeys-') as tempora
     (saves / 'activeProfile').write_bytes(b'SGB1' + sized('Profile2'))
     external_target = build_save(999, 'external-newer-target')
     (saves / 'Profile2.sav').write_bytes(external_target)
+    (saves / 'Profile2.sav').chmod(0o600)
     receipt = apply(workspace)
     assert receipt['applied'] and receipt['verified'] and receipt['hot']
     assert not receipt['runtimeReloaded'] and receipt['target'] == target
     assert receipt['source'] == {'kind': 'currentFile', **source}
     assert receipt['sourceSHA256'] == original_hash
     assert receipt['installedSHA256'] == hashlib.sha256((saves / 'Profile2.sav').read_bytes()).hexdigest()
+    assert stat.S_IMODE((saves / 'Profile2.sav').stat().st_mode) == 0o600
     installed = state(saves / 'Profile2.sav')
     assert installed['Resources']['MetaPoints'] == 18
     assert installed['LifetimeResourcesGained']['MetaPoints'] == 100
@@ -231,9 +234,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-journeys-') as tempora
     selected = router.handle_encoded({'id': 'target', 'command': 'save_editor_target', 'params':
         {'workspaceId': identifier, 'target': target, 'baselineGeneration': generation}})
     assert json.loads(selected)['ok']
+    (saves / 'Profile2.sav').chmod(0o600)
     applied = json.loads(router.handle_encoded({'id': 'apply', 'command': 'save_editor_apply', 'params':
         {'workspaceId': identifier, 'baselineGeneration': generation}}))
     assert applied['ok'] and applied['result']['baselineGeneration'] != generation
+    assert stat.S_IMODE((saves / 'Profile2.sav').stat().st_mode) == 0o600
     stale = json.loads(router.handle_encoded({'id': 'stale-after-apply', 'command': 'save_editor_stage', 'params':
         {**request['params'], 'value': scalar(8)}}))
     assert not stale['ok']

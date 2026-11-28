@@ -1,5 +1,6 @@
 """Selected-file races, verified rollback and outcome-unknown non-replay."""
 from pathlib import Path
+import stat
 import sys
 import tempfile
 from unittest.mock import patch
@@ -41,6 +42,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-recovery-') as tempora
     saves, service, workspace = opened(base / 'post-verify')
     captured_generation = workspace.baseline_generation
     target = saves / 'Profile2.sav'
+    target.chmod(0o600)
     original = target.read_bytes()
     original_load = HadesSaveDocument.load
     unrelated = saves / 'Profile1.sjson'
@@ -54,6 +56,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-recovery-') as tempora
     with patch.object(HadesSaveDocument, 'load', classmethod(racing_load)):
         rejects(SaveRestoreError, lambda: apply(workspace))
     assert target.read_bytes() == original
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
     assert unrelated.read_bytes() == b'concurrent-unrelated-settings'
     assert workspace.review()['count'] == 1
     assert workspace.baseline_generation == captured_generation
