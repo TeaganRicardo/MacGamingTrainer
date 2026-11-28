@@ -94,7 +94,11 @@ local function mountTradeScreenComponents(screen)
 end
 
 RandomInt = function(minimum) return minimum end
-IsGameStateEligible = function(_, _, requirements)
+IsGameStateEligible = function(source, requirements)
+  assert(source ~= CurrentRun and type(source) == 'table',
+    'IsGameStateEligible must receive the option as source, not CurrentRun')
+  assert(requirements == nil or requirements == source.GameStateRequirements,
+    'IsGameStateEligible must receive option.GameStateRequirements as requirements')
   return not (type(requirements) == 'table' and requirements.Blocked)
 end
 local randomChoiceCalls = 0
@@ -426,18 +430,24 @@ OpenTradeScreen = function(source, args, chosenGiveOption, chosenGetOption)
   return screen
 end
 
-NemesisTradeChoice = function(source, args, dialogueScreen)
+NemesisTradeChoice = function(source, args, dialogueScreen, ...)
+  if source.ObjectId == 801 then
+    local first, second, third, fourth = ...
+    assert(select('#', ...) == 4 and first == 'sentinel' and second == nil
+      and third == 'tail' and fourth == nil,
+      'Nemesis wrapper did not preserve optional arguments and their nil slots')
+  end
   local eligibleGiveOptions = {}
   for _, option in ipairs(args.GiveOptions or {}) do
     if option.GameStateRequirements == nil
-        or IsGameStateEligible(CurrentRun, option, option.GameStateRequirements) then
+        or IsGameStateEligible(option, option.GameStateRequirements) then
       eligibleGiveOptions[#eligibleGiveOptions + 1] = option
     end
   end
   local eligibleGetOptions = {}
   for _, option in ipairs(args.GetOptions or {}) do
     if option.GameStateRequirements == nil
-        or IsGameStateEligible(CurrentRun, option, option.GameStateRequirements) then
+        or IsGameStateEligible(option, option.GameStateRequirements) then
       eligibleGetOptions[#eligibleGetOptions + 1] = option
     end
   end
@@ -484,7 +494,7 @@ local enabled = M.dispatch('set_feature', {
 assert(enabled.activeFeatures.forceEnableRerolls,
   'Nemesis trade seam made Force Enable Rerolls unavailable')
 
-NemesisTradeChoice(source, PresetEventArgs.NemesisBuyItemChoices, dialogue)
+NemesisTradeChoice(source, PresetEventArgs.NemesisBuyItemChoices, dialogue, 'sentinel', nil, 'tail', nil)
 assert(tradeOpenCount == 2, 'one Nemesis trade reroll did not regenerate exactly one native screen')
 assert(displayedReward ~= 'TradeRewardA'
   and (displayedReward == 'TradeRewardB' or displayedReward == 'TradeRewardC'),

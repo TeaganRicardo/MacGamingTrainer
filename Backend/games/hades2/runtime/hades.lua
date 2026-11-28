@@ -7134,7 +7134,7 @@ if __MacGamingTrainerV1 == nil then
       for _, option in ipairs(type(options) == "table" and options or {}) do
         if type(option) == "table"
             and (option.GameStateRequirements == nil
-              or IsGameStateEligible(CurrentRun, option, option.GameStateRequirements)) then
+              or IsGameStateEligible(option, option.GameStateRequirements)) then
           result[#result + 1] = option
         end
       end
@@ -8257,10 +8257,10 @@ if __MacGamingTrainerV1 == nil then
             run = CurrentRun,
           }
           nemesisTradeArgs[copiedArgs] = owner
-          local args = { ... }
+          local extraArgs = table.pack(...)
           local ok, result = nativeOperations.run(nil, "completed", function(operation)
             owner.operation = operation
-            local nativeOk, result = pcall(original, source, copiedArgs, screen, unpack(args))
+            local nativeOk, result = pcall(original, source, copiedArgs, screen, table.unpack(extraArgs, 1, extraArgs.n))
             if nativeOk and source.Accepted and owner.finalPlan ~= nil then
               copiedArgs.ChosenGiveOption = owner.finalPlan.give
               copiedArgs.ChosenGetOption = owner.finalPlan.get
