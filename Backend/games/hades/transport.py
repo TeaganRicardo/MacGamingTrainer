@@ -8,15 +8,13 @@ import sys
 import time
 
 from core.adapter import AdapterError
-from .mailbox import HadesCommandMailbox, KNOWN_LUA_REFUSAL_KEYS
+from .mailbox import DEFAULT_TRANSPORT_MODE, HadesCommandMailbox, KNOWN_LUA_REFUSAL_KEYS, LUA_SOURCE_LIMIT_BYTES
 from .native_mailbox import install_command_mailbox, prepare_command_mailbox
 from .operation_budgets import (
     EXPRESSION_TIMEOUT_MICROSECONDS,
     LLDB_MODULE_PATH_TIMEOUT_SECONDS,
     PROCESS_CONTROL_TIMEOUT_SECONDS,
 )
-
-LUA_SOURCE_LIMIT_BYTES = 128 * 1024
 
 sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun', 'lldb', '-P'], text=True, shell=False, timeout=LLDB_MODULE_PATH_TIMEOUT_SECONDS).strip())
 import lldb
@@ -28,7 +26,7 @@ def failure(code, key, detail=None):
 
 class HadesLuaTransport:
     def __init__(self):
-        self.mailbox_mode = os.environ.get('MGT_HADES_TRANSPORT', 'mailbox')
+        self.mailbox_mode = os.environ.get('MGT_HADES_TRANSPORT', DEFAULT_TRANSPORT_MODE)
         if self.mailbox_mode not in ('mailbox', 'lldb'):
             raise ValueError('MGT_HADES_TRANSPORT must be mailbox or lldb')
         self.manifest = json.loads(Path(__file__).with_name('symbols.json').read_text())
@@ -346,7 +344,7 @@ class HadesLuaTransport:
             raise failure('not_connected', 'notConnected')
         payload = source.encode('utf-8')
         if len(payload) > LUA_SOURCE_LIMIT_BYTES:
-            raise ValueError('Hades Lua request exceeds 128 KiB')
+            raise ValueError('Hades Lua request exceeds 1 MiB')
         self.last_mailbox_profile = {}
         if getattr(self, '_mailbox', None) is None:
             library = getattr(self, 'native_mailbox_library', None)
@@ -403,7 +401,7 @@ class HadesLuaTransport:
             raise failure('restart_required', 'restartRequired')
         payload = source.encode('utf-8')
         if len(payload) > LUA_SOURCE_LIMIT_BYTES:
-            raise ValueError('Hades Lua request exceeds 128 KiB')
+            raise ValueError('Hades Lua request exceeds 1 MiB')
         scratch = None
         self._boundary_initial_stop_pending = False
         try:

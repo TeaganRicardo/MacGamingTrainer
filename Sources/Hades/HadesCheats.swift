@@ -5,6 +5,9 @@ package enum HadesCheatIcon {
     package static let godGauge = "bolt.heart.fill"
     package static let fishing = "fish.fill"
     package static let portal = "circle.hexagongrid.fill"
+    package static let purge = "arrow.left.arrow.right.circle"
+    package static let legendary = "star.fill"
+    package static let duo = "person.2.fill"
 }
 
 package enum HadesCheatCatalog {
@@ -83,8 +86,40 @@ package enum HadesCheatCatalog {
                 label: .key("hades.boonRarityEnabled"),
                 help: .key("hades.boonRarityHelp"),
                 icon: TrainerSemanticIcon.Concept.quality,
-                action: TrainerCheatActionSpec(command: "set_feature", valueParam: "value"),
-                shortcutID: "boonRarityEnabled"
+            action: TrainerCheatActionSpec(command: "set_feature", valueParam: "value"),
+            shortcutID: "boonRarityEnabled"
+        ),
+        TrainerCheatDefinition(
+            id: "moneyMultiplierEnabled",
+            kind: .toggle,
+            label: .key("hades.moneyMultiplier"),
+            help: .key("hades.moneyMultiplierHelp"),
+            icon: TrainerSemanticIcon.Concept.currency,
+            action: TrainerCheatActionSpec(command: "set_feature", valueParam: "value"),
+            shortcutID: "moneyMultiplierEnabled"
+        ),
+        TrainerCheatDefinition(
+            id: "resourceMultiplierEnabled",
+            kind: .toggle,
+            label: .key("hades.resourceMultiplier"),
+            help: .key("hades.resourceMultiplierHelp"),
+            icon: TrainerSemanticIcon.Concept.item,
+            action: TrainerCheatActionSpec(command: "set_feature", valueParam: "value"),
+            shortcutID: "resourceMultiplierEnabled"
+        ),
+            TrainerCheatDefinition(
+                id: "forceLegendary",
+                kind: .toggle,
+                label: .key("hades.rarity.forceLegendary"),
+                icon: HadesCheatIcon.legendary,
+                action: TrainerCheatActionSpec(command: "set_boon_rarity", valueParam: "forceLegendary")
+            ),
+            TrainerCheatDefinition(
+                id: "forceDuo",
+                kind: .toggle,
+                label: .key("hades.rarity.forceDuo"),
+                icon: HadesCheatIcon.duo,
+                action: TrainerCheatActionSpec(command: "set_boon_rarity", valueParam: "forceDuo")
             ),
             TrainerCheatDefinition(
                 id: "gameSpeed",
@@ -126,6 +161,20 @@ package enum HadesCheatCatalog {
                 kind: .value,
                 label: .key("hades.dashBonus"),
                 icon: TrainerSemanticIcon.Concept.dash,
+                action: TrainerCheatActionSpec(command: "set_feature", valueParam: "value")
+            ),
+            TrainerCheatDefinition(
+                id: "moneyMultiplier",
+                kind: .value,
+                label: .key("hades.moneyMultiplier"),
+                icon: TrainerSemanticIcon.Concept.currency,
+                action: TrainerCheatActionSpec(command: "set_feature", valueParam: "value")
+            ),
+            TrainerCheatDefinition(
+                id: "resourceMultiplier",
+                kind: .value,
+                label: .key("hades.resourceMultiplier"),
+                icon: TrainerSemanticIcon.Concept.item,
                 action: TrainerCheatActionSpec(command: "set_feature", valueParam: "value")
             ),
             TrainerCheatDefinition(
@@ -215,6 +264,14 @@ package enum HadesCheatCatalog {
                 label: .key("hades.gainResource"),
                 icon: TrainerSemanticIcon.Action.acquire,
                 action: TrainerCheatActionSpec(command: "gain_resource")
+            ),
+            TrainerCheatDefinition(
+                id: "openSellTraits",
+                kind: .oneShot,
+                label: .key("hades.shortcut.openPurgingPool"),
+                icon: HadesCheatIcon.purge,
+                action: TrainerCheatActionSpec(command: "open_sell_traits"),
+                shortcutID: "openSellTraits"
             ),
             TrainerCheatDefinition(
                 id: "disableAll",

@@ -25,7 +25,8 @@ SUCCESS, ERROR, CANCELLED, UNKNOWN = range(4)
 GENERATION_CHANGED = -1000
 STACK_UNAVAILABLE = -1001
 
-LUA_SOURCE_LIMIT_BYTES = 128 * 1024
+DEFAULT_TRANSPORT_MODE = 'mailbox'
+LUA_SOURCE_LIMIT_BYTES = 1_048_576
 LUA_RESULT_LIMIT_BYTES = 262144
 
 KNOWN_LUA_REFUSAL_KEYS = (
@@ -40,6 +41,8 @@ KNOWN_LUA_REFUSAL_KEYS = (
     'staleRoom',
     'staleDoor',
     'worldUnavailable',
+    'sellDataUnavailable',
+    'sellScreenBusy',
     'unsupportedRuntime',
 )
 
@@ -256,7 +259,7 @@ class HadesCommandMailbox:
         if not payload:
             raise ValueError('Hades Lua request cannot be empty')
         if len(payload) > LUA_SOURCE_LIMIT_BYTES:
-            raise ValueError('Hades Lua request exceeds 128 KiB')
+            raise ValueError('Hades Lua request exceeds 1 MiB')
         if type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= 30:
             raise ValueError('Mailbox timeout must be within (0, 30].')
         if not self._alive():

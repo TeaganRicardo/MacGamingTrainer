@@ -14,11 +14,15 @@ DEFAULT_FEATURES = {
     'infiniteAmmo': False,
     'forceEnableRerolls': False,
     'boonRarityEnabled': False,
+    'moneyMultiplierEnabled': False,
+    'resourceMultiplierEnabled': False,
     'damageMultiplier': 1,
     'incomingDamageMultiplier': 1,
     'moveSpeedMultiplier': 1,
     'attackSpeedMultiplier': 1,
     'dashBonus': 0,
+    'moneyMultiplier': 2,
+    'resourceMultiplier': 2,
 }
 # Game-native simulation speed is a durable module preference, but it must
 # never enter the Lua resident feature document. Hades owns it directly on
@@ -26,13 +30,18 @@ DEFAULT_FEATURES = {
 DEFAULT_PREFERENCES = {
     **DEFAULT_FEATURES,
     'boonRarityTarget': 'Heroic',
+    'boonForceLegendary': False,
+    'boonForceDuo': False,
+    'fishingChance': None,
+    'chaosGateChance': None,
     'gameSpeed': 1.0,
     'healthLock': None,
     'moneyLock': None,
     'rerollsLock': None,
+    'resourceLocks': {},
 }
 # Persisted feature-set format of HadesPreferenceStore and HadesProfileStore.
-PREFERENCE_SCHEMA_VERSION = 3
+PREFERENCE_SCHEMA_VERSION = 6
 RESOURCE_IDS = frozenset(('MetaPoints', 'Gems', 'SuperGems', 'LockKeys',
                           'SuperLockKeys', 'GiftPoints', 'SuperGiftPoints'))
 # Resident status flag and value key for each fixed-value lock.
@@ -47,10 +56,10 @@ DEFERRED_WORLD_COMMANDS = frozenset(('gain_resource', 'spawn_reward', 'generate_
 DEFERRED_TRAIT_COMMANDS = frozenset(('add_trait', 'update_trait', 'remove_trait',
                                      'set_trait_uses', 'expire_trait', 'refresh_trait',
                                      'add_chaos_pair'))
-ONE_SHOT_COMMANDS = WORLD_COMMANDS | DEFERRED_TRAIT_COMMANDS | frozenset(('set_value', 'set_resource'))
+ONE_SHOT_COMMANDS = WORLD_COMMANDS | DEFERRED_TRAIT_COMMANDS | frozenset(('set_value', 'set_resource', 'open_sell_traits'))
 MUTATING_COMMANDS = ONE_SHOT_COMMANDS | {
-    'set_feature', 'set_boon_rarity', 'configure',
-    'configure_locks', 'lock_vital', 'lock_resource', 'lock_rerolls', 'disable_all',
+    'set_feature', 'set_boon_rarity', 'set_fishing_chance', 'set_chaos_gate_chance',
+    'configure', 'configure_locks', 'lock_vital', 'lock_resource', 'lock_rerolls', 'disable_all',
 }
 
 
@@ -74,6 +83,8 @@ def feature_value(name, value):
         return value
     if name == 'dashBonus':
         return number(value, 0, 20, integer=True)
+    if name in ('moneyMultiplier', 'resourceMultiplier'):
+        return number(value, 1, 100)
     return number(value, 0.1, 100)
 
 
@@ -89,9 +100,21 @@ def boon_rarity_target(value):
     return value
 
 
+def spawn_chance(value):
+    if value is None:
+        return None
+    return float(number(value, 0, 100))
+
+
 def preference_value(name, value):
     if name == 'boonRarityTarget':
         return boon_rarity_target(value)
+    if name in ('boonForceLegendary', 'boonForceDuo'):
+        if type(value) is not bool:
+            raise invalid_value()
+        return value
+    if name in ('fishingChance', 'chaosGateChance'):
+        return spawn_chance(value)
     if name == 'gameSpeed':
         return number(value, 0, 10)
     if name == 'healthLock':
@@ -108,7 +131,20 @@ def preference_value(name, value):
         if value is None:
             return None
         return number(value, 0, 1_000_000_000, integer=True)
+    if name == 'resourceLocks':
+        if not isinstance(value, dict):
+            raise invalid_value()
+        normalized_locks = {}
+        for resource_id, target in value.items():
+            if not isinstance(resource_id, str) or resource_id not in RESOURCE_IDS:
+                raise invalid_value()
+            normalized_locks[resource_id] = number(target, 0, 1_000_000_000, integer=True)
+        return normalized_locks
     return feature_value(name, value)
+
+
+def default_preferences():
+    return {**DEFAULT_PREFERENCES, 'resourceLocks': {}}
 
 
 def preference_document(values):
@@ -128,13 +164,18 @@ _LEGACY_V2_FEATURE_OVERRIDES = {
     'infiniteRerolls': 'rerollsNoDecrease',
     'forceEnableRerolls': 'forceRerolls',
 }
-_SCHEMA_V2_KEYS = frozenset(_LEGACY_V2_FEATURE_OVERRIDES.get(key, key) for key in DEFAULT_PREFERENCES)
+_SCHEMA_V5_KEYS = frozenset(DEFAULT_PREFERENCES) - {
+    'moneyMultiplierEnabled', 'resourceMultiplierEnabled', 'moneyMultiplier', 'resourceMultiplier', 'resourceLocks',
+}
+_SCHEMA_V4_KEYS = _SCHEMA_V5_KEYS - {'fishingChance', 'chaosGateChance'}
+_SCHEMA_V3_KEYS = _SCHEMA_V4_KEYS - {'boonForceLegendary', 'boonForceDuo'}
+_SCHEMA_V2_KEYS = frozenset(_LEGACY_V2_FEATURE_OVERRIDES.get(key, key) for key in _SCHEMA_V3_KEYS)
 
 
 def persisted_preference_document(schema_version, values):
     """Interpret a preference or Profile feature document of a supported schema.
 
-    Schema 3 is the current canonical set. Callers refuse a newer schema first.
+    Schema 6 is the current canonical set. Callers refuse a newer schema first.
     """
     if type(schema_version) is not int:
         raise invalid_value()
@@ -142,6 +183,12 @@ def persisted_preference_document(schema_version, values):
         return _migrate_v1_preference_document(values)
     if schema_version == 2:
         return _migrate_v2_preference_document(values)
+    if schema_version == 3:
+        return _migrate_v3_preference_document(values)
+    if schema_version == 4:
+        return _migrate_v4_preference_document(values)
+    if schema_version == 5:
+        return _migrate_v5_preference_document(values)
     if schema_version == PREFERENCE_SCHEMA_VERSION:
         return preference_document(values)
     raise invalid_value()
@@ -181,8 +228,35 @@ def _migrate_v2_preference_document(values):
     return _finalize_migrated_preference_document(values)
 
 
+def _migrate_v3_preference_document(values):
+    """Migrate schema 3 preferences by filling neutral defaults for forced rarity toggles, occurrence chances, and economy modifiers."""
+    if not isinstance(values, dict) or set(values) != _SCHEMA_V3_KEYS:
+        raise invalid_value()
+    migrated = default_preferences()
+    migrated.update(values)
+    return preference_document(migrated)
+
+
+def _migrate_v4_preference_document(values):
+    """Migrate schema 4 preferences by filling neutral defaults for occurrence chances and economy modifiers."""
+    if not isinstance(values, dict) or set(values) != _SCHEMA_V4_KEYS:
+        raise invalid_value()
+    migrated = default_preferences()
+    migrated.update(values)
+    return preference_document(migrated)
+
+
+def _migrate_v5_preference_document(values):
+    """Migrate schema 5 preferences by filling neutral defaults for economy multipliers and resource locks."""
+    if not isinstance(values, dict) or set(values) != _SCHEMA_V5_KEYS:
+        raise invalid_value()
+    migrated = default_preferences()
+    migrated.update(values)
+    return preference_document(migrated)
+
+
 def _finalize_migrated_preference_document(values):
-    migrated = dict(DEFAULT_PREFERENCES)
+    migrated = default_preferences()
     migrated.update(HADES_CHEAT_CATALOG.migrate_identity_map(values))
     if 'boonRarityTarget' in values:
         migrated['boonRarityTarget'] = values['boonRarityTarget']

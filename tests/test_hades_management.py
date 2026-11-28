@@ -1,4 +1,5 @@
 """Hades feature-profile persistence, native reconciliation and diagnostic truth."""
+from contextlib import ExitStack
 import json
 import logging
 from pathlib import Path
@@ -10,11 +11,40 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.adapter import AdapterError, GameAdapterContext
+from games.hades import config as hades_config
 from games.hades.adapter import HadesAdapter
 from games.hades.cheats import to_runtime_features
 from games.hades.preferences import HadesPreferenceStore
 from games.hades.profiles import HadesProfileStore
 from games.hades.schema import DEFAULT_FEATURES, DEFAULT_PREFERENCES
+
+
+def patched_environment(root, *, installed=True, lldb_ok=True, python_ok=True, rosetta_ok=True, mailbox_ok=True):
+    stack = ExitStack()
+    fake_app = root / 'Hades/Game.macOS.app'
+    fake_exe = fake_app / 'Contents/MacOS/Game.macOS'
+    fake_saves = root / 'Saves'
+    if installed:
+        fake_saves.mkdir(parents=True, exist_ok=True)
+        (fake_saves / 'Profile1.sav').write_bytes(b'stub')
+    install_report = {
+        'gameApp': fake_app,
+        'executable': fake_exe,
+        'manifestPath': root / 'appmanifest_1145360.acf',
+        'installed': installed,
+        'version': hades_config.SUPPORTED_BUILD['contentBuildInfo'] if installed else '',
+        'steamBuild': hades_config.SUPPORTED_BUILD['steamBuildID'] if installed else '',
+        'uuid': hades_config.SUPPORTED_BUILD['uuid'] if installed else None,
+        'compatible': installed,
+        'warnings': [] if installed else ['not_installed'],
+    }
+    stack.enter_context(patch.object(hades_config, 'inspect_install', return_value=install_report))
+    stack.enter_context(patch.object(hades_config, 'saves_dir', return_value=fake_saves))
+    stack.enter_context(patch.object(hades_config, 'probe_lldb', return_value=(lldb_ok, '/usr/bin/lldb' if lldb_ok else 'missing')))
+    stack.enter_context(patch.object(hades_config, 'probe_lldb_python', return_value=(python_ok, "<class 'lldb.SBDebugger'>" if python_ok else 'missing')))
+    stack.enter_context(patch.object(hades_config, 'probe_rosetta', return_value=(rosetta_ok, 'x86_64')))
+    stack.enter_context(patch.object(hades_config, 'probe_native_mailbox', return_value=(mailbox_ok, 'lldb', 'lldb · DEADBEEF' if mailbox_ok else 'missing')))
+    return stack
 
 
 class Runtime:
@@ -28,7 +58,11 @@ class Runtime:
     def status(self):
         self.calls.append(('status',))
         return {'connected': self.connected, 'pid': 42 if self.connected else None,
-                'heroReady': self.connected, 'target': {'heroId': 'run:hero:1'} if self.connected else None,
+                'heroReady': self.connected, 'status': 'ready' if self.connected else 'disconnected',
+                'scene': 'run' if self.connected else 'unknown',
+                'roomName': 'A_Combat01' if self.connected else None,
+                'runtimeRevision': 'abc123def456' if self.connected else None,
+                'target': {'heroId': 'run:hero:1'} if self.connected else None,
                 'features': dict(self.features), 'health': 50, 'money': 25}
 
     def connect(self, pid, executable, features):
@@ -88,11 +122,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-management-') as directory:
     assert not offline['connected'] and preferences.load() == desired
     assert offline['features']['gameSpeed']['desired'] == 2
     assert offline['features']['gameSpeed']['actual'] is None and runtime.calls == []
-    diagnostic_reply = adapter.dispatch('diagnostics', {}, 'diagnostics')
+    with patched_environment(root):
+        diagnostic_reply = adapter.dispatch('diagnostics', {}, 'diagnostics')
     assert diagnostic_reply['connected'] is False and diagnostic_reply['heroReady'] is False
     report = diagnostic_reply['diagnostics']
     assert report['gameID'] == 'hades' and report['desired'] == desired
     assert report['supportedBuild'] == json.loads((context.module_dir / 'module.json').read_text())['supportedBuild']
+    assert len(report['checks']) == 19 and report['total'] == 19
+    assert all(not check['detail'].startswith('{') for check in report['checks']), 'raw JSON leaked into diagnostics'
     assert not next(check for check in report['checks'] if check['name'] == 'hades.diagnostics.connection')['ok']
     assert not next(check for check in report['checks'] if check['name'] == 'hades.diagnostics.hero')['ok']
     assert runtime.calls == [], 'offline diagnostics must not attach or probe native state'
@@ -108,9 +145,23 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-management-') as directory:
     assert state['health'] == 50 and state['money'] == 25, 'preset replay changed a one-shot value'
     assert state['features']['gameSpeed']['actual'] == 0.5
     assert [call[0] for call in runtime.calls if len(call) > 1 and call[0] == 'configure'] == ['configure']
-    report = adapter.dispatch('diagnostics', {}, 'diagnostics-connected')['diagnostics']
-    assert all(check['ok'] for check in report['checks'])
+    with patched_environment(root):
+        report = adapter.dispatch('diagnostics', {}, 'diagnostics-connected')['diagnostics']
+    assert len(report['checks']) == 19 and report['passed'] == 19 and report['total'] == 19
+    assert all(check['ok'] for check in report['checks']), [c for c in report['checks'] if not c['ok']]
     assert report['desired'] == reset and report['state']['target']['heroId'] == 'run:hero:1'
+
+    # Failing install/environment probes & unreadable preferences stay safe and structured.
+    preferences.path.write_text('{corrupt-json')
+    try:
+        with patched_environment(root / 'missing-env', installed=False, lldb_ok=False, python_ok=False, rosetta_ok=False, mailbox_ok=False):
+            corrupt_diag = adapter.dispatch('diagnostics', {}, 'diagnostics-failing')['diagnostics']
+        corrupt_by_id = {c['id']: c for c in corrupt_diag['checks']}
+        assert corrupt_diag['desired'] is None
+        assert corrupt_by_id['install']['ok'] is False and corrupt_by_id['install']['detail'] == 'hades.diagnostics.detail.notInstalled'
+        assert corrupt_by_id['lldb']['ok'] is False and corrupt_by_id['preferences']['ok'] is False
+    finally:
+        preferences.save(reset)
 
     calls = list(runtime.calls)
     with patch.object(preferences, 'save', side_effect=AdapterError('preferences_failed', 'hades.error.preferencesFailed')):
@@ -136,12 +187,15 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-management-') as directory:
 
     path = adapter.profiles.path('战斗')
     document = json.loads(path.read_text())
-    assert document['schemaVersion'] == 3, 'a Profile must identify the current feature set as schema 3'
+    assert document['schemaVersion'] == 6, 'a Profile must identify the current feature set as schema 6'
     schema_one_set = {
         {'infiniteHealth': 'fullHealth', 'infiniteMoney': 'moneyNoDecrease',
          'infiniteRerolls': 'rerollsNoDecrease', 'forceEnableRerolls': 'forceRerolls'}.get(key, key): value
         for key, value in document['features'].items()
-        if key not in {'healthLock', 'moneyLock', 'rerollsLock'}
+        if key not in {'boonForceLegendary', 'boonForceDuo', 'fishingChance', 'chaosGateChance',
+                       'healthLock', 'moneyLock', 'rerollsLock',
+                       'moneyMultiplierEnabled', 'resourceMultiplierEnabled',
+                       'moneyMultiplier', 'resourceMultiplier', 'resourceLocks'}
     }
     path.write_text(json.dumps({**document, 'schemaVersion': 1, 'features': schema_one_set}))
     assert adapter.profiles.load('战斗') == document['features'], 'a schema-1 Profile did not migrate'
@@ -149,6 +203,9 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-management-') as directory:
         {'infiniteHealth': 'fullHealth', 'infiniteMoney': 'moneyNoDecrease',
          'infiniteRerolls': 'rerollsNoDecrease', 'forceEnableRerolls': 'forceRerolls'}.get(key, key): value
         for key, value in document['features'].items()
+        if key not in {'boonForceLegendary', 'boonForceDuo', 'fishingChance', 'chaosGateChance',
+                       'moneyMultiplierEnabled', 'resourceMultiplierEnabled',
+                       'moneyMultiplier', 'resourceMultiplier', 'resourceLocks'}
     }
     path.write_text(json.dumps({
         **document,
@@ -160,15 +217,39 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-management-') as directory:
     assert migrated_record['features'] == document['features'], 'a schema-2 Profile did not migrate'
     assert migrated_record['shortcuts']['infiniteHealth'] == {'keyCode': 21, 'modifiers': 6144, 'keyLabel': '4'}
     assert 'fullHealth' not in migrated_record['shortcuts']
+    schema_three_set = {
+        key: value for key, value in document['features'].items()
+        if key not in {'boonForceLegendary', 'boonForceDuo', 'fishingChance', 'chaosGateChance',
+                       'moneyMultiplierEnabled', 'resourceMultiplierEnabled',
+                       'moneyMultiplier', 'resourceMultiplier', 'resourceLocks'}
+    }
+    path.write_text(json.dumps({**document, 'schemaVersion': 3, 'features': schema_three_set}))
+    assert adapter.profiles.load('战斗') == document['features'], 'a schema-3 Profile did not migrate'
+    schema_four_set = {
+        key: value for key, value in document['features'].items()
+        if key not in {'fishingChance', 'chaosGateChance',
+                       'moneyMultiplierEnabled', 'resourceMultiplierEnabled',
+                       'moneyMultiplier', 'resourceMultiplier', 'resourceLocks'}
+    }
+    path.write_text(json.dumps({**document, 'schemaVersion': 4, 'features': schema_four_set}))
+    assert adapter.profiles.load('战斗') == document['features'], 'a schema-4 Profile did not migrate'
+    schema_five_set = {
+        key: value for key, value in document['features'].items()
+        if key not in {'moneyMultiplierEnabled', 'resourceMultiplierEnabled',
+                       'moneyMultiplier', 'resourceMultiplier', 'resourceLocks'}
+    }
+    path.write_text(json.dumps({**document, 'schemaVersion': 5, 'features': schema_five_set}))
+    assert adapter.profiles.load('战斗') == document['features'], 'a schema-5 Profile did not migrate'
     for key, value in [('gameID', 'hades2'), ('schemaVersion', 0), ('schemaVersion', True),
-                       ('features', {'health': 100}), ('features', schema_one_set), ('features', schema_two_set)]:
+                       ('features', {'health': 100}), ('features', schema_one_set), ('features', schema_two_set),
+                       ('features', schema_three_set), ('features', schema_four_set), ('features', schema_five_set)]:
         malformed = {**document, key: value}
         path.write_text(json.dumps(malformed))
         rejected('profile_read_failed', lambda: adapter.profiles.load('战斗'))
         assert json.loads(path.read_text()) == malformed, 'reading modified an invalid profile'
     # A Profile from a newer Trainer is refused, skipped by listing and never
     # replaced by saving the same name; deleting it stays an explicit choice.
-    newer = json.dumps({**document, 'schemaVersion': 4, 'features': {'futureFeature': True}})
+    newer = json.dumps({**document, 'schemaVersion': 7, 'features': {'futureFeature': True}})
     path.write_text(newer)
     try:
         adapter.dispatch('load_profile', {'name': '战斗'}, 'load-newer')

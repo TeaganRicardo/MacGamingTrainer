@@ -14,8 +14,8 @@ from .cheats import HADES_CHEAT_CATALOG, to_runtime_feature, to_runtime_features
 from .mailbox import KNOWN_LUA_REFUSAL_KEYS
 from .operation_budgets import PROCESS_CONTROL_TIMEOUT_SECONDS
 from .schema import (DEFAULT_FEATURES, DEFERRED_TRAIT_COMMANDS, DEFERRED_WORLD_COMMANDS, LOCK_FIELDS,
-                     MUTATING_COMMANDS, ONE_SHOT_COMMANDS, WORLD_COMMANDS, boon_rarity_target,
-                     feature_value, invalid_value)
+                     MUTATING_COMMANDS, ONE_SHOT_COMMANDS, RESOURCE_IDS, WORLD_COMMANDS,
+                     boon_rarity_target, feature_value, invalid_value, preference_value, spawn_chance)
 from .world import (mutation_params as world_mutation_params, runtime_definitions,
                     runtime_definitions_identity)
 
@@ -78,8 +78,12 @@ class HadesLLDBWorker:
         # The resident's last acknowledged lock and rarity intent. A same-process
         # Lua reset recreates the runtime table, so the bootstrap replays the
         # complete acknowledged desired state, not only the boolean features.
-        self.locks = (None, None, None)
+        self.locks = (None, None, None, {})
         self.boon_rarity_target = 'Heroic'
+        self.boon_force_legendary = False
+        self.boon_force_duo = False
+        self.fishing_chance = None
+        self.chaos_gate_chance = None
         self._bootstrapped = None
         self._pending_ack_method = None
         self._pending_ack_id = None
@@ -134,6 +138,25 @@ class HadesLLDBWorker:
                 raise ValueError(f'Hades status payload {flag} must be a boolean')
         if 'boonRarityTarget' in payload and payload['boonRarityTarget'] not in ('Common', 'Rare', 'Epic', 'Heroic'):
             raise ValueError('Hades status payload has invalid boonRarityTarget')
+        for rarity_flag in ('boonForceLegendary', 'boonForceDuo', 'canOpenSellTraits'):
+            if rarity_flag in payload and type(payload[rarity_flag]) is not bool:
+                raise ValueError(f'Hades status payload {rarity_flag} must be a boolean')
+        for text_key in ('status', 'scene'):
+            if text_key in payload and not isinstance(payload[text_key], str):
+                raise ValueError(f'Hades status payload {text_key} must be a string')
+        if 'roomName' in payload and payload['roomName'] is not None and not isinstance(payload['roomName'], str):
+            raise ValueError('Hades status payload roomName must be a string or null')
+        for chance_key in ('fishingChance', 'chaosGateChance'):
+            if chance_key in payload and payload[chance_key] is not None:
+                try:
+                    spawn_chance(payload[chance_key])
+                except AdapterError as error:
+                    raise ValueError(f'Hades status payload has invalid {chance_key}') from error
+        if 'resourceLocks' in payload:
+            try:
+                preference_value('resourceLocks', payload['resourceLocks'])
+            except AdapterError as error:
+                raise ValueError('Hades status payload has invalid resourceLocks') from error
         return payload
 
     @classmethod
@@ -231,7 +254,11 @@ class HadesLLDBWorker:
                 if not result.get('needsBootstrap'):
                     try:
                         self._remember(result)
-                        result.update({'connected': True, 'pid': self.transport.pid})
+                        result.update({
+                            'connected': True,
+                            'pid': self.transport.pid,
+                            'runtimeRevision': self.revision,
+                        })
                         result['target'] = {'heroId': result.get('heroId', '')}
                         if self._has_pending_acknowledgement():
                             self._pending_ack_method = rpc_method or method
@@ -255,10 +282,18 @@ class HadesLLDBWorker:
                        + 'runtime.worldDefinitions=' + lua_literal(definitions)
                        + ';runtime.worldDefinitionsIdentity=' + literal_identity + ' end\n')
             replay = 'runtime.configure(' + lua_literal(self.features) + ')'
-            if any(lock is not None for lock in self.locks):
+            if any(lock is not None for lock in self.locks[:3]) or bool(self.locks[3]):
                 replay += ';runtime.configure_locks(' + ','.join(map(lua_literal, self.locks)) + ')'
-            if self.boon_rarity_target != 'Heroic':
-                replay += ';runtime.set_boon_rarity(' + lua_literal(self.boon_rarity_target) + ')'
+            if self.boon_rarity_target != 'Heroic' or self.boon_force_legendary or self.boon_force_duo:
+                replay += ';runtime.set_boon_rarity(' + ','.join((
+                    lua_literal(self.boon_rarity_target),
+                    lua_literal(self.boon_force_legendary),
+                    lua_literal(self.boon_force_duo),
+                )) + ')'
+            if self.fishing_chance is not None:
+                replay += ';runtime.set_fishing_chance(' + lua_literal(self.fishing_chance) + ')'
+            if self.chaos_gate_chance is not None:
+                replay += ';runtime.set_chaos_gate_chance(' + lua_literal(self.chaos_gate_chance) + ')'
             source += ('if not runtime.bootstrapId then runtime.bootstrapId=' + lua_literal(uuid.uuid4().hex)
                        + ';runtime.generationId=runtime.bootstrapId;' + replay + ' end\n')
             if target is not None:
@@ -290,7 +325,11 @@ class HadesLLDBWorker:
             try:
                 self._bootstrapped = transport_key
                 self._remember(result)
-                result.update({'connected': True, 'pid': self.transport.pid})
+                result.update({
+                    'connected': True,
+                    'pid': self.transport.pid,
+                    'runtimeRevision': self.revision,
+                })
                 result['target'] = {'heroId': result.get('heroId', '')}
                 if self._has_pending_acknowledgement():
                     self._pending_ack_method = rpc_method or method
@@ -349,7 +388,7 @@ class HadesLLDBWorker:
             return (
                 isinstance(candidate, dict)
                 and candidate.get('id') == command_id
-                and candidate.get('state') in ('pending', 'running', 'complete', 'cancelled', 'error')
+                and candidate.get('state') in ('pending', 'running', 'complete', 'cancelled', 'error', 'unknown')
             )
 
         if not valid_receipt(receipt):
@@ -441,9 +480,18 @@ class HadesLLDBWorker:
     def _remember(self, result):
         """Record lock/rarity intent from a reply that reports the resident status."""
         if all(type(result.get(flag)) is bool for flag, _ in LOCK_FIELDS):
-            self.locks = tuple(result.get(value) if result[flag] else None for flag, value in LOCK_FIELDS)
+            base_locks = tuple(result.get(value) if result[flag] else None for flag, value in LOCK_FIELDS)
+            raw_res = result.get('resourceLocks')
+            res_locks = dict(raw_res) if isinstance(raw_res, dict) else dict(self.locks[3])
+            self.locks = (*base_locks, res_locks)
         if result.get('boonRarityTarget') in ('Common', 'Rare', 'Epic', 'Heroic'):
             self.boon_rarity_target = result['boonRarityTarget']
+        if type(result.get('boonForceLegendary')) is bool:
+            self.boon_force_legendary = result['boonForceLegendary']
+        if type(result.get('boonForceDuo')) is bool:
+            self.boon_force_duo = result['boonForceDuo']
+        self.fishing_chance = spawn_chance(result.get('fishingChance'))
+        self.chaos_gate_chance = spawn_chance(result.get('chaosGateChance'))
 
     def close(self):
         self._bootstrapped = None
@@ -492,8 +540,12 @@ class HadesLLDBWorker:
                 self.features = _runtime_feature_document(params['features'])
             # A new connection reconciles locks and rarity from durable desired
             # state; never replay intent acknowledged by an earlier connection.
-            self.locks = (None, None, None)
+            self.locks = (None, None, None, {})
             self.boon_rarity_target = 'Heroic'
+            self.boon_force_legendary = False
+            self.boon_force_duo = False
+            self.fishing_chance = None
+            self.chaos_gate_chance = None
             self.transport.attach(pid, executable)
             try:
                 return self._invoke('configure', (self.features,), rpc_method='connect')
@@ -541,7 +593,15 @@ class HadesLLDBWorker:
                 return result
             if method == 'set_boon_rarity':
                 target = boon_rarity_target(params.get('target'))
-                return self._invoke(method, (target,))
+                force_legendary = params.get('forceLegendary', False)
+                force_duo = params.get('forceDuo', False)
+                if type(force_legendary) is not bool or type(force_duo) is not bool:
+                    raise invalid_value()
+                return self._invoke(method, (target, force_legendary, force_duo))
+            if method in ('set_fishing_chance', 'set_chaos_gate_chance'):
+                if 'chance' not in params:
+                    raise invalid_value()
+                return self._invoke(method, (spawn_chance(params['chance']),))
             if method == 'configure':
                 values = _runtime_feature_document(params.get('features'))
                 result = self._invoke(method, (values,))
@@ -549,12 +609,16 @@ class HadesLLDBWorker:
                 return result
             if method == 'configure_locks':
                 return self._invoke(method, (
-                    params.get('health'), params.get('money'), params.get('rerolls')
+                    params.get('health'), params.get('money'), params.get('rerolls'),
+                    params.get('resourceLocks') or {},
                 ))
             if method == 'lock_vital':
                 return self._invoke(method, (params.get('vital'), params.get('locked')), target=target)
             if method == 'lock_resource':
-                return self._invoke(method, (params.get('resource'), params.get('locked')), target=target)
+                resource = params.get('resource')
+                if resource != 'Money' and resource not in RESOURCE_IDS:
+                    raise invalid_value()
+                return self._invoke(method, (resource, params.get('locked')), target=target)
             if method == 'lock_rerolls':
                 return self._invoke(method, (params.get('locked'),), target=target)
             if method in WORLD_COMMANDS:
@@ -571,10 +635,17 @@ class HadesLLDBWorker:
                 'expire_trait': (params.get('instanceId'),),
                 'refresh_trait': (params.get('instanceId'),),
                 'add_chaos_pair': (params.get('blessing'), params.get('curse'), params.get('rarity'), params.get('encounters')),
+                'open_sell_traits': (),
             }[method]
             result = self._invoke(method, arguments, target=target)
             if method == 'disable_all':
                 self.features = dict(_RUNTIME_FEATURE_DEFAULTS)
+                self.locks = (None, None, None, {})
+                self.boon_rarity_target = 'Heroic'
+                self.boon_force_legendary = False
+                self.boon_force_duo = False
+                self.fishing_chance = None
+                self.chaos_gate_chance = None
             return result
         else:
             raise ValueError('unsupported Hades worker method: ' + method)

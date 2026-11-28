@@ -23,6 +23,8 @@ class Runtime:
                       'healthLocked': False, 'healthLock': None,
                       'moneyLocked': False, 'moneyLock': None,
                       'rerollsLocked': False, 'rerollsLock': None,
+                      'boonRarityTarget': 'Heroic', 'boonForceLegendary': False, 'boonForceDuo': False,
+                      'fishingChance': None, 'chaosGateChance': None,
                       'resources': {}, 'traits': [], 'invincible': False}
 
     def connect(self, pid, executable, features=None):
@@ -67,6 +69,8 @@ class Runtime:
             self.state['moneyLocked'] = params.get('money') is not None
             self.state['rerollsLock'] = params.get('rerolls')
             self.state['rerollsLocked'] = params.get('rerolls') is not None
+            if 'resourceLocks' in params:
+                self.state['resourceLocks'] = dict(params.get('resourceLocks') or {})
             if self.state['moneyLocked']:
                 self.state['money'] = self.state['moneyLock']
             if self.state['rerollsLocked']:
@@ -79,9 +83,24 @@ class Runtime:
                 if params['locked'] else None
             )
         if name == 'lock_resource':
-            assert params['resource'] == 'Money'
-            self.state['moneyLocked'] = params['locked']
-            self.state['moneyLock'] = self.state['money'] if params['locked'] else None
+            resource = params['resource']
+            if resource == 'Money':
+                self.state['moneyLocked'] = params['locked']
+                self.state['moneyLock'] = self.state['money'] if params['locked'] else None
+            else:
+                locks = dict(self.state.get('resourceLocks') or {})
+                if params['locked']:
+                    locks[resource] = self.state.get('resources', {}).get(resource, 10)
+                else:
+                    locks.pop(resource, None)
+                self.state['resourceLocks'] = locks
+        if name == 'set_resource':
+            res = params['resource']
+            self.state.setdefault('resources', {})[res] = params['value']
+            locks = dict(self.state.get('resourceLocks') or {})
+            if res in locks:
+                locks[res] = params['value']
+                self.state['resourceLocks'] = locks
         if name == 'lock_rerolls':
             self.state['rerollsLocked'] = params['locked']
             self.state['rerollsLock'] = self.state['rerolls'] if params['locked'] else None
@@ -99,14 +118,26 @@ class Runtime:
                 self.state['rerollsLock'] = params['value']
         if name == 'set_boon_rarity':
             self.state['boonRarityTarget'] = params['target']
+            self.state['boonForceLegendary'] = bool(params.get('forceLegendary', False))
+            self.state['boonForceDuo'] = bool(params.get('forceDuo', False))
+        if name == 'set_fishing_chance':
+            self.state['fishingChance'] = params['chance']
+        if name == 'set_chaos_gate_chance':
+            self.state['chaosGateChance'] = params['chance']
         if name == 'disable_all':
             self.state['features'] = dict(DEFAULT_FEATURES)
+            self.state['boonRarityTarget'] = 'Heroic'
+            self.state['boonForceLegendary'] = False
+            self.state['boonForceDuo'] = False
+            self.state['fishingChance'] = None
+            self.state['chaosGateChance'] = None
             self.state['healthLocked'] = False
             self.state['healthLock'] = None
             self.state['moneyLocked'] = False
             self.state['moneyLock'] = None
             self.state['rerollsLocked'] = False
             self.state['rerollsLock'] = None
+            self.state['resourceLocks'] = {}
         return self.status()
 
     def disconnect(self):
@@ -132,7 +163,8 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     }
     historical = {
         to_legacy.get(name, name): value for name, value in DEFAULT_FEATURES.items()
-        if name not in {'infiniteHealth', 'infiniteAmmo', 'forceEnableRerolls', 'incomingDamageMultiplier'}
+        if name not in {'infiniteHealth', 'infiniteAmmo', 'forceEnableRerolls', 'incomingDamageMultiplier',
+                        'moneyMultiplierEnabled', 'resourceMultiplierEnabled', 'moneyMultiplier', 'resourceMultiplier'}
     }
     legacy = dict(historical)
     legacy.pop('boonRarityEnabled')
@@ -142,7 +174,11 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert store.load() == DEFAULT_PREFERENCES, 'post-rarity preferences did not migrate'
     previous_before_rarity_target = {
         to_legacy.get(name, name): value for name, value in DEFAULT_PREFERENCES.items()
-        if name not in {'boonRarityTarget', 'healthLock', 'moneyLock', 'rerollsLock'}
+        if name not in {'boonRarityTarget', 'boonForceLegendary', 'boonForceDuo',
+                        'fishingChance', 'chaosGateChance',
+                        'healthLock', 'moneyLock', 'rerollsLock',
+                        'moneyMultiplierEnabled', 'resourceMultiplierEnabled',
+                        'moneyMultiplier', 'resourceMultiplier', 'resourceLocks'}
     }
     previous_before_rarity_target['boonRarityEnabled'] = True
     previous_before_rarity_target['gameSpeed'] = 2.0
@@ -151,8 +187,21 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert store.load() == {
         **DEFAULT_PREFERENCES, 'boonRarityEnabled': True, 'gameSpeed': 2.0, 'infiniteHealth': True,
     }, 'older schema-1 preferences did not acquire the neutral rarity/lock targets and canonical IDs'
+    schema_five = {
+        name: value for name, value in DEFAULT_PREFERENCES.items()
+        if name not in {'moneyMultiplierEnabled', 'resourceMultiplierEnabled',
+                        'moneyMultiplier', 'resourceMultiplier', 'resourceLocks'}
+    }
+    schema_four = {
+        name: value for name, value in schema_five.items()
+        if name not in {'fishingChance', 'chaosGateChance'}
+    }
+    schema_three = {
+        name: value for name, value in schema_four.items()
+        if name not in {'boonForceLegendary', 'boonForceDuo'}
+    }
     schema_two = {
-        to_legacy.get(name, name): value for name, value in DEFAULT_PREFERENCES.items()
+        to_legacy.get(name, name): value for name, value in schema_three.items()
     }
     schema_two['boonRarityEnabled'] = True
     schema_two['boonRarityTarget'] = 'Rare'
@@ -170,24 +219,48 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
         'infiniteRerolls': True,
         'forceEnableRerolls': True,
     }, 'schema-2 legacy cheat IDs did not migrate onto canonical IDs'
-    # Schema 1/2 named those historical feature sets. The next write
-    # identifies the current canonical set as schema 3.
+    schema_three['boonRarityTarget'] = 'Epic'
+    store.path.write_text(json.dumps({'schemaVersion': 3, 'features': schema_three}))
+    assert store.load() == {
+        **DEFAULT_PREFERENCES,
+        'boonRarityTarget': 'Epic',
+        'boonForceLegendary': False,
+        'boonForceDuo': False,
+        'fishingChance': None,
+        'chaosGateChance': None,
+    }, 'schema-3 canonical preferences did not migrate forced rarity flags'
+    schema_four['boonForceLegendary'] = True
+    store.path.write_text(json.dumps({'schemaVersion': 4, 'features': schema_four}))
+    assert store.load() == {
+        **DEFAULT_PREFERENCES,
+        'boonForceLegendary': True,
+        'fishingChance': None,
+        'chaosGateChance': None,
+    }, 'schema-4 canonical preferences did not migrate spawn chances'
+    schema_five['fishingChance'] = 25.0
+    store.path.write_text(json.dumps({'schemaVersion': 5, 'features': schema_five}))
+    assert store.load() == {
+        **DEFAULT_PREFERENCES,
+        'fishingChance': 25.0,
+    }, 'schema-5 canonical preferences did not migrate economy multipliers and resource locks'
+    # Schema 1/2/3/4/5 named those historical feature sets. The next write
+    # identifies the current canonical set as schema 6.
     expected_canonical = store.load()
     store.save(expected_canonical)
     assert json.loads(store.path.read_text()) == {
-        'schemaVersion': 3, 'features': expected_canonical}
-    for shipped in (legacy, historical, previous_before_rarity_target, schema_two):
-        store.path.write_text(json.dumps({'schemaVersion': 3, 'features': shipped}))
+        'schemaVersion': 6, 'features': expected_canonical}
+    for shipped in (legacy, historical, previous_before_rarity_target, schema_two, schema_three, schema_four, schema_five):
+        store.path.write_text(json.dumps({'schemaVersion': 6, 'features': shipped}))
         try:
             store.load()
         except AdapterError as error:
             assert (error.code, error.presentation) == ('preferences_failed', 'hades.error.preferencesReadFailed')
         else:
-            raise AssertionError('schema 3 accepted a pre-canonical feature set')
+            raise AssertionError('schema 6 accepted a pre-canonical feature set')
 
     # Settings written by a newer Trainer are refused and never replaced: not by
     # edits, a Profile load, or the Disable All the Host sends on app exit.
-    newer = json.dumps({'schemaVersion': 4, 'features': {'futureFeature': True}})
+    newer = json.dumps({'schemaVersion': 7, 'features': {'futureFeature': True}})
     store.path.write_text(newer)
     newer_runtime = Runtime()
     newer_adapter = HadesAdapter(context, runtime=newer_runtime, preferences=store,
@@ -196,7 +269,10 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     refusals = [store.load, lambda: store.save(DEFAULT_PREFERENCES)] + [
         lambda command=command, params=params: newer_adapter.dispatch(command, params, command)
         for command, params in (('connect', {}), ('set_feature', {'feature': 'invincibility', 'value': True}),
-                                ('set_boon_rarity', {'target': 'Rare'}), ('save_profile', {'name': 'Newer'}),
+                                ('set_boon_rarity', {'target': 'Rare', 'forceLegendary': False, 'forceDuo': False}),
+                                ('set_fishing_chance', {'chance': 50}),
+                                ('set_chaos_gate_chance', {'chance': 25}),
+                                ('save_profile', {'name': 'Newer'}),
                                 ('load_profile', {'name': 'Older'}), ('disable_all', {}))]
     for refused in refusals:
         try:
@@ -216,7 +292,11 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     profile_name = 'Previous Current'
     previous_current = {
         to_legacy.get(name, name): value for name, value in DEFAULT_PREFERENCES.items()
-        if name not in {'healthLock', 'moneyLock', 'rerollsLock'}
+        if name not in {'boonForceLegendary', 'boonForceDuo',
+                        'fishingChance', 'chaosGateChance',
+                        'healthLock', 'moneyLock', 'rerollsLock',
+                        'moneyMultiplierEnabled', 'resourceMultiplierEnabled',
+                        'moneyMultiplier', 'resourceMultiplier', 'resourceLocks'}
     }
     previous_current['boonRarityEnabled'] = True
     previous_current['boonRarityTarget'] = 'Rare'
@@ -226,6 +306,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     }))
     loaded_profile = adapter.dispatch('load_profile', {'name': profile_name}, 'load-previous-profile')
     assert loaded_profile['boonRarityTarget'] == 'Rare'
+    assert loaded_profile['boonForceLegendary'] is False and loaded_profile['boonForceDuo'] is False
     assert loaded_profile['healthLock'] is None
     assert loaded_profile['moneyLock'] is None and loaded_profile['rerollsLock'] is None
     assert store.load()['healthLock'] is None
@@ -237,14 +318,20 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
 
     # Durable desired state is editable while detached. No runtime command is
     # issued until connect, where the complete preference document is replayed.
-    detached = adapter.dispatch('set_boon_rarity', {'target': 'Rare'}, 'rarity-target-offline')
+    detached = adapter.dispatch(
+        'set_boon_rarity',
+        {'target': 'Rare', 'forceLegendary': True, 'forceDuo': False},
+        'rarity-target-offline',
+    )
     adapter.dispatch('set_feature', {'feature': 'boonRarityEnabled', 'value': True}, 'rarity-on-offline')
     adapter.dispatch('set_feature', {'feature': 'gameSpeed', 'value': 1.5}, 'speed-offline')
     assert runtime.events == []
     assert detached['boonRarityTarget'] == 'Rare'
+    assert detached['boonForceLegendary'] is True and detached['boonForceDuo'] is False
     assert 'boonRarityTarget' not in detached['features']
     assert detached['dormantFeatures'] == {}, 'a detached projection fabricated a dormant observation'
     assert store.load()['boonRarityTarget'] == 'Rare'
+    assert store.load()['boonForceLegendary'] is True and store.load()['boonForceDuo'] is False
     assert store.load()['boonRarityEnabled'] is True
     assert store.load()['gameSpeed'] == 1.5
 
@@ -261,7 +348,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert not any(event[0] == 'configure_locks' for event in runtime.events), (
         'neutral locks added a redundant native status round-trip'
     )
-    assert ('set_boon_rarity', {'target': 'Rare'}) in runtime.events
+    assert ('set_boon_rarity', {'target': 'Rare', 'forceLegendary': True, 'forceDuo': False}) in runtime.events
     assert ('set_game_speed', 1.5) in runtime.events
     calls = len(runtime.events)
     for bad in (1, 'true', None):
@@ -273,25 +360,67 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
             raise AssertionError('invalid rarity toggle reached runtime')
     for bad in ('Legendary', 'Duo', 1, None):
         try:
-            adapter.dispatch('set_boon_rarity', {'target': bad}, 'rarity-target-invalid')
+            adapter.dispatch('set_boon_rarity', {'target': bad, 'forceLegendary': False, 'forceDuo': False}, 'rarity-target-invalid')
         except AdapterError as error:
             assert error.code == 'invalid_value'
         else:
             raise AssertionError('invalid rarity target reached runtime')
+    for bad_flag in (1, 'true', None):
+        for bad_params in (
+            {'target': 'Rare', 'forceLegendary': bad_flag, 'forceDuo': False},
+            {'target': 'Rare', 'forceLegendary': False, 'forceDuo': bad_flag},
+        ):
+            try:
+                adapter.dispatch('set_boon_rarity', bad_params, 'rarity-force-invalid')
+            except AdapterError as error:
+                assert error.code == 'invalid_value'
+            else:
+                raise AssertionError('invalid force flag reached runtime')
     assert len(runtime.events) == calls and store.load()['boonRarityEnabled'] is True
+
+    # Fishing and Chaos Gate spawn chances: offline editing, validation, connect replay, and reset.
+    detached_fish = adapter.dispatch('set_fishing_chance', {'chance': 42.5}, 'fish-offline')
+    assert detached_fish['fishingChance'] == 42.5 and store.load()['fishingChance'] == 42.5
+    detached_chaos = adapter.dispatch('set_chaos_gate_chance', {'chance': 100}, 'chaos-offline')
+    assert detached_chaos['chaosGateChance'] == 100.0 and store.load()['chaosGateChance'] == 100.0
+    before_chance_calls = len(runtime.events)
+    for bad_chance in (-1, 101, True, '50', float('nan'), float('inf')):
+        for chance_cmd in ('set_fishing_chance', 'set_chaos_gate_chance'):
+            try:
+                adapter.dispatch(chance_cmd, {'chance': bad_chance}, 'invalid-chance')
+            except AdapterError as error:
+                assert error.code == 'invalid_value', (chance_cmd, bad_chance, error.code)
+            else:
+                raise AssertionError((chance_cmd, bad_chance))
+    assert len(runtime.events) == before_chance_calls
+    adapter.dispatch('disconnect', {}, 'detach-before-chance-connect')
+    runtime.events.clear()
+    reconnect_chances = adapter.dispatch('connect', {}, 'connect-with-chances')
+    assert reconnect_chances['fishingChance'] == 42.5 and reconnect_chances['chaosGateChance'] == 100.0
+    assert ('set_fishing_chance', {'chance': 42.5}) in runtime.events
+    assert ('set_chaos_gate_chance', {'chance': 100.0}) in runtime.events
 
     connected_profile = dict(store.load())
     connected_profile['boonRarityTarget'] = 'Epic'
+    connected_profile['boonForceLegendary'] = False
+    connected_profile['boonForceDuo'] = True
+    connected_profile['fishingChance'] = 12.5
+    connected_profile['chaosGateChance'] = 0.0
     connected_name = 'Connected Epic'
     adapter.profiles.path(connected_name).write_text(json.dumps({
-        'schemaVersion': 3, 'gameID': 'hades', 'name': connected_name,
+        'schemaVersion': 6, 'gameID': 'hades', 'name': connected_name,
         'updatedAt': '2026-11-04T00:00:01+00:00', 'features': connected_profile,
     }))
     before_profile_events = len(runtime.events)
     profile_state = adapter.dispatch('load_profile', {'name': connected_name}, 'load-connected-profile')
     assert profile_state['boonRarityTarget'] == 'Epic'
-    assert ('set_boon_rarity', {'target': 'Epic'}) in runtime.events[before_profile_events:]
-    assert store.load()['boonRarityTarget'] == 'Epic'
+    assert profile_state['boonForceLegendary'] is False and profile_state['boonForceDuo'] is True
+    assert profile_state['fishingChance'] == 12.5 and profile_state['chaosGateChance'] == 0.0
+    assert ('set_boon_rarity', {'target': 'Epic', 'forceLegendary': False, 'forceDuo': True}) in runtime.events[before_profile_events:]
+    assert ('set_fishing_chance', {'chance': 12.5}) in runtime.events[before_profile_events:]
+    assert ('set_chaos_gate_chance', {'chance': 0.0}) in runtime.events[before_profile_events:]
+    assert store.load()['boonRarityTarget'] == 'Epic' and store.load()['boonForceDuo'] is True
+    assert store.load()['fishingChance'] == 12.5 and store.load()['chaosGateChance'] == 0.0
 
     owner = {'heroId': 'generation:run:hero'}
     locked_health = adapter.dispatch(
@@ -396,6 +525,43 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
 
     adapter.preferences = store
     adapter.dispatch(
+        'lock_resource', {'resource': 'Money', 'locked': False, 'target': owner}, 'unlock-money-before-gems-rollback'
+    )
+    adapter.preferences = RejectingLockPreferences()
+    try:
+        adapter.dispatch(
+            'lock_resource', {'resource': 'Gems', 'locked': True, 'target': owner}, 'lock-gems-disk-failure'
+        )
+    except AdapterError as error:
+        assert error.code == 'preferences_failed'
+    else:
+        raise AssertionError('failed permanent-resource lock persistence was presented as success')
+    assert runtime.state['resourceLocks'] == {}, (
+        'failed permanent-resource lock persistence left resource lock mounted'
+    )
+    adapter.preferences = store
+    locked_gems = adapter.dispatch(
+        'lock_resource', {'resource': 'Gems', 'locked': True, 'target': owner}, 'lock-gems-before-edit-failure'
+    )
+    assert locked_gems['resourceLocks'] == {'Gems': 10}
+    previous_gems = store.load()['resourceLocks']['Gems']
+    adapter.preferences = RejectingLockPreferences()
+    try:
+        adapter.dispatch(
+            'set_resource', {'resource': 'Gems', 'value': previous_gems + 5, 'target': owner}, 'locked-gems-edit-disk-failure'
+        )
+    except AdapterError as error:
+        assert error.code == 'preferences_failed'
+    else:
+        raise AssertionError('failed locked resource edit persistence was presented as success')
+    assert runtime.state['resourceLocks'].get('Gems') == previous_gems, (
+        'failed locked resource edit did not roll back runtime lock'
+    )
+    adapter.preferences = store
+    adapter.dispatch(
+        'lock_resource', {'resource': 'Gems', 'locked': False, 'target': owner}, 'unlock-gems-after-rollback'
+    )
+    adapter.dispatch(
         'lock_resource', {'resource': 'Money', 'locked': True, 'target': owner}, 'lock-money-before-edit-failure'
     )
     previous_lock = store.load()['moneyLock']
@@ -445,6 +611,17 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     long_token = 'trait:AmmoBoltTrait:' + ','.join(map(str, range(1, 101)))
     adapter.dispatch('remove_trait', {'instanceId': long_token, 'target': params['target']}, 'level-100-remove')
     assert runtime.events[-1] == ('remove_trait', {'instanceId': long_token, 'target': params['target']})
+    try:
+        adapter.dispatch('open_sell_traits', {}, 'stale-sell-traits')
+    except AdapterError as error:
+        assert error.code == 'stale_target'
+    else:
+        raise AssertionError('open_sell_traits without a captured hero was accepted')
+    runtime.state['canOpenSellTraits'] = True
+    sell_state = adapter.dispatch('open_sell_traits', {'target': params['target']}, 'open-sell-traits')
+    assert runtime.events[-1] == ('open_sell_traits', {'target': params['target']})
+    assert sell_state['canOpenSellTraits'] is True
+    runtime.state['canOpenSellTraits'] = False
     adapter.dispatch('disable_all', {}, 'disable')
     assert store.load() == DEFAULT_PREFERENCES and runtime.speed == 1.0
     adapter.dispatch('set_feature', {'feature': 'gameSpeed', 'value': 4.0}, 'speed-before-detach')
@@ -452,7 +629,7 @@ with tempfile.TemporaryDirectory(prefix='hades-commands-') as directory:
     assert runtime.speed == 1.0
     adapter.dispatch('disable_all', {}, 'offline-disable')
     assert store.load() == DEFAULT_PREFERENCES
-    assert json.loads(store.path.read_text())['schemaVersion'] == 3
+    assert json.loads(store.path.read_text())['schemaVersion'] == 6
 
     class UnwritablePreferences:
         def save(self, features):

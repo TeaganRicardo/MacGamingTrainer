@@ -155,7 +155,7 @@ func wait(_ message: String, timeout: TimeInterval = 4, _ condition: () -> Bool)
             !model.busy && model.shortcutText(.infiniteHealth) == migratedChord.displayText
         }
 
-        // 5. HadesShortcutStore migrates v1 UserDefaults keys -> v2 atomically and preserves future versions.
+        // 5. HadesShortcutStore migrates v1/v2/v3 UserDefaults keys -> v4 atomically and preserves future versions.
         let v1Defaults = InMemoryDefaults()
         let oldFullHealthKey = "hades.shortcut." + "fullHealth"
         let canonicalInfiniteHealthKey = "hades.shortcut." + "infiniteHealth"
@@ -168,16 +168,65 @@ func wait(_ message: String, timeout: TimeInterval = 4, _ condition: () -> Bool)
         check(v1Defaults.object(forKey: oldFullHealthKey) == nil,
               "migrated legacy UserDefaults shortcut key was not cleaned up")
         check(v1Defaults.integer(forKey: HadesShortcutStore.layoutVersionKey) == HadesShortcutStore.currentLayoutVersion,
-              "shortcut layout version was not bumped to v2")
+              "shortcut layout version was not bumped to v4")
+
+        // v2 -> v4 migration preserves explicit overrides, reflows uncustomized defaults, and bumps version.
+        let v2Defaults = InMemoryDefaults()
+        v2Defaults.set(2, forKey: HadesShortcutStore.layoutVersionKey)
+        let customFishing = HotkeyChord(keyCode: 37, modifiers: HotkeyChord.commandModifier, keyLabel: "L")
+        v2Defaults.set(customFishing.payload, forKey: "hades.shortcut.generateFishing")
+        let v2Migrated = HadesShortcutStore(defaults: v2Defaults)
+        check(v2Migrated.chord(.generateFishing) == customFishing,
+              "v2 -> v4 migration dropped custom fishing binding")
+        check(v2Migrated.chord(.acquireChaosPair) == HadesShortcutStore.defaultLayout()[.acquireChaosPair],
+              "v2 -> v5 migration did not reflow uncustomized action onto v5 default")
+        check(v2Defaults.integer(forKey: HadesShortcutStore.layoutVersionKey) == 5,
+              "v2 -> v5 migration did not persist layoutVersion = 5")
+
+        // v3 -> v5 migration preserves explicit overrides and assigns v5 defaults including openSellTraits and economy toggles.
+        let v3Defaults = InMemoryDefaults()
+        v3Defaults.set(3, forKey: HadesShortcutStore.layoutVersionKey)
+        v3Defaults.set(customFishing.payload, forKey: "hades.shortcut.generateFishing")
+        let v3Migrated = HadesShortcutStore(defaults: v3Defaults)
+        check(v3Migrated.chord(.generateFishing) == customFishing,
+              "v3 -> v5 migration dropped custom fishing binding")
+        check(v3Migrated.chord(.openSellTraits) == HadesShortcutStore.defaultLayout()[.openSellTraits],
+              "v3 -> v5 migration did not assign openSellTraits default")
+        check(v3Migrated.chord(.moneyMultiplierEnabled) == HadesShortcutStore.defaultLayout()[.moneyMultiplierEnabled],
+              "v3 -> v5 migration did not assign moneyMultiplierEnabled default")
+        check(v3Migrated.chord(.spawnSpecial) == HadesShortcutStore.defaultLayout()[.spawnSpecial],
+              "v3 -> v5 migration did not reflow uncustomized trailing action onto v5 default")
+        check(v3Defaults.integer(forKey: HadesShortcutStore.layoutVersionKey) == 5,
+              "v3 -> v5 migration did not persist layoutVersion = 5")
+
+        // v4 -> v5 migration preserves overrides and allocates defaults for moneyMultiplierEnabled/resourceMultiplierEnabled.
+        let v4Defaults = InMemoryDefaults()
+        v4Defaults.set(4, forKey: HadesShortcutStore.layoutVersionKey)
+        v4Defaults.set(customFishing.payload, forKey: "hades.shortcut.generateFishing")
+        let v4Migrated = HadesShortcutStore(defaults: v4Defaults)
+        check(v4Migrated.chord(.generateFishing) == customFishing,
+              "v4 -> v5 migration dropped custom fishing binding")
+        check(v4Migrated.chord(.resourceMultiplierEnabled) == HadesShortcutStore.defaultLayout()[.resourceMultiplierEnabled],
+              "v4 -> v5 migration did not assign resourceMultiplierEnabled default")
+        check(v4Defaults.integer(forKey: HadesShortcutStore.layoutVersionKey) == 5,
+              "v4 -> v5 migration did not persist layoutVersion = 5")
 
         let futureDefaults = InMemoryDefaults()
         futureDefaults.set(99, forKey: HadesShortcutStore.layoutVersionKey)
         futureDefaults.set(migratedChord.payload, forKey: oldFullHealthKey)
-        _ = HadesShortcutStore(defaults: futureDefaults)
+        futureDefaults.set(customFishing.payload, forKey: "hades.shortcut.generateFishing")
+        var futureStore = HadesShortcutStore(defaults: futureDefaults)
+        check(futureStore.set(.infiniteHealth, chord: HotkeyChord(keyCode: 7, modifiers: HotkeyChord.commandModifier, keyLabel: "X")) == nil || true,
+              "future store should not crash")
+        futureStore.reset()
         check(futureDefaults.integer(forKey: HadesShortcutStore.layoutVersionKey) == 99,
               "future shortcut layout version was overwritten")
         check(futureDefaults.object(forKey: oldFullHealthKey) != nil,
               "future shortcut layout store removed keys")
+        check(futureDefaults.object(forKey: "hades.shortcut.generateFishing") as? [String: Any] != nil,
+              "future shortcut layout store modified existing key under canWrite guard")
+        check(futureDefaults.object(forKey: "hades.shortcut.infiniteHealth") == nil,
+              "future shortcut layout store wrote new key under canWrite guard")
 
         print("hades_profile_shortcuts_ok")
     }

@@ -351,7 +351,7 @@ class PayloadCapture:
 capture = PayloadCapture()
 HadesLLDBWorker(capture).dispatch('connect', {'pid': 42, 'executable': '/tmp/Hades/Game.macOS'})
 worker = HadesLLDBWorker(capture)
-features = {key: (False if type(value) is bool else 20 if key == 'dashBonus' else 0.10000000000000002)
+features = {key: (False if type(value) is bool else 20 if key == 'dashBonus' else 2 if key in ('moneyMultiplier', 'resourceMultiplier') else 0.10000000000000002)
             for key, value in DEFAULT_FEATURES.items()}
 worker.dispatch('connect', {'pid': 42, 'executable': '/tmp/Hades/Game.macOS', 'features': features})
 worker.dispatch('configure', {'features': features})
@@ -365,7 +365,7 @@ reward = max((row for row in reward_catalog() if row['doorAllowed']), key=lambda
 worker.dispatch('apply_world_exit', {
     'target': target, 'roomId': 'a' * 32 + ':1:room:3',
     'doorToken': '4:5:' + reward + ':nil:6',
-    'kind': 'reward', 'targetID': reward, 'requestId': 'cleanup-reward-apply',
+    'room': 'combat', 'reward': reward, 'requestId': 'cleanup-reward-apply',
 })
 worker.dispatch('cancel_world_exit', {
     'target': target, 'roomId': 'a' * 32 + ':1:room:3',
@@ -375,7 +375,7 @@ worker.dispatch('cancel_world_exit', {
 worker.dispatch('apply_world_exit', {
     'target': target, 'roomId': 'a' * 32 + ':1:room:3',
     'doorToken': '4:5:' + reward + ':nil:6',
-    'kind': 'roomCategory', 'targetID': 'reprieve', 'requestId': 'cleanup-route-apply',
+    'room': 'reprieve', 'requestId': 'cleanup-route-apply',
 })
 worker.dispatch('cancel_world_exit', {
     'target': target, 'roomId': 'a' * 32 + ':1:room:3',
@@ -388,7 +388,7 @@ group_id = 'trait:' + leveled['id'] + ':' + ','.join(map(str, range(1_000_000, 1
 worker.dispatch('update_trait', {'target': target, 'instanceId': group_id, 'rarity': 'Legendary', 'level': 100})
 assert max(capture.sizes) > 64 * 1024, 'fixture missed the combined resident/group request regression'
 oversized_transport, _, oversized_events, _, _ = fixture()
-at_limit = '中' * (module.LUA_SOURCE_LIMIT_BYTES // 3) + 'ab'
+at_limit = '中' * (module.LUA_SOURCE_LIMIT_BYTES // 3) + 'a' * (module.LUA_SOURCE_LIMIT_BYTES % 3)
 assert len(at_limit.encode('utf-8')) == module.LUA_SOURCE_LIMIT_BYTES
 try:
     oversized_transport.execute(at_limit + 'c', mutating=True)
@@ -460,4 +460,25 @@ with tempfile.TemporaryDirectory(prefix='hades-cleanup-') as directory, \
         assert error.code == 'restart_required'
     else:
         raise AssertionError('backend replacement discarded uncertain cleanup')
+
+    # Invalid or non-object LLDB JSON receipts must present 'hades.error.outcomeUnknown' once, not double-prefixed.
+    for raw_reply in ('not-json', '[1, 2]'):
+        bad_transport, _, _, _, _ = fixture()
+        bad_transport._boundary = lambda: (types.SimpleNamespace(
+            GetFrameAtIndex=lambda index: types.SimpleNamespace(
+                EvaluateExpression=lambda *args: types.SimpleNamespace(
+                    GetError=lambda: Error(),
+                    GetValueAsSigned=lambda: 0,
+                )
+            )
+        ), 123)
+        bad_transport.process.ReadCStringFromMemory = lambda *args, payload=raw_reply: payload
+        try:
+            bad_transport.execute('return "{}"', mutating=True)
+        except AdapterError as error:
+            assert error.code == 'outcome_unknown'
+            assert error.presentation == 'hades.error.outcomeUnknown', (raw_reply, error.presentation)
+            assert bad_transport.tainted is True
+        else:
+            raise AssertionError(f'invalid JSON receipt {raw_reply!r} was accepted')
 print('hades_transport_cleanup_stopped_breakpoint_ownership_ok')

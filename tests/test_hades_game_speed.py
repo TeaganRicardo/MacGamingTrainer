@@ -77,7 +77,8 @@ with tempfile.TemporaryDirectory(prefix='hades-speed-') as directory:
     }
     historical = {
         to_legacy.get(name, name): value for name, value in DEFAULT_FEATURES.items()
-        if name not in {'infiniteHealth', 'infiniteAmmo', 'forceEnableRerolls', 'incomingDamageMultiplier'}
+        if name not in {'infiniteHealth', 'infiniteAmmo', 'forceEnableRerolls', 'incomingDamageMultiplier',
+                        'moneyMultiplierEnabled', 'resourceMultiplierEnabled', 'moneyMultiplier', 'resourceMultiplier'}
     }
     legacy = dict(historical)
     legacy.pop('boonRarityEnabled')

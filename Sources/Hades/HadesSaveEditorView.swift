@@ -9,9 +9,12 @@ struct HadesSaveEditorView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.trainerCloseToolWindow) private var closeWindow
     @State private var confirmingRead = false
+    @State private var retiredDraftsExpanded = false
 
     init(model: HadesSaveEditorModel) { _model = StateObject(wrappedValue: model) }
-    private func text(_ key: String) -> String { localization.string(key) }
+    private func text(_ key: String, arguments: [String] = []) -> String {
+        localization.string(key, arguments: arguments)
+    }
     private var hasReview: Bool { model.review.count > 0 }
 
     private var resultPhase: TrainerSaveEditorResultPhase {
@@ -38,7 +41,7 @@ struct HadesSaveEditorView: View {
             saveScopeContext
             Divider()
             TrainerSaveEditorWorkspace(
-                identity: model.workspaceID.map(AnyHashable.init),
+                identity: model.baselineGeneration.map(AnyHashable.init),
                 hasReview: hasReview,
                 busy: model.busy,
                 showsPaging: model.total > HadesSaveEditorModel.pageSize
@@ -48,6 +51,29 @@ struct HadesSaveEditorView: View {
                 paging
             } review: {
                 changes
+            }
+            if !model.retiredDrafts.isEmpty {
+                Divider()
+                VStack(alignment: .leading, spacing: theme.compactControlSpacing) {
+                    TrainerDisclosureButton(
+                        isExpanded: $retiredDraftsExpanded,
+                        expandTitle: text("hades.saveEditor.retiredDrafts"),
+                        collapseTitle: text("hades.saveEditor.retiredDrafts")
+                    )
+                    TrainerDisclosure(isExpanded: retiredDraftsExpanded) {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: theme.compactControlSpacing) {
+                                ForEach(model.retiredDrafts) { draft in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(draft.name).font(.caption.weight(.semibold))
+                                        Text(draft.text).font(.caption.monospaced()).textSelection(.enabled)
+                                    }
+                                }
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }.frame(maxHeight: 120)
+                    }
+                }
+                .padding(theme.controlPadding)
             }
             VStack(spacing: 0) {
                 if let receipt = model.receipt {
@@ -74,6 +100,9 @@ struct HadesSaveEditorView: View {
         .onChange(of: model.receipt?.installedSHA256) { _, receipt in
             if receipt != nil { TrainerSaveEditorAccessibility.announce(text("hades.saveEditor.applied")) }
         }
+        .onChange(of: model.retiredDrafts.isEmpty) { _, isEmpty in
+            if isEmpty { retiredDraftsExpanded = false }
+        }
         .onChange(of: model.selectedSourceID) { _, identifier in
             guard !identifier.isEmpty, identifier != loadedSourceID else { return }
             if model.busy {
@@ -87,9 +116,11 @@ struct HadesSaveEditorView: View {
             if model.review.count > 0 { confirmingRead = true }
             else { model.openSelection() }
         }
-        .confirmationDialog(text("hades.saveEditor.readConfirm"), isPresented: $confirmingRead) {
+        .confirmationDialog(text("hades.saveEditor.source.confirmTitle"), isPresented: $confirmingRead) {
             Button(text("hades.saveEditor.read"), role: .destructive, action: model.openSelection)
             Button(text("host.cancel"), role: .cancel) { model.selectedSourceID = loadedSourceID }
+        } message: {
+            Text(text("hades.saveEditor.source.confirmBody"))
         }
         .sheet(item: Binding(
             get: { model.editingRow },
@@ -142,7 +173,7 @@ struct HadesSaveEditorView: View {
             sourceSelection: $model.selectedSourceID,
             sources: sourceOptions,
             sourceEnabled: !model.busy,
-            sourceRefreshTitle: text("host.refresh"),
+            sourceRefreshTitle: text("hades.saveEditor.source.refreshFiles"),
             onRefreshSources: { model.refreshInventory() },
             targetLabel: text("hades.saveEditor.target"),
             targetPlaceholder: text("hades.saveEditor.selectTarget"),
@@ -300,9 +331,22 @@ struct HadesSaveEditorView: View {
         }
     }
 
+    private var selectedTargetLabel: String {
+        if let file = model.targets.first(where: { $0.id == model.selectedTargetID }) {
+            return file.relativePath
+        }
+        let parts = model.selectedTargetID.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
+        return parts.count == 2 ? String(parts[1]) : model.selectedTargetID
+    }
+
     private var paging: some View {
-        TrainerSaveEditorPagingBar(
-            summary: "\(model.total == 0 ? 0 : model.offset + 1)–\(min(model.total, model.offset + model.pageLimit)) / \(model.total)",
+        let count = model.pageLimit > 0 ? model.pageLimit : model.rows.count
+        let start = model.total == 0 ? 0 : model.offset + 1
+        let end = model.total == 0 ? 0 : min(model.total, model.offset + count)
+        return TrainerSaveEditorPagingBar(
+            summary: text("hades.saveEditor.pageSummary", arguments: [
+                String(start), String(end), String(model.total),
+            ]),
             previousTitle: text("hades.saveEditor.previous"),
             nextTitle: text("hades.saveEditor.next"),
             canPrevious: model.canPreviousPage,
@@ -314,23 +358,68 @@ struct HadesSaveEditorView: View {
     private var changes: some View {
         let baseline = model.review.baselineGeneration
         return VStack(alignment: .leading, spacing: theme.controlPadding) {
-            TrainerSaveEditorReviewHeader(
-                title: text("hades.saveEditor.changes") + " (\(model.review.count))",
-                discardTitle: text("hades.saveEditor.discard"),
-                discardEnabled: !model.busy && model.canEditRows,
-                applyTitle: text("hades.apply"),
-                applyEnabled: model.canApply,
-                onDiscard: { model.cancel(baseline: baseline) },
-                onApply: { model.apply(baseline: baseline) }
-            )
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(text("hades.saveEditor.changes"))
+                        .font(.headline)
+                    Text(text("hades.saveEditor.basket.summary", arguments: [
+                        String(model.review.count),
+                        String(model.review.effectCount),
+                    ]))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Spacer()
+                TrainerSecondaryActionButton(
+                    title: text("hades.saveEditor.discard"),
+                    enabled: !model.busy && model.canEditRows,
+                    widthRole: .sheet
+                ) {
+                    model.cancel(baseline: baseline)
+                }
+                TrainerPrimaryActionButton(
+                    title: text("hades.saveEditor.apply"),
+                    enabled: model.canApply,
+                    widthRole: .sheet
+                ) {
+                    model.apply(baseline: baseline)
+                }
+            }
+            Text(text("hades.saveEditor.workbench.target", arguments: [
+                !model.selectedTargetID.isEmpty ? selectedTargetLabel : text("hades.saveEditor.selectTarget"),
+            ]))
+            .font(.caption)
+            .foregroundStyle(.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: theme.compactControlSpacing) {
                     ForEach(model.review.actions) { action in
+                        let inlineRow = action.inlineRow(baseline: baseline)
                         TrainerListCard {
                             VStack(alignment: .leading, spacing: theme.compactControlSpacing / 2) {
                                 HStack(alignment: .firstTextBaseline, spacing: theme.compactControlSpacing) {
-                                    Text(action.name).font(.subheadline.weight(.semibold))
-                                    Spacer()
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(action.name).font(.subheadline.weight(.semibold))
+                                        if let owner = action.owner, !owner.isEmpty, owner != action.name {
+                                            Text(owner)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    Spacer(minLength: theme.compactControlSpacing)
+                                    if action.operation == "set",
+                                       HadesSaveEditorControlRow.supportsInlineControl(
+                                        row: inlineRow,
+                                        value: action.typedValue
+                                       ) {
+                                        HadesSaveEditorControlRow(
+                                            model: model,
+                                            row: inlineRow,
+                                            workspace: model.workspaceID,
+                                            identity: "basket:" + action.id,
+                                            compactFieldWidth: 155
+                                        )
+                                    }
                                     TrainerSecondaryActionButton(
                                         title: text("hades.saveEditor.revise"),
                                         enabled: !model.busy && model.canEditRows,
@@ -344,8 +433,8 @@ struct HadesSaveEditorView: View {
                                         Image(systemName: TrainerSemanticIcon.Action.remove)
                                     }
                                     .buttonStyle(.borderless)
-                                    .help(text("hades.remove"))
-                                    .accessibilityLabel(text("hades.remove"))
+                                    .help(text("hades.saveEditor.basket.remove"))
+                                    .accessibilityLabel(text("hades.saveEditor.basket.remove"))
                                     .accessibilityIdentifier("saveEditor.remove." + action.id)
                                     .disabled(model.busy || !model.canEditRows)
                                 }
@@ -371,18 +460,137 @@ struct HadesSaveEditorView: View {
         .trainerSurface(.panel)
     }
     private func applied(_ receipt: HadesSaveEditorReceipt) -> some View {
-        TrainerSaveEditorReceiptPanel(
+        let resolvedSource = receipt.source ?? model.source
+        let sourceSummary = resolvedSource.map {
+            ($0.snapshotId.map { $0 + " · " } ?? "") + $0.relativePath
+        } ?? ""
+        let mode = text(
+            receipt.hot == true
+                ? "hades.saveEditor.applyOutcome.mode.hot"
+                : "hades.saveEditor.applyOutcome.mode.cold"
+        )
+        let memory = text(
+            receipt.runtimeReloaded
+                ? "hades.saveEditor.applyOutcome.memory.reloaded"
+                : "hades.saveEditor.applyOutcome.memory.notReloaded"
+        )
+        return TrainerSaveEditorReceiptPanel(
             title: text("hades.saveEditor.applied"),
             maintenanceWarning: receipt.maintenanceWarning,
             namingWarning: receipt.namingWarning
         ) {
-            Text(receipt.target.id).font(.caption).textSelection(.enabled)
-            Text("SHA-256 · " + receipt.installedSHA256).font(.caption2.monospaced()).textSelection(.enabled)
+            if !sourceSummary.isEmpty {
+                Text(text("hades.saveEditor.applyOutcome.sourceTarget", arguments: [
+                    sourceSummary,
+                    receipt.target.relativePath,
+                ]))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            } else {
+                Text(receipt.target.id).font(.caption).textSelection(.enabled)
+            }
+            Text(text("hades.saveEditor.applyOutcome.disk", arguments: [mode, memory]))
+                .font(.caption)
+                .foregroundStyle(.secondary)
             if let backup = receipt.previousSnapshotId {
-                Text(text("hades.saveEditor.recoverableBackup") + ": " + backup).font(.caption).textSelection(.enabled)
+                Text(text("hades.saveEditor.applyOutcome.recovery", arguments: [backup]))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
             Text(text(receipt.hot == true ? "hades.saveEditor.hot" : "hades.saveEditor.loadInGame"))
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct HadesSaveEditorControlRow: View {
+    @ObservedObject var model: HadesSaveEditorModel
+    let row: HadesSaveEditorRow
+    let workspace: String?
+    var identity: String? = nil
+    var compactFieldWidth: CGFloat? = nil
+    @EnvironmentObject private var localization: TrainerLocalizationStore
+    @State private var focused = false
+
+    private func text(_ key: String) -> String { localization.string(key) }
+    private var pending: HadesSaveEditorReview.Action? { model.review.actions.first { $0.id == row.id } }
+    private var value: HadesSaveValue? {
+        pending?.operation == "set" ? (pending?.typedValue ?? row.typedValue) : row.typedValue
+    }
+    private var displayValue: String { pending?.after ?? row.displayValue }
+
+    static func supportsInlineControl(row: HadesSaveEditorRow, value: HadesSaveValue?) -> Bool {
+        if row.choices?.isEmpty == false { return true }
+        switch value {
+        case .some(.boolean), .some(.number), .some(.string): return true
+        default: return false
+        }
+    }
+
+    var body: some View {
+        if let choices = row.choices, !choices.isEmpty {
+            Picker(row.name, selection: Binding(get: { choices.firstIndex(where: { $0.value == value }) ?? -1 }, set: { index in
+                if choices.indices.contains(index) {
+                    model.stage(row.id, operation: "set", value: choices[index].value.object, workspace: workspace, baseline: row.baselineGeneration)
+                }
+            })) {
+                Text(displayValue).tag(-1)
+                ForEach(choices.indices, id: \.self) { Text(choices[$0].name).tag($0) }
+            }.labelsHidden().trainerPicker(.rowValue, state: model.canEdit(row) ? .interactive : .unavailable)
+        } else if case .some(.boolean(let enabled)) = value {
+            TrainerToggleControl(
+                title: row.name,
+                isOn: enabled,
+                enabled: model.canEdit(row),
+                helpText: row.name
+            ) { newValue in
+                model.stage(row.id, operation: "set", value: HadesSaveValue.boolean(newValue).object, workspace: workspace, baseline: row.baselineGeneration)
+            }
+        } else if let scalar = value?.scalarText {
+            TrainerTextField(
+                title: row.name,
+                text: Binding(
+                    get: { model.textDrafts[row.id] ?? scalar },
+                    set: { draft in
+                        model.updateTextDraft(
+                            draft == value?.scalarText ? nil : draft,
+                            for: row.id,
+                            baseline: row.baselineGeneration
+                        )
+                    }
+                ),
+                onEditingChanged: {
+                    focused = $0
+                    model.editingChanged(row.id, baseline: row.baselineGeneration, active: $0)
+                },
+                onCommit: { completed in
+                    guard completed.changed else {
+                        // A review update can remove this row's staged value
+                        // while its native draft remains focused. On unchanged
+                        // completion, resume the latest acknowledged value;
+                        // failed drafts still belong to the user's correction.
+                        if !model.hasFailedDraft(row) {
+                            model.updateTextDraft(nil, for: row.id, baseline: row.baselineGeneration)
+                        }
+                        return model.hasFailedDraft(row) ? completed.text : (value?.scalarText ?? completed.text)
+                    }
+                    return model.commit(row, text: completed.text, workspace: workspace)
+                }
+            )
+            .id(identity ?? (row.id + ":" + row.baselineGeneration))
+            .disabled(!model.canEdit(row))
+            .frame(width: compactFieldWidth ?? (row.valueType == "number" ? 155 : 280))
+        } else {
+            Text(displayValue).font(.caption).lineLimit(3).textSelection(.enabled).frame(maxWidth: 220, alignment: .trailing)
+            TrainerSecondaryActionButton(
+                title: text("hades.saveEditor.editTyped"),
+                enabled: model.canEdit(row),
+                widthRole: .sheet
+            ) {
+                model.detail(row.id, baseline: row.baselineGeneration)
+            }
         }
     }
 }
@@ -393,15 +601,12 @@ private struct HadesSaveEditorField: View {
     let workspace: String?
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @Environment(\.trainerTheme) private var theme
-    @State private var draft: String?
-    @State private var focused = false
 
     private func text(_ key: String) -> String { localization.string(key) }
     private var pending: HadesSaveEditorReview.Action? { model.review.actions.first { $0.id == row.id } }
     private var value: HadesSaveValue? {
         pending?.operation == "set" ? (pending?.typedValue ?? row.typedValue) : row.typedValue
     }
-    private var displayValue: String { pending?.after ?? row.displayValue }
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             TrainerLabeledControlRow(
@@ -410,7 +615,7 @@ private struct HadesSaveEditorField: View {
                 tint: theme.accent,
                 emphasized: pending != nil
             ) {
-                controls
+                HadesSaveEditorControlRow(model: model, row: row, workspace: workspace)
                 if model.domain == .advanced && hasNativeControl {
                     TrainerSecondaryActionButton(
                         title: text("hades.saveEditor.editTyped"),
@@ -465,58 +670,9 @@ private struct HadesSaveEditorField: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .onChange(of: model.editRevision) { _, _ in if !focused && !model.hasFailedDraft(row) { draft = nil } }
     }
     private var hasNativeControl: Bool {
-        if row.choices?.isEmpty == false { return true }
-        switch value {
-        case .some(.boolean), .some(.number), .some(.string): return true
-        default: return false
-        }
-    }
-    @ViewBuilder private var controls: some View {
-        if let choices = row.choices, !choices.isEmpty {
-            Picker(row.name, selection: Binding(get: { choices.firstIndex(where: { $0.value == value }) ?? -1 }, set: { index in
-                if choices.indices.contains(index) { model.stage(row.id, operation: "set", value: choices[index].value.object, workspace: workspace, baseline: row.baselineGeneration) }
-            })) {
-                Text(displayValue).tag(-1)
-                ForEach(choices.indices, id: \.self) { Text(choices[$0].name).tag($0) }
-            }.labelsHidden().trainerPicker(.rowValue, state: model.canEdit(row) ? .interactive : .unavailable)
-        } else if case .some(.boolean(let enabled)) = value {
-            TrainerToggleControl(
-                title: row.name,
-                isOn: enabled,
-                enabled: model.canEdit(row),
-                helpText: row.name
-            ) { newValue in
-                model.stage(row.id, operation: "set", value: HadesSaveValue.boolean(newValue).object, workspace: workspace, baseline: row.baselineGeneration)
-            }
-        } else if let scalar = value?.scalarText {
-            TrainerTextField(title: row.name, text: Binding(get: { draft ?? scalar }, set: { draft = $0 }),
-                onEditingChanged: {
-                    focused = $0
-                    model.editingChanged(row.id, baseline: row.baselineGeneration, active: $0)
-                }, onCommit: { completed in
-                    guard completed.changed else {
-                        // A review update can remove this row's staged value
-                        // while its native draft remains focused. On unchanged
-                        // completion, resume the latest acknowledged value;
-                        // failed drafts still belong to the user's correction.
-                        return model.hasFailedDraft(row) ? completed.text : (value?.scalarText ?? completed.text)
-                    }
-                    return model.commit(row, text: completed.text, workspace: workspace)
-                })
-                .frame(width: row.valueType == "number" ? 155 : 280)
-        } else {
-            Text(displayValue).font(.caption).lineLimit(3).textSelection(.enabled).frame(maxWidth: 220, alignment: .trailing)
-            TrainerSecondaryActionButton(
-                title: text("hades.saveEditor.editTyped"),
-                enabled: model.canEdit(row),
-                widthRole: .sheet
-            ) {
-                model.detail(row.id, baseline: row.baselineGeneration)
-            }
-        }
+        HadesSaveEditorControlRow.supportsInlineControl(row: row, value: value)
     }
 }
 

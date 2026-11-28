@@ -14,6 +14,8 @@ enum HadesCommand: String {
     case deleteProfile = "delete_profile"
     case setFeature = "set_feature"
     case setBoonRarity = "set_boon_rarity"
+    case setFishingChance = "set_fishing_chance"
+    case setChaosGateChance = "set_chaos_gate_chance"
     case disableAll = "disable_all"
     case lockVital = "lock_vital"
     case lockResource = "lock_resource"
@@ -36,6 +38,7 @@ enum HadesCommand: String {
     case expireTrait = "expire_trait"
     case refreshTrait = "refresh_trait"
     case addChaosPair = "add_chaos_pair"
+    case openSellTraits = "open_sell_traits"
     case saveEditorInventory = "save_editor_inventory"
     case saveEditorOpen = "save_editor_open"
     case saveEditorTarget = "save_editor_target"
@@ -59,6 +62,7 @@ enum HadesCommand: String {
         case .lockResource: return 55.0
         case .lockRerolls: return 55.0
         case .setValue: return 55.0
+        case .setResource: return 55.0
         case .gainResource: return 60.0
         case .spawnReward: return 60.0
         case .generateFishing: return 60.0
@@ -79,7 +83,7 @@ enum HadesCommand: String {
 
     var supportsOfflineIntent: Bool {
         switch self {
-        case .loadProfile, .setFeature, .setBoonRarity, .disableAll: return true
+        case .loadProfile, .setFeature, .setBoonRarity, .setFishingChance, .setChaosGateChance, .disableAll: return true
         default: return false
         }
     }

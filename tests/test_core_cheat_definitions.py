@@ -239,7 +239,7 @@ _assert_raises_value_error(
 
 # 2. Hades I catalog validation, schema migrations, and runtime translation.
 HADES_CHEAT_CATALOG.validate_commands(COMMAND_SPECS)
-assert PREFERENCE_SCHEMA_VERSION == 3
+assert PREFERENCE_SCHEMA_VERSION == 6
 
 to_legacy = HADES_CHEAT_CATALOG.alias_map()
 canonical_to_legacy = {canonical: alias for alias, canonical in to_legacy.items()}
@@ -333,18 +333,39 @@ class FakeRuntime:
 
 
 module_protocol = json.loads((ROOT / "Backend/games/hades/module.json").read_text(encoding="utf-8"))["protocolVersion"]
-assert module_protocol == 4
+assert module_protocol == 9
 
 with tempfile.TemporaryDirectory(prefix="mgt-cheat-defs-") as td:
     root = Path(td)
     pref_store = HadesPreferenceStore(root / "preferences.json")
 
-    # V2 legacy preference keys migrate onto canonical v3 keys while refusing v4 files read-only.
-    v2_features = {canonical_to_legacy.get(k, k): v for k, v in DEFAULT_PREFERENCES.items()}
+    # V2 legacy preference keys migrate onto canonical v6 keys while refusing v7 files read-only.
+    v5_features = {
+        k: v
+        for k, v in DEFAULT_PREFERENCES.items()
+        if k not in {
+            "moneyMultiplierEnabled",
+            "resourceMultiplierEnabled",
+            "moneyMultiplier",
+            "resourceMultiplier",
+            "resourceLocks",
+        }
+    }
+    v4_features = {
+        k: v
+        for k, v in v5_features.items()
+        if k not in {"fishingChance", "chaosGateChance"}
+    }
+    v3_features = {
+        k: v
+        for k, v in v4_features.items()
+        if k not in {"boonForceLegendary", "boonForceDuo"}
+    }
+    v2_features = {canonical_to_legacy.get(k, k): v for k, v in v3_features.items()}
     v2_features["fullHealth"] = True
     v2_features["moneyNoDecrease"] = True
     v2_features["forceRerolls"] = True
-    # Historical schema-1 files carrying full v2 keys migrate, whereas unshipped v3 canonical keys under schema 1 are rejected.
+    # Historical schema-1 files carrying full v2 keys migrate, whereas unshipped canonical keys under schema 1 are rejected.
     pref_store.path.write_text(json.dumps({"schemaVersion": 1, "features": v2_features}), encoding="utf-8")
     assert pref_store.load()["infiniteHealth"] is True
     pref_store.path.write_text(json.dumps({"schemaVersion": 1, "features": DEFAULT_PREFERENCES}), encoding="utf-8")
@@ -353,29 +374,57 @@ with tempfile.TemporaryDirectory(prefix="mgt-cheat-defs-") as td:
     except AdapterError as error:
         assert error.code == "preferences_failed"
     else:
-        raise AssertionError("schema 1 accepted unshipped v3 canonical keys")
+        raise AssertionError("schema 1 accepted unshipped v6 canonical keys")
 
     pref_store.path.write_text(json.dumps({"schemaVersion": 2, "features": v2_features}), encoding="utf-8")
     migrated_prefs = pref_store.load()
     assert migrated_prefs["infiniteHealth"] is True
     assert migrated_prefs["infiniteMoney"] is True
     assert migrated_prefs["forceEnableRerolls"] is True
+    assert migrated_prefs["boonForceLegendary"] is False
+    assert migrated_prefs["boonForceDuo"] is False
+    assert migrated_prefs["fishingChance"] is None
+    assert migrated_prefs["chaosGateChance"] is None
+    assert migrated_prefs["moneyMultiplier"] == 2
+    assert migrated_prefs["resourceLocks"] == {}
     assert "fullHealth" not in migrated_prefs
 
-    future_pref_payload = json.dumps({"schemaVersion": 4, "features": {"futureToggle": True}})
+    pref_store.path.write_text(json.dumps({"schemaVersion": 3, "features": v3_features}), encoding="utf-8")
+    migrated_v3 = pref_store.load()
+    assert migrated_v3["boonForceLegendary"] is False and migrated_v3["boonForceDuo"] is False
+    assert migrated_v3["fishingChance"] is None and migrated_v3["chaosGateChance"] is None
+
+    pref_store.path.write_text(json.dumps({"schemaVersion": 4, "features": v4_features}), encoding="utf-8")
+    migrated_v4 = pref_store.load()
+    assert migrated_v4["fishingChance"] is None and migrated_v4["chaosGateChance"] is None
+
+    pref_store.path.write_text(json.dumps({"schemaVersion": 5, "features": v5_features}), encoding="utf-8")
+    migrated_v5 = pref_store.load()
+    assert migrated_v5["moneyMultiplierEnabled"] is False
+    assert migrated_v5["resourceLocks"] == {}
+
+    pref_store.path.write_text(json.dumps({"schemaVersion": 6, "features": v5_features}), encoding="utf-8")
+    try:
+        pref_store.load()
+    except AdapterError as error:
+        assert error.code == "preferences_failed"
+    else:
+        raise AssertionError("schema 6 accepted v5 keys missing economy modifiers")
+
+    future_pref_payload = json.dumps({"schemaVersion": 7, "features": {"futureToggle": True}})
     pref_store.path.write_text(future_pref_payload, encoding="utf-8")
     try:
         pref_store.load()
     except AdapterError as error:
         assert error.code == "preferences_unsupported_schema"
     else:
-        raise AssertionError("future v4 preferences were loaded")
+        raise AssertionError("future v7 preferences were loaded")
     try:
         pref_store.save(migrated_prefs)
     except AdapterError as error:
         assert error.code == "preferences_unsupported_schema"
     else:
-        raise AssertionError("future v4 preferences were overwritten by save")
+        raise AssertionError("future v7 preferences were overwritten by save")
     assert pref_store.path.read_text(encoding="utf-8") == future_pref_payload
     pref_store.path.unlink()
 
@@ -436,14 +485,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-cheat-defs-") as td:
     configure_sent = [payload for cmd, payload in runtime.events if cmd == "configure"][-1]
     assert configure_sent["features"]["fullHealth"] is True  # type: ignore[index]
 
-    future_profile = json.dumps({**v2_profile, "schemaVersion": 4, "name": "Future", "features": {"future": True}})
+    future_profile = json.dumps({**v2_profile, "schemaVersion": 7, "name": "Future", "features": {"future": True}})
     profiles.path("Future").write_text(future_profile, encoding="utf-8")
     try:
         profiles.load_record("Future")
     except AdapterError as error:
         assert error.code == "profile_unsupported_schema"
     else:
-        raise AssertionError("future v4 profile was loaded")
+        raise AssertionError("future v7 profile was loaded")
     assert profiles.path("Future").read_text(encoding="utf-8") == future_profile
 
 from games.hades.lldb_worker import _runtime_feature_document  # noqa: E402

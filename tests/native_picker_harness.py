@@ -15,6 +15,7 @@ private final class NativePickerSelectionState {
     var reportedFailure = false
     var menuStructure: [String] = []
     var accessibilityAction: [String: Any] = [:]
+    var nilHighlightTicks = 0
 }
 
 @MainActor
@@ -245,6 +246,9 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
             }
             let highlightedTitle = menu.highlightedItem?.title
             let highlightedIndex = highlightedTitle.flatMap { titles.firstIndex(of: $0) }
+            if highlightedTitle != nil {
+                state.nilHighlightTicks = 0
+            }
             guard highlightedTitle == nil || highlightedIndex != nil else {
                 state.failure = "native popup highlight is not a unique current choice: \(highlightedTitle!)"
                 reportFailure("invalid highlight")
@@ -254,22 +258,39 @@ func selectNativePicker(_ picker: NativeAccessibilityControl, in window: NSWindo
             }
             if state.awaitingArrow {
                 // A transient nil highlight during menu rebuilding also does
-                // not acknowledge the queued Arrow. Wait for an actual choice.
-                guard let highlightedTitle, highlightedTitle != state.previousHighlightTitle else { return }
-                state.awaitingArrow = false
+                // not acknowledge the queued Arrow. Wait for an actual choice,
+                // unless AppKit stays nil past the grace window (macOS 27).
+                if let highlightedTitle {
+                    guard highlightedTitle != state.previousHighlightTitle else { return }
+                    state.awaitingArrow = false
+                } else {
+                    state.nilHighlightTicks += 1
+                    guard state.nilHighlightTicks >= 10 else { return }
+                    state.awaitingArrow = false
+                    state.previousHighlightTitle = nil
+                }
             }
             if highlightedIndex == destinationIndex {
                 state.returnQueued = true
                 postKey("\r", code: 36)
-            } else {
-                // A newly opened or rebuilt popup can briefly have no highlighted
-                // item. Do not synthesize navigation from an invented -1 index;
-                // wait until AppKit exposes the real current choice, then send one
-                // Arrow relative to that semantic position.
-                guard let highlightedTitle, let highlightedIndex else { return }
+            } else if let highlightedTitle, let highlightedIndex {
+                state.nilHighlightTicks = 0
                 state.previousHighlightTitle = highlightedTitle
                 state.awaitingArrow = true
                 let down = highlightedIndex < destinationIndex
+                postKey(down ? "\u{F701}" : "\u{F700}", code: down ? 125 : 126)
+            } else {
+                // A newly opened or rebuilt popup can briefly have no highlighted item;
+                // wait 200 ms first so macOS 26 transient nil highlights settle naturally.
+                // On macOS 27, a pointer-opened popup whose hardware cursor is outside
+                // the menu can stay nil indefinitely until one Arrow key establishes
+                // keyboard highlight on a real choice.
+                state.nilHighlightTicks += 1
+                guard state.nilHighlightTicks >= 10 else { return }
+                state.nilHighlightTicks = 0
+                state.previousHighlightTitle = nil
+                state.awaitingArrow = true
+                let down = steps >= 0
                 postKey(down ? "\u{F701}" : "\u{F700}", code: down ? 125 : 126)
             }
         }

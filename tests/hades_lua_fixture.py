@@ -30,6 +30,7 @@ GameState = { Resources = { MetaPoints = 5 } }
 function UpdateHealthUI() end
 function UpdateMoneyUI(value) end
 function UpdateRerollUI(value) end
+function UpdateResourceUI(name, value) end
 function ValidateMaxHealth() end
 function AddOutgoingDamageModifier(unit, modifier) table.insert(unit.OutgoingDamageModifiers, modifier) end
 function AddIncomingDamageModifier(unit, modifier) table.insert(unit.IncomingDamageModifiers, modifier) end
@@ -151,5 +152,9 @@ def assert_projection_matches_resident(state, resident, label):
         assert state[flag] == resident[flag], (label, flag, state[flag], resident[flag])
         assert state[value] == (resident[value] if resident[flag] else None), (label, value)
     assert state['boonRarityTarget'] == resident['boonRarityTarget'], label
+    assert state['boonForceLegendary'] == resident['boonForceLegendary'], label
+    assert state['boonForceDuo'] == resident['boonForceDuo'], label
+    assert state['fishingChance'] == resident.get('fishingChance'), label
+    assert state['chaosGateChance'] == resident.get('chaosGateChance'), label
 
 

@@ -22,12 +22,25 @@ apply_exit = {
     'roomId': 'runtime:run:room',
     'doorToken': 'door:room:reward',
     'requestId': 'apply-exit-1',
-    'kind': 'reward',
-    'targetID': 'AthenaUpgrade',
+    'room': 'combat',
+    'reward': 'AthenaUpgrade',
 }
 assert mutation_params('apply_world_exit', apply_exit) == apply_exit
-apply_route = {**apply_exit, 'kind': 'roomCategory', 'targetID': 'story'}
+apply_route = {
+    'roomId': 'runtime:run:room',
+    'doorToken': 'door:room:reward',
+    'requestId': 'apply-exit-2',
+    'room': 'story',
+}
 assert mutation_params('apply_world_exit', apply_route) == apply_route
+apply_current = {
+    'roomId': 'runtime:run:room',
+    'doorToken': 'door:room:reward',
+    'requestId': 'apply-exit-3',
+    'room': 'current',
+    'reward': 'AthenaUpgrade',
+}
+assert mutation_params('apply_world_exit', apply_current) == apply_current
 cancel_exit = {
     'roomId': 'runtime:run:room',
     'doorToken': 'door:room:reward',
@@ -52,8 +65,10 @@ for command, payload, expected in (
     ('spawn_reward', {**valid, 'reward': 'ArbitraryLua'}, 'invalid_value'),
     ('apply_world_exit', {**apply_exit, 'doorToken': ''}, 'stale_door'),
     ('apply_world_exit', {**apply_exit, 'requestId': ''}, 'invalid_value'),
-    ('apply_world_exit', {**apply_exit, 'kind': 'roomCategory', 'targetID': 'thanatos'}, 'invalid_value'),
-    ('apply_world_exit', {**apply_exit, 'kind': 'reward', 'targetID': 'TrialUpgrade'}, 'invalid_value'),
+    ('apply_world_exit', {**apply_exit, 'room': ''}, 'invalid_value'),
+    ('apply_world_exit', {**apply_exit, 'room': 'thanatos'}, 'invalid_value'),
+    ('apply_world_exit', {'roomId': 'runtime:run:room', 'doorToken': 'door:room:reward', 'requestId': 'apply-exit-no-reward', 'room': 'current'}, 'invalid_value'),
+    ('apply_world_exit', {**apply_exit, 'reward': 'TrialUpgrade'}, 'invalid_value'),
     ('cancel_world_exit', {**cancel_exit, 'leaseToken': ''}, 'stale_door'),
     ('apply_world_occurrence', {**apply_occurrence, 'targetID': 'npc:Hades'}, 'invalid_value'),
     ('apply_world_occurrence', {**apply_occurrence, 'requestId': ''}, 'invalid_value'),

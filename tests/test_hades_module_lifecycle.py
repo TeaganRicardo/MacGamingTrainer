@@ -341,11 +341,26 @@ enum HadesRequest: String {
     case disableAll = "disable_all"
     case disconnect = "disconnect"
 }
+struct Services {
+    var targetObservation: Int = 0
+}
+final class CancellableStub {
+    var cancelled = false
+    func cancel() { cancelled = true }
+    func stop() { cancelled = true }
+}
 final class ExitHarness {
     var connected = true
     var backendAvailable = true
+    var exiting = false
+    var terminationRequestedFromHost = false
+    var terminationTargetObservation: Int?
+    var services = Services()
+    let launchAttachGate = CancellableStub()
+    let runLogWatcher = CancellableStub()
     let session = Session()
     var failures: Set<String> = []
+    func cancelPendingRunLogSettle() {}
     func send(_ request: HadesRequest, operation: String, announceSuccess: Bool,
               completion: @escaping (Bool) -> Void) {
         let command = request.rawValue
@@ -363,15 +378,21 @@ final class ExitHarness {
             model.failures = failures
             var completions = 0
             model.prepareForTermination { completions += 1; model.session.events.append("complete") }
-            precondition(model.session.events == ["disable_all", "disconnect", "complete"],
+            model.prepareForTermination { completions += 1; model.session.events.append("duplicate") }
+            precondition(model.session.events == ["disable_all", "disconnect", "complete", "duplicate"],
                 "the module must finish best-effort cleanup before the Context stops the worker")
             precondition(Set(model.session.diagnostics) == Set(failures.map { "recovery: " + $0 }))
-            precondition(completions == 1)
+            precondition(completions == 2)
         }
         let offline = ExitHarness()
         offline.connected = false
         offline.prepareForTermination { offline.session.events.append("complete") }
         precondition(offline.session.events == ["disable_all", "disconnect", "complete"])
+        let mismatched = ExitHarness()
+        mismatched.terminationTargetObservation = 100
+        mismatched.services.targetObservation = 200
+        mismatched.prepareForTermination { mismatched.session.events.append("complete") }
+        precondition(mismatched.session.events == ["disconnect", "complete"])
         let unavailable = ExitHarness()
         unavailable.connected = false
         unavailable.backendAvailable = false

@@ -33,12 +33,30 @@ with tempfile.TemporaryDirectory(prefix='hades-desired-') as directory:
     assert runtime.replies[-1]['healthLocked'] is False, 'resident kept a health lock the Profile removed'
     assert_projection_matches_resident(state, runtime.replies[-1], 'offline profile + reconnect')
 
+# Permanent resource locks survive detach/restart and set_resource updates the lock.
+with tempfile.TemporaryDirectory(prefix='hades-desired-reslock-') as directory:
+    adapter, runtime, game, store = adapter_for(directory)
+    state = adapter.dispatch('connect', {}, 'connect')
+    game.native('GameState.Resources.Gems=18')
+    locked = adapter.dispatch('lock_resource', {'resource': 'Gems', 'locked': True, 'target': state['target']}, 'lock-gems')
+    assert locked['resourceLocks'] == {'Gems': 18}
+    assert store.load()['resourceLocks'] == {'Gems': 18}
+    updated = adapter.dispatch('set_resource', {'resource': 'Gems', 'value': 77, 'target': state['target']}, 'edit-gems')
+    assert updated['resourceLocks'] == {'Gems': 77} and store.load()['resourceLocks'] == {'Gems': 77}
+    adapter.dispatch('disconnect', {}, 'detach')
+    restarted, runtime, game, _ = adapter_for(directory)
+    state = restarted.dispatch('connect', {}, 'reconnect-restarted')
+    assert runtime.replies[-1]['resourceLocks'] == {'Gems': 77}
+    assert_projection_matches_resident(state, runtime.replies[-1], 'restarted game resource lock')
+
 # A same-process Lua reset replays every durable desired value, not only the
 # boolean features: fixed locks and the boon rarity target come back too.
 with tempfile.TemporaryDirectory(prefix='hades-desired-') as directory:
     adapter, runtime, game, store = adapter_for(directory)
     adapter.dispatch('set_feature', {'feature': 'boonRarityEnabled', 'value': True}, 'rarity-on')
-    adapter.dispatch('set_boon_rarity', {'target': 'Epic'}, 'rarity-epic')
+    adapter.dispatch('set_boon_rarity', {'target': 'Epic', 'forceLegendary': True, 'forceDuo': True}, 'rarity-epic')
+    adapter.dispatch('set_fishing_chance', {'chance': 37.5}, 'fish-chance')
+    adapter.dispatch('set_chaos_gate_chance', {'chance': 0.0}, 'chaos-chance')
     state = adapter.dispatch('connect', {}, 'connect')
     state = adapter.dispatch('lock_resource', {'resource': 'Money', 'locked': True, 'target': state['target']}, 'lock')
     assert state['moneyLock'] == 100
@@ -46,6 +64,8 @@ with tempfile.TemporaryDirectory(prefix='hades-desired-') as directory:
     state = adapter.dispatch('status', {}, 'status-after-reset')
     resident = runtime.replies[-1]
     assert resident['boonRarityTarget'] == 'Epic', 'Lua reset dropped the rarity target'
+    assert resident['boonForceLegendary'] is True and resident['boonForceDuo'] is True, 'Lua reset dropped force flags'
+    assert resident['fishingChance'] == 37.5 and resident['chaosGateChance'] == 0.0, 'Lua reset dropped spawn chances'
     assert resident['moneyLocked'] is True and resident['moneyLock'] == 100, 'Lua reset dropped the gold lock'
     assert_projection_matches_resident(state, resident, 'after Lua reset')
     game.native('SpendMoney(60)')
@@ -74,13 +94,14 @@ with tempfile.TemporaryDirectory(prefix='hades-desired-') as directory:
     first, _, _, store = adapter_for(directory)
     first.dispatch('set_feature', {'feature': 'invincibility', 'value': True}, 'inv')
     first.dispatch('set_feature', {'feature': 'gameSpeed', 'value': 2.0}, 'speed')
-    first.dispatch('set_boon_rarity', {'target': 'Epic'}, 'epic')
+    first.dispatch('set_boon_rarity', {'target': 'Epic', 'forceLegendary': True, 'forceDuo': False}, 'epic')
     saved = store.load()
     fresh, _, _, store = adapter_for(directory)
     state = fresh.dispatch('status', {}, 'fresh-status')
     assert state['features']['invincibility'] is True
     assert state['features']['gameSpeed']['desired'] == 2.0
     assert state['boonRarityTarget'] == 'Epic'
+    assert state['boonForceLegendary'] is True and state['boonForceDuo'] is False
     fresh.dispatch('set_feature', {'feature': 'infiniteHealth', 'value': True}, 'detached-edit')
     assert store.load() == {**saved, 'infiniteHealth': True}, 'detached edit discarded saved desired state'
 
@@ -117,13 +138,21 @@ with tempfile.TemporaryDirectory(prefix='hades-desired-') as directory:
     adapter, runtime, game, _ = adapter_for(directory)
     adapter.profiles.save('Heroic', DEFAULT_PREFERENCES)
     adapter.dispatch('connect', {}, 'connect')
-    adapter.dispatch('set_boon_rarity', {'target': 'Epic'}, 'epic')
+    adapter.dispatch('set_boon_rarity', {'target': 'Epic', 'forceLegendary': True, 'forceDuo': True}, 'epic')
+    adapter.dispatch('set_fishing_chance', {'chance': 80.0}, 'fish-profile')
+    adapter.dispatch('set_chaos_gate_chance', {'chance': 15.0}, 'chaos-profile')
     state = adapter.dispatch('load_profile', {'name': 'Heroic'}, 'neutral-profile')
     assert state['boonRarityTarget'] == 'Heroic', 'neutral Profile kept the previous rarity target'
-    adapter.dispatch('set_boon_rarity', {'target': 'Rare'}, 'rare')
+    assert state['boonForceLegendary'] is False and state['boonForceDuo'] is False, 'neutral Profile kept force flags'
+    assert state['fishingChance'] is None and state['chaosGateChance'] is None, 'neutral Profile kept spawn chances'
+    adapter.dispatch('set_boon_rarity', {'target': 'Rare', 'forceLegendary': False, 'forceDuo': True}, 'rare')
+    adapter.dispatch('set_fishing_chance', {'chance': 50.0}, 'fish-offline')
+    adapter.dispatch('set_chaos_gate_chance', {'chance': 100.0}, 'chaos-offline')
     adapter.dispatch('disconnect', {}, 'detach')
     adapter.dispatch('disable_all', {}, 'offline-disable')
     state = adapter.dispatch('connect', {}, 'reconnect')
     assert state['boonRarityTarget'] == 'Heroic', 'offline Disable All kept the previous rarity target'
+    assert state['boonForceLegendary'] is False and state['boonForceDuo'] is False, 'offline Disable All kept force flags'
+    assert state['fishingChance'] is None and state['chaosGateChance'] is None, 'offline Disable All kept spawn chances'
 
 print('hades_desired_state_replay_ok')

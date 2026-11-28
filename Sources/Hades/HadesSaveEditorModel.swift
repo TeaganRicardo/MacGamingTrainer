@@ -103,12 +103,13 @@ indirect enum HadesSaveValue: Decodable, Equatable {
 }
 
 enum HadesSaveEditorDomain: String, CaseIterable, Identifiable, Decodable {
-    case resources, progression, equipment, relationships, narrative, statistics, history, advanced
+    case all, resources, progression, equipment, relationships, narrative, statistics, history, advanced
     var id: String { rawValue }
     var titleKey: String { "hades.saveEditor.domain." + rawValue }
 
     var sectionIcon: String {
         switch self {
+        case .all: return TrainerSemanticIcon.Section.general
         case .resources: return TrainerSemanticIcon.Section.inventory
         case .progression: return "rectangle.stack.fill"
         case .equipment: return "bolt.shield.fill"
@@ -162,15 +163,49 @@ struct HadesSaveEditorReview: Decodable {
         let after: String
         let operation: String
         let valueType: String
+        let owner: String?
+        let group: String?
+        let operations: [String]?
+        let hasChildren: Bool?
+        let choices: [HadesSaveEditorRow.Choice]?
+        let warning: String?
         let typedValue: HadesSaveValue?
         let typedKey: HadesSaveValue?
         let effects: [Effect]
+
+        func inlineRow(baseline: String, stagedValue: HadesSaveValue? = nil) -> HadesSaveEditorRow {
+            HadesSaveEditorRow(
+                baselineGeneration: baseline,
+                content: nil,
+                id: id,
+                name: name,
+                englishName: name,
+                group: group ?? "",
+                groupId: group ?? id,
+                owner: owner ?? "",
+                ownerId: owner ?? id,
+                valueType: valueType,
+                displayValue: after,
+                typedValue: stagedValue ?? typedValue,
+                editable: true,
+                operations: operations ?? [operation],
+                hasChildren: hasChildren ?? false,
+                warning: warning,
+                choices: choices
+            )
+        }
     }
     let baselineGeneration: String
     let actions: [Action]
     let count: Int
     let effectCount: Int
     static let empty = Self(baselineGeneration: "", actions: [], count: 0, effectCount: 0)
+}
+
+struct HadesSaveRetiredDraft: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let text: String
 }
 
 struct HadesSaveEditorSource: Decodable {
@@ -186,12 +221,15 @@ struct HadesSaveEditorReceipt: Decodable {
     let applied: Bool
     let verified: Bool
     let installedSHA256: String
+    let source: HadesSaveEditorSource?
     let hot: Bool?
     let runtimeReloaded: Bool
     let previousSnapshotId: String?
     let target: HadesSaveFileIdentity
     let maintenanceWarning: String?
     let namingWarning: String?
+    let continuousDraftEntryIds: [String]?
+    let changeCount: Int?
 }
 struct HadesSaveFileIdentity: Decodable {
     let rootId: String
@@ -224,7 +262,7 @@ final class HadesSaveEditorModel: ObservableObject {
     @Published private(set) var source: HadesSaveEditorSource?
     @Published private(set) var sourceSHA256 = ""
     @Published private(set) var domains = HadesSaveEditorDomain.allCases
-    @Published private(set) var domain = HadesSaveEditorDomain.resources
+    @Published private(set) var domain = HadesSaveEditorDomain.all
     @Published var search = ""
     @Published private(set) var rows: [HadesSaveEditorRow] = []
     @Published private(set) var breadcrumbs: [Breadcrumb] = []
@@ -238,6 +276,8 @@ final class HadesSaveEditorModel: ObservableObject {
     @Published private var readyGeneration: String?
     @Published private var activeEdits: Set<String> = []
     @Published private var failedDrafts: Set<String> = []
+    @Published private(set) var textDrafts: [String: String] = [:]
+    @Published private(set) var retiredDrafts: [HadesSaveRetiredDraft] = []
     @Published private(set) var failures: [String: TrainerTextToken] = [:]
     @Published private(set) var receipt: HadesSaveEditorReceipt?
     @Published private(set) var editingRow: HadesSaveEditorRow?
@@ -248,6 +288,7 @@ final class HadesSaveEditorModel: ObservableObject {
     private let client: TrainerStructuredSaveEditorClient
     private var clientObserver: AnyCancellable?
     private var language: TrainerPresentationLanguage = .en
+    private var knownEntryNames: [String: String] = [:]
     var workspaceID: String? { client.workspaceID }
     var baselineGeneration: String? { client.baselineGeneration }
     var busy: Bool { client.busy }
@@ -348,7 +389,8 @@ final class HadesSaveEditorModel: ObservableObject {
             self.domains = summary.domains; self.review = summary.review; self.rows = []; self.breadcrumbs = []; self.parentID = nil
             self.domain = summary.domains.first ?? .resources; self.search = ""; self.editingRow = nil
             self.client.clearRecoveryPath(); self.failures = [:]; self.editRevision += 1; self.typedEntries = []
-            self.activeEdits = []; self.failedDrafts = []; self.receipt = nil
+            self.activeEdits = []; self.failedDrafts = []; self.textDrafts = [:]; self.retiredDrafts = []
+            self.knownEntryNames = [:]; self.receipt = nil
             self.client.releasePreviousWorkspace(oldWorkspace, capturedGeneration: oldGeneration)
             self.query()
         }
@@ -416,6 +458,7 @@ final class HadesSaveEditorModel: ObservableObject {
                 self.failures["query"] = TrainerTextToken(key: "hades.saveEditor.invalidResponse"); return
             }
             self.rows = query.rows; self.total = query.total; self.offset = query.offset; self.pageLimit = query.limit
+            for row in query.rows { self.knownEntryNames[row.id] = row.name }
             // A server-rebased offset invalidates the originally requested Back path.
             self.pageHistory = query.offset == pageOffset && query.parentId == scope.parentID ? acceptedHistory : []
             self.breadcrumbs = query.breadcrumbs; self.parentID = query.parentId; self.readyGeneration = baseline
@@ -433,9 +476,19 @@ final class HadesSaveEditorModel: ObservableObject {
         }
     }
     func dismissDetail() { client.invalidate(.detail); editingRow = nil; editingTyped = false }
+    func updateTextDraft(_ text: String?, for entryID: String, baseline: String? = nil) {
+        if let baseline, baseline != baselineGeneration { return }
+        if let text {
+            textDrafts[entryID] = text
+        } else {
+            textDrafts.removeValue(forKey: entryID)
+        }
+    }
+
     func discardDraft(_ row: HadesSaveEditorRow, workspace captured: String?) {
         if captured == workspaceID, row.baselineGeneration == baselineGeneration {
             failedDrafts.remove(draftKey(row.id, row.baselineGeneration))
+            textDrafts.removeValue(forKey: row.id)
             activeEdits.remove(draftKey(row.id, row.baselineGeneration))
             activeEdits.remove(draftKey(row.id + ":key", row.baselineGeneration))
             failures.removeValue(forKey: row.id)
@@ -486,6 +539,7 @@ final class HadesSaveEditorModel: ObservableObject {
                 self.failedDrafts.insert(self.draftKey(id, baseline)); accepted(false); return
             }
             self.failedDrafts.remove(self.draftKey(id, baseline))
+            self.textDrafts.removeValue(forKey: id)
             if typed { self.typedEntries.insert(id) } else { self.typedEntries.remove(id) }
             self.editRevision += 1; self.query(offset: self.offset); accepted(true)
         }
@@ -496,7 +550,7 @@ final class HadesSaveEditorModel: ObservableObject {
                 failed: { accepted(false) }) { [weak self] result in
             guard let self else { return }
             guard self.applyReview(result, scope: id) else { accepted(false); return }
-            self.failedDrafts.remove(self.draftKey(id, baseline)); self.typedEntries.remove(id)
+            self.failedDrafts.remove(self.draftKey(id, baseline)); self.textDrafts.removeValue(forKey: id); self.typedEntries.remove(id)
             self.editRevision += 1; self.query(offset: self.offset); accepted(true)
         }
     }
@@ -504,7 +558,7 @@ final class HadesSaveEditorModel: ObservableObject {
         guard !busy, ownsMutation(workspaceID, baseline), let workspaceID else { return }
         perform("cancel", params: ["language": language.rawValue], scope: "cancel", workspace: workspaceID, baseline: baseline) { [weak self] result in
             guard let self, self.applyReview(result, scope: "cancel") else { return }
-            self.typedEntries = []; self.failedDrafts = []; self.editRevision += 1; self.query(offset: self.offset)
+            self.typedEntries = []; self.failedDrafts = []; self.textDrafts = [:]; self.editRevision += 1; self.query(offset: self.offset)
         }
     }
     private func refreshReview() {
@@ -519,7 +573,8 @@ final class HadesSaveEditorModel: ObservableObject {
         applying = true; readyGeneration = nil; receipt = nil; searchTask?.cancel()
         client.invalidate(.query); client.invalidate(.detail)
         queryLoading = false
-        perform("apply", scope: "apply", workspace: workspaceID, baseline: baseline,
+        let sentDrafts = textDrafts
+        perform("apply", params: ["draftEntryIds": Array(sentDrafts.keys).sorted()], scope: "apply", workspace: workspaceID, baseline: baseline,
                 failed: { [weak self] in self?.readyGeneration = baseline },
                 finished: { [weak self] in self?.applying = false }) { [weak self] result in
             guard let self else { return }
@@ -528,6 +583,20 @@ final class HadesSaveEditorModel: ObservableObject {
             }
             guard receipt.applied, receipt.verified, receipt.baselineGeneration != baseline else {
                 self.applyUnconfirmed(); return
+            }
+            let continuous = Set(receipt.continuousDraftEntryIds ?? [])
+            let retired = sentDrafts.keys.sorted().compactMap { entryID -> HadesSaveRetiredDraft? in
+                guard !continuous.contains(entryID), let text = sentDrafts[entryID] else { return nil }
+                return HadesSaveRetiredDraft(id: entryID, name: self.knownEntryNames[entryID] ?? entryID, text: text)
+            }
+            let retiredIDs = Set(retired.map(\.id))
+            self.retiredDrafts.removeAll { retiredIDs.contains($0.id) }
+            self.retiredDrafts.append(contentsOf: retired)
+            self.textDrafts = sentDrafts.filter { continuous.contains($0.key) }
+            if let oldBaseline = baseline {
+                for entryID in sentDrafts.keys where !continuous.contains(entryID) {
+                    self.failedDrafts.remove(self.draftKey(entryID, oldBaseline))
+                }
             }
             self.client.bind(workspaceID: workspaceID, baselineGeneration: receipt.baselineGeneration)
             self.receipt = receipt; self.applying = false
@@ -549,11 +618,13 @@ final class HadesSaveEditorModel: ObservableObject {
         guard decoded.baselineGeneration == baselineGeneration else {
             failures[scope] = TrainerTextToken(key: "hades.saveEditor.invalidResponse"); return false
         }
+        for action in decoded.actions { knownEntryNames[action.id] = action.name }
         review = decoded; return true
     }
     func close() {
         searchTask?.cancel(); started = false; queryLoading = false
         readyGeneration = nil; editingRow = nil
+        textDrafts = [:]; retiredDrafts = []; knownEntryNames = [:]
         client.retireAndClose()
     }
     private func decode<T: Decodable>(_ result: [String: Any], scope: String) -> T? {

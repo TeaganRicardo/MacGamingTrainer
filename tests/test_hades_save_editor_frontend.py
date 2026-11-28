@@ -42,15 +42,15 @@ def make_rows(offset, parent_id=None, domain="resources"):
             "baselineGeneration": baseline,
             "content": None,
             "id": "row:child",
-            "name": "Child Flag",
-            "englishName": "Child Flag",
+            "name": "Child Count",
+            "englishName": "Child Count",
             "group": "Nested",
             "groupId": "nested",
             "owner": "Profile",
             "ownerId": "profile",
-            "valueType": "boolean",
-            "displayValue": "true",
-            "typedValue": {"luaType": "boolean", "value": True},
+            "valueType": "number",
+            "displayValue": "3",
+            "typedValue": {"luaType": "number", "value": 3},
             "editable": True,
             "operations": ["set"],
             "hasChildren": False,
@@ -109,15 +109,19 @@ def review_payload():
             "after": "true" if op == "set" and val == {"luaType": "boolean", "value": True} else "updated",
             "operation": op,
             "valueType": "boolean" if entry_id == "row:bool" else "table",
+            "owner": "Fixture Owner",
+            "group": "Fixture Group",
+            "operations": ["set", "unset"] if entry_id == "row:bool" else ["set", "append", "unset"],
+            "hasChildren": entry_id != "row:bool",
             "typedValue": val,
             "typedKey": None,
-            "effects": [],
+            "effects": [{"id": "fx:1", "name": "Linked Effect", "before": "0", "after": "1"}] if entry_id == "row:bool" else [],
         })
     return {
         "baselineGeneration": state["baseline"],
         "actions": actions,
         "count": len(actions),
-        "effectCount": 0,
+        "effectCount": sum(len(item["effects"]) for item in actions),
     }
 
 for raw in sys.stdin:
@@ -193,18 +197,23 @@ for raw in sys.stdin:
     elif cmd == "save_editor_apply":
         state["apply_count"] += 1
         state["baseline"] = f"gen-{state['apply_count'] + 1}"
+        staged_count = len(state["staged"])
         state["staged"] = []
+        draft_ids = params.get("draftEntryIds", [])
         result = {
             "baselineGeneration": state["baseline"],
             "applied": True,
             "verified": True,
             "installedSHA256": "def456",
+            "source": {"kind": "currentFile", "snapshotId": None, "rootId": "main", "relativePath": "Profile1.sav"},
             "hot": False,
             "runtimeReloaded": False,
             "previousSnapshotId": "snap-1",
             "target": {"rootId": "main", "relativePath": "Profile1.sav"},
             "maintenanceWarning": None,
             "namingWarning": None,
+            "continuousDraftEntryIds": [item for item in draft_ids if item != "row:retired"],
+            "changeCount": staged_count,
         }
     elif cmd == "save_editor_close":
         result = {"closed": True}
@@ -307,6 +316,15 @@ func commands(at url: URL) -> [[String: Any]] {
 
         let prevTitle = text("hades.saveEditor.previous")
         let nextTitle = text("hades.saveEditor.next")
+        let pageSummary = localization.string("hades.saveEditor.pageSummary", arguments: ["1", "40", "85"])
+        check(namedNativeControl(root, role: "AXStaticText", name: pageSummary) != nil,
+              "localized pagination summary missing: expected \(pageSummary)")
+        check(namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.source.refreshFiles")) != nil,
+              "Refresh Files button copy did not match Hades II parity")
+        check(HadesPresentation.text("hades.saveEditor.domain.all", language: .zhCN) == "全部内容"
+              && HadesPresentation.text("hades.saveEditor.domain.all", language: .en) == "All Content"
+              && HadesPresentation.text("hades.saveEditor.source.confirmTitle", language: .en) == "Read another source?",
+              "All category or source-switch confirmation copy missing")
         guard let prevBtn = namedNativeControl(root, role: "AXButton", name: prevTitle),
               let nextBtn = namedNativeControl(root, role: "AXButton", name: nextTitle),
               !prevBtn.enabled, nextBtn.enabled, nextBtn.help == nextTitle, prevBtn.help == prevTitle,
@@ -398,6 +416,16 @@ func commands(at url: URL) -> [[String: Any]] {
         }
         wait("entered Container Row child view") { !editor.queryLoading && editor.parentID == "row:container" }
         root.layoutSubtreeIfNeeded(); pump()
+        func findChildField(in view: NSView) -> NSTextField? {
+            if let field = view as? NSTextField, field.isEditable, field.accessibilityLabel() == "Child Count" {
+                return field
+            }
+            return view.subviews.lazy.compactMap { findChildField(in: $0) }.first
+        }
+        guard let childField = findChildField(in: root),
+              window.makeFirstResponder(childField), childField.currentEditor() != nil,
+              window.makeFirstResponder(nil) else { fail("could not focus and leave the child scalar field") }
+        check(editor.textDrafts["row:child"] == nil, "unchanged scalar field created a text draft")
         guard let domainCrumb = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.domain.resources")),
               domainCrumb.enabled, domainCrumb.press() else {
             fail("root breadcrumb button missing")
@@ -542,22 +570,62 @@ func commands(at url: URL) -> [[String: Any]] {
         wait("restaged switch before trash check") { !editor.busy && editor.review.count == 1 }
 
         guard let removeBtn = nativeAccessibilityControls(root).first(where: {
-            $0.identifier == "saveEditor.remove.row:bool" && $0.label == text("hades.remove")
+            $0.identifier == "saveEditor.remove.row:bool" && $0.label == text("hades.saveEditor.basket.remove")
         }), removeBtn.enabled, removeBtn.press() else {
             fail("saveEditor.remove.<id> trash button missing or unlabeled in Changes drawer")
         }
         wait("trash button unstaged row:bool") { !editor.busy && editor.review.count == 0 }
 
-        // Re-stage & Apply -> verified receipt + error notice coverage.
+        // Re-stage & verify Changes header summary, write target path, inline switch in Changes,
+        // retiredDrafts disclosure after Apply, and rich receipt without raw SHA-256.
         guard let switchAgain = namedNativeControl(root, role: "AXCheckBox", name: "Boolean Switch"),
               switchAgain.press() else { fail("switch missing before Apply") }
         wait("second stage ready") { !editor.busy && editor.canApply }
-        guard let applyBtn = namedNativeControl(root, role: "AXButton", name: text("hades.apply")),
-              applyBtn.enabled, applyBtn.press() else { fail("Apply button missing") }
+        root.layoutSubtreeIfNeeded(); pump()
+        let basketSummary = localization.string("hades.saveEditor.basket.summary", arguments: ["1", "1"])
+        let targetLine = localization.string("hades.saveEditor.workbench.target", arguments: ["Profile1.sav"])
+        check(namedNativeControl(root, role: "AXStaticText", name: basketSummary) != nil,
+              "Changes impact summary missing: \(basketSummary)")
+        check(namedNativeControl(root, role: "AXStaticText", name: targetLine) != nil,
+              "Changes target write path line missing: \(targetLine)")
+        let booleanSwitches = nativeAccessibilityControls(root).filter { $0.role == "AXCheckBox" && $0.label == "Boolean Switch" }
+        check(booleanSwitches.count >= 2, "inline editable control missing from Changes drawer")
+
+        editor.updateTextDraft("999", for: "row:retired")
+        guard let applyBtn = namedNativeControl(root, role: "AXButton", name: text("hades.saveEditor.apply")),
+              applyBtn.enabled, applyBtn.press() else { fail("Apply Changes button missing") }
         wait("Apply completed receipt") { !editor.busy && editor.receipt != nil }
         root.layoutSubtreeIfNeeded(); pump()
+        check(editor.retiredDrafts.map(\.id) == ["row:retired"] && editor.textDrafts.isEmpty,
+              "discontinued draft did not retire cleanly after Apply")
         check(namedNativeControl(root, role: "AXStaticText", name: text("hades.saveEditor.applied")) != nil,
               "verified receipt headline missing")
+        let expectedSourceTarget = localization.string("hades.saveEditor.applyOutcome.sourceTarget", arguments: ["Profile1.sav", "Profile1.sav"])
+        let expectedDisk = localization.string("hades.saveEditor.applyOutcome.disk", arguments: [
+            text("hades.saveEditor.applyOutcome.mode.cold"),
+            text("hades.saveEditor.applyOutcome.memory.notReloaded"),
+        ])
+        let expectedRecovery = localization.string("hades.saveEditor.applyOutcome.recovery", arguments: ["snap-1"])
+        check(namedNativeControl(root, role: "AXStaticText", name: expectedSourceTarget) != nil
+              && namedNativeControl(root, role: "AXStaticText", name: expectedDisk) != nil
+              && namedNativeControl(root, role: "AXStaticText", name: expectedRecovery) != nil,
+              "rich apply receipt lines missing")
+        let receiptSHALines = nativeAccessibilityControls(root).filter {
+            ($0.label ?? "").contains("def456") || ($0.text ?? "").contains("def456")
+        }
+        check(receiptSHALines.isEmpty,
+              "receipt still rendered raw installed SHA-256 instead of rich summary: \(receiptSHALines.count)")
+
+        wait("post-apply query settled") { !editor.busy && !editor.queryLoading }
+        guard let switchForSecondApply = namedNativeControl(root, role: "AXCheckBox", name: "Boolean Switch"),
+              switchForSecondApply.press() else { fail("switch missing before second Apply") }
+        wait("repeated apply stage ready") { !editor.busy && editor.canApply }
+        editor.updateTextDraft("888", for: "row:retired")
+        let nextBaseline = editor.baselineGeneration
+        editor.apply(baseline: nextBaseline)
+        wait("second apply completed") { !editor.busy && !editor.queryLoading && editor.baselineGeneration != nextBaseline }
+        check(editor.retiredDrafts.map(\.id) == ["row:retired"] && editor.retiredDrafts.first?.text == "888",
+              "repeated Apply created duplicate retiredDrafts IDs or lost latest draft: \(editor.retiredDrafts)")
 
         editor.search = "fail-query"
         editor.query()

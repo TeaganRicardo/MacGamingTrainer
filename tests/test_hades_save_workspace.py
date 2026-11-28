@@ -70,11 +70,15 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-journeys-') as tempora
     set_target(workspace, target)
     original_hash = workspace.summary()['sourceSHA256']
     assert original_hash == hashlib.sha256(original).hexdigest()
+    assert workspace.summary()['domains'][0] == 'all'
     for domain in workspace.summary()['domains']:
         page = workspace.query(domain=domain, language='zh-CN')
         assert page['rows'], domain
         assert all(row['editable'] and row['ownerId'] and row['groupId'] for row in page['rows'])
         assert all('set' in row['operations'] for row in page['rows'])
+    global_ids = {row['id'] for row in workspace.query(domain='all', language='en', limit=200)['rows']}
+    assert {'resource:MetaPoints', 'mirror:1', 'aspectSelection:SwordWeapon'} <= global_ids
+    assert any(row['id'] == 'mirror:1' for row in workspace.query(domain='all', language='en', query='影子袭击')['rows'])
     assert any(row['id'] == 'mirror:1' for row in workspace.query(domain='progression', language='en', query='影子袭击')['rows'])
     # Every returned owner is complete, even with a one-row request.
     complete = workspace.query(domain='equipment', language='en', limit=200)
@@ -255,11 +259,18 @@ with tempfile.TemporaryDirectory(prefix='mgt-hades-editor-journeys-') as tempora
     precision = HadesSaveWorkspace.open(precision_service, source=source)
     set_target(precision, target)
     precise_id = entry(precision, ('GameState', 'UnknownFutureField', 'Precise'))
+    other_phys = entry(precision, ('GameState', 'Resources', 'MetaPoints'))
     review = stage(precision, precise_id, 'set', scalar(1.0000000000000002))
     action = review['actions'][0]
     assert action['before'] == '1' and action['after'] == '1.0000000000000002'
     assert action['effects'] == [], 'A raw physical edit has no linked semantic effects'
-    apply(precision)
+    assert action['owner'] and action['group'] and 'set' in action['operations']
+    precise_receipt = precision.apply(
+        baseline_generation=precision.baseline_generation,
+        draft_entry_ids=('resource:Gems', other_phys, precise_id),
+    )
+    assert precise_receipt['changeCount'] == 1
+    assert precise_receipt['continuousDraftEntryIds'] == ['resource:Gems']
     assert state(precision_saves / 'Profile2.sav')['UnknownFutureField']['Precise'] == 1.0000000000000002
 
     def assert_typed_error(response_json, expected_key):

@@ -15,7 +15,9 @@ enum HadesRequest {
     case loadProfile(name: String)
     case deleteProfile(name: String)
     case setFeature(feature: String, value: Any)
-    case setBoonRarity(target: String)
+    case setBoonRarity(target: String, forceLegendary: Bool, forceDuo: Bool)
+    case setFishingChance(Double?)
+    case setChaosGateChance(Double?)
     case disableAll
     case lockVital(vital: String, locked: Bool)
     case lockResource(resource: String, locked: Bool)
@@ -27,7 +29,7 @@ enum HadesRequest {
     case generateFishing
     case generateChaosGate
     case generateChamberObject(object: String)
-    case applyWorldExit(doorToken: String, kind: String, targetID: String)
+    case applyWorldExit(doorToken: String, room: String, reward: String?)
     case cancelWorldExit(doorToken: String, leaseToken: String)
     case applyWorldOccurrence(targetID: String)
     case cancelWorldOccurrence(leaseToken: String)
@@ -38,6 +40,7 @@ enum HadesRequest {
     case expireTrait(instanceID: String)
     case refreshTrait(instanceID: String)
     case addChaosPair(blessing: String, curse: String, rarity: String, encounters: Int)
+    case openSellTraits
 
     var command: HadesCommand {
         switch self {
@@ -53,6 +56,8 @@ enum HadesRequest {
         case .deleteProfile: return .deleteProfile
         case .setFeature: return .setFeature
         case .setBoonRarity: return .setBoonRarity
+        case .setFishingChance: return .setFishingChance
+        case .setChaosGateChance: return .setChaosGateChance
         case .disableAll: return .disableAll
         case .lockVital: return .lockVital
         case .lockResource: return .lockResource
@@ -75,6 +80,7 @@ enum HadesRequest {
         case .expireTrait: return .expireTrait
         case .refreshTrait: return .refreshTrait
         case .addChaosPair: return .addChaosPair
+        case .openSellTraits: return .openSellTraits
         }
     }
 
@@ -87,8 +93,10 @@ enum HadesRequest {
             return ["name": name]
         case .setFeature(let feature, let value):
             return ["feature": feature, "value": value]
-        case .setBoonRarity(let target):
-            return ["target": target]
+        case .setBoonRarity(let target, let forceLegendary, let forceDuo):
+            return ["target": target, "forceLegendary": forceLegendary, "forceDuo": forceDuo]
+        case .setFishingChance(let value), .setChaosGateChance(let value):
+            return ["chance": value.map { $0 as Any } ?? NSNull()]
         case .lockVital(let vital, let locked):
             return ["vital": vital, "locked": locked]
         case .lockResource(let resource, let locked):
@@ -105,8 +113,10 @@ enum HadesRequest {
             return ["reward": reward]
         case .generateChamberObject(let object):
             return ["object": object]
-        case .applyWorldExit(let doorToken, let kind, let targetID):
-            return ["doorToken": doorToken, "kind": kind, "targetID": targetID]
+        case .applyWorldExit(let doorToken, let room, let reward):
+            var payload: [String: Any] = ["doorToken": doorToken, "room": room]
+            if let reward { payload["reward"] = reward }
+            return payload
         case .cancelWorldExit(let doorToken, let leaseToken):
             return ["doorToken": doorToken, "leaseToken": leaseToken]
         case .applyWorldOccurrence(let targetID):
@@ -124,7 +134,7 @@ enum HadesRequest {
         case .addChaosPair(let blessing, let curse, let rarity, let encounters):
             return ["blessing": blessing, "curse": curse, "rarity": rarity, "encounters": encounters]
         case .status, .connect, .disconnect, .launch, .catalog, .diagnostics, .listProfiles,
-             .disableAll, .generateFishing, .generateChaosGate:
+             .disableAll, .generateFishing, .generateChaosGate, .openSellTraits:
             return [:]
         }
     }

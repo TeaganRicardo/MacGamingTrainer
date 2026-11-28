@@ -20,6 +20,7 @@ extension HadesShortcutAction {
         case .spawnSpecial: HadesWorkbenchIcon.characterReward
         case .acquireChaosPair: HadesWorkbenchIcon.portal
         case .acquireExactBoon: TrainerSemanticIcon.Action.acquire
+        case .openSellTraits: HadesWorkbenchIcon.purge
         default: TrainerSemanticIcon.Concept.controls
         }
     }
@@ -56,6 +57,7 @@ enum HadesWorkbenchSection: String, CaseIterable, Identifiable {
 
 enum HadesWorkbenchIcon {
     static let godGauge = HadesCheatIcon.godGauge
+    static let purge = HadesCheatIcon.purge
     static let catalog = TrainerSemanticIcon.Concept.precision
     static let level = TrainerSemanticIcon.Concept.level
     static let route = "arrow.triangle.branch"
@@ -87,9 +89,12 @@ enum HadesWorkbenchIcon {
         case "hades.currentTraits": return TrainerSemanticIcon.Concept.controls
         case "hades.catalog", "hades.exactSource", "hades.selectTrait": return catalog
         case "hades.rarity", "hades.minimumRarity", "hades.setRarity": return TrainerSemanticIcon.Concept.quality
+        case "hades.rarity.forceLegendary": return HadesCheatIcon.legendary
+        case "hades.rarity.forceDuo": return HadesCheatIcon.duo
         case "hades.level", "hades.setLevel": return level
         case "hades.apply": return TrainerSemanticIcon.Action.apply
         case "hades.remove", "hades.cancelCurse": return TrainerSemanticIcon.Action.remove
+        case "hades.purgingPool": return purge
         case "hades.chaosPair": return portal
         case "hades.chaosBlessing", "hades.chaosCurse": return TrainerSemanticIcon.Section.effects
         case "hades.remainingUses", "hades.expireEffect": return TrainerSemanticIcon.Concept.duration
@@ -97,6 +102,8 @@ enum HadesWorkbenchIcon {
         case "hades.refreshEffect": return TrainerSemanticIcon.Concept.refresh
         case "hades.resources": return TrainerSemanticIcon.Section.inventory
         case "hades.gainResource": return TrainerSemanticIcon.Action.acquire
+        case "hades.fishing.probability": return fishing
+        case "hades.chaosGate.probability": return portal
         case "hades.spawn.olympianBoons": return TrainerSemanticIcon.Section.effects
         case "hades.spawn.pickupRewards": return TrainerSemanticIcon.Section.inventory
         case "hades.spawn.characterRewards": return characterReward
@@ -151,6 +158,11 @@ enum HadesWorkbenchCatalog {
         .decreaseGameSpeed,
         .increaseGameSpeed,
         .boonRarityEnabled,
+        .openSellTraits,
+        .acquireChaosPair,
+        .acquireExactBoon,
+        .moneyMultiplierEnabled,
+        .resourceMultiplierEnabled,
         .generateFishing,
         .applyWorldExit,
         .applyWorldOccurrence,
@@ -159,8 +171,6 @@ enum HadesWorkbenchCatalog {
         .spawnOlympian,
         .spawnPickup,
         .spawnSpecial,
-        .acquireChaosPair,
-        .acquireExactBoon,
         .disableAll,
     ]
 
@@ -170,8 +180,8 @@ enum HadesWorkbenchCatalog {
 
     private static func section(for action: HadesShortcutAction) -> HadesWorkbenchSection {
         switch action {
-        case .boonRarityEnabled, .acquireChaosPair, .acquireExactBoon: .boons
-        case .generateFishing: .resources
+        case .boonRarityEnabled, .openSellTraits, .acquireChaosPair, .acquireExactBoon: .boons
+        case .moneyMultiplierEnabled, .resourceMultiplierEnabled, .generateFishing: .resources
         case .applyWorldExit, .applyWorldOccurrence, .generateChamberObject,
              .generateChaosGate, .spawnOlympian, .spawnPickup, .spawnSpecial: .rooms
         case .disableAll: .management
@@ -192,13 +202,14 @@ enum HadesWorkbenchCatalog {
             (.values, ["hades.health", "hades.maxHealth", "hades.money", "hades.rerolls",
                        "hades.godGauge"]),
             (.common, ["hades.gameSpeed"]),
-            (.boons, ["hades.currentTraits", "hades.catalog", "hades.exactSource", "hades.selectTrait",
+            (.boons, ["hades.rarity.forceLegendary", "hades.rarity.forceDuo",
+                      "hades.currentTraits", "hades.purgingPool", "hades.catalog", "hades.exactSource", "hades.selectTrait",
                       "hades.rarity", "hades.minimumRarity",
                       "hades.level", "hades.setLevel", "hades.setRarity", "hades.apply", "hades.remove", "hades.chaosPair",
                       "hades.chaosBlessing", "hades.chaosCurse",
                       "hades.remainingUses", "hades.activateBlessing", "hades.expireEffect", "hades.refreshEffect"]),
-            (.resources, ["hades.resources", "hades.gainResource"]),
-            (.rooms, ["hades.spawn.olympianBoons", "hades.spawn.pickupRewards", "hades.spawn.characterRewards"]),
+            (.resources, ["hades.resources", "hades.gainResource", "hades.fishing.probability"]),
+            (.rooms, ["hades.chaosGate.probability", "hades.spawn.olympianBoons", "hades.spawn.pickupRewards", "hades.spawn.characterRewards"]),
             (.management, ["host.refreshStatus", "hades.saveEditor.title", "host.saveManagement", "host.shortcutSettings",
                            "hades.manage.profiles", "hades.manage.diagnostics", "host.viewLog",
                            "host.viewLogHistory", "host.clearCompletedLogs"]),
@@ -206,7 +217,9 @@ enum HadesWorkbenchCatalog {
         let fixed = other.flatMap { section, keys in
             keys.map { HadesWorkbenchEntry(id: $0, titleKey: $0, section: section) }
         }
-        let numbers = HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }.map {
+        let numbers = HadesFeature.allCases.filter {
+            !$0.isToggle && $0 != .gameSpeed && $0 != .moneyMultiplier && $0 != .resourceMultiplier
+        }.map {
             HadesWorkbenchEntry(id: "numeric.\($0.rawValue)", titleKey: $0.key, section: .values)
         }
         return actions + fixed + numbers

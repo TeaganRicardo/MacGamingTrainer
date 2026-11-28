@@ -2,15 +2,21 @@ import Foundation
 import TrainerCore
 
 enum HadesFeature: String, CaseIterable, Identifiable {
-    case invincibility, infiniteHealth, infiniteMoney, infiniteRerolls, fullGodGauge, infiniteAmmo, forceEnableRerolls, boonRarityEnabled, gameSpeed
-    case damageMultiplier, incomingDamageMultiplier, moveSpeedMultiplier, attackSpeedMultiplier, dashBonus
+    case invincibility, infiniteHealth, infiniteMoney, infiniteRerolls, fullGodGauge, infiniteAmmo, forceEnableRerolls, boonRarityEnabled, moneyMultiplierEnabled, resourceMultiplierEnabled, gameSpeed
+    case damageMultiplier, incomingDamageMultiplier, moveSpeedMultiplier, attackSpeedMultiplier, dashBonus, moneyMultiplier, resourceMultiplier
 
     var id: String { rawValue }
     var cheatDefinition: TrainerCheatDefinition { HadesCheatCatalog.definition(id: rawValue)! }
     var key: String { cheatDefinition.label.rawKey ?? "hades.\(rawValue)" }
     var isToggle: Bool { cheatDefinition.kind == .toggle }
     var helpKey: String { cheatDefinition.help?.rawKey ?? "hades.noConsumptionHelp" }
-    var neutralValue: Double { self == .dashBonus ? 0 : 1 }
+    var neutralValue: Double {
+        switch self {
+        case .dashBonus: return 0
+        case .moneyMultiplier, .resourceMultiplier: return 2
+        default: return 1
+        }
+    }
 }
 
 /// Only the exact-acquisition workbench may set this session state.
@@ -29,6 +35,8 @@ enum HadesTextEdit {
     case value(HadesHeroValue)
     case resource(String)
     case feature(HadesFeature)
+    case fishingChance
+    case chaosGateChance
 }
 
 enum HadesFeatureValue: Decodable, Equatable {
@@ -171,14 +179,68 @@ struct HadesWorldReward: Decodable, Identifiable {
 struct HadesWorldActionTarget: Decodable, Equatable {
     let kind: String
     let id: String
+    let enabled: Bool
+    let reason: String?
+    let warning: String?
+    let acceptsReward: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case kind, id, enabled, reason, warning, acceptsReward
+    }
+
+    init(kind: String, id: String, enabled: Bool = true, reason: String? = nil,
+         warning: String? = nil, acceptsReward: Bool = false) {
+        self.kind = kind
+        self.id = id
+        self.enabled = enabled
+        self.reason = reason
+        self.warning = warning
+        self.acceptsReward = acceptsReward
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try container.decode(String.self, forKey: .kind)
+        id = try container.decode(String.self, forKey: .id)
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        reason = try container.decodeIfPresent(String.self, forKey: .reason)
+        warning = try container.decodeIfPresent(String.self, forKey: .warning)
+        acceptsReward = try container.decodeIfPresent(Bool.self, forKey: .acceptsReward) ?? false
+    }
 
     var stableID: String { kind + ":" + id }
+    var isRoom: Bool { kind == "roomCategory" }
+}
+
+struct HadesWorldExitChoice: Equatable {
+    let room: String
+    let reward: String?
+
+    init(room: String, reward: String? = nil) {
+        self.room = room
+        self.reward = reward
+    }
+
+    init?(id: String) {
+        let parts = id.split(separator: ">", maxSplits: 1, omittingEmptySubsequences: false)
+        guard let room = parts.first, !room.isEmpty else { return nil }
+        if parts.count == 2 {
+            guard !parts[1].isEmpty else { return nil }
+            self.init(room: String(room), reward: String(parts[1]))
+        } else {
+            self.init(room: String(room))
+        }
+    }
+
+    var id: String { reward.map { room + ">" + $0 } ?? room }
 }
 
 struct HadesWorldActionLease: Decodable, Equatable {
-    let kind: String
-    let target: String
+    let room: String
+    let reward: String?
     let leaseToken: String
+
+    var choice: HadesWorldExitChoice { HadesWorldExitChoice(room: room, reward: reward) }
 }
 
 struct HadesWorldOccurrenceTarget: Decodable, Identifiable, Equatable {
@@ -197,19 +259,56 @@ struct HadesWorldDoor: Decodable, Identifiable, Equatable {
     let doorToken: String?
     let number: Int
     let roomName: String?
+    let roomKind: String?
     let reward: String
+    let rewardWarning: String?
     let targets: [HadesWorldActionTarget]?
     let activeLease: HadesWorldActionLease?
 
     var effectiveDoorToken: String { doorToken ?? id }
+    var effectiveRoomKind: String { roomKind ?? "" }
     var worldActionTargets: [HadesWorldActionTarget] { targets ?? [] }
+    var roomTargets: [HadesWorldActionTarget] { worldActionTargets.filter(\.isRoom) }
+    var rewardTargets: [HadesWorldActionTarget] { worldActionTargets.filter { $0.kind == "reward" } }
+
+    func isCurrentRoom(_ room: String) -> Bool {
+        room == "current" || room == roomName || (!effectiveRoomKind.isEmpty && room == effectiveRoomKind)
+    }
+
+    func offersAnyReward(_ room: HadesWorldActionTarget) -> Bool {
+        room.acceptsReward && room.id != "current"
+    }
+
+    func isEnabled(_ choice: HadesWorldExitChoice) -> Bool {
+        guard let room = roomTargets.first(where: { $0.id == choice.room }), room.enabled else { return false }
+        guard let reward = choice.reward else { return !room.acceptsReward || offersAnyReward(room) }
+        return room.acceptsReward && rewardTargets.contains { $0.id == reward && $0.enabled }
+    }
+
+    var defaultChoice: HadesWorldExitChoice? {
+        let rooms = roomTargets.filter(\.enabled)
+        if let current = rooms.first(where: { $0.acceptsReward && isCurrentRoom($0.id) }),
+           let reward = rewardTargets.first(where: { $0.enabled && $0.id != self.reward }) {
+            return HadesWorldExitChoice(room: current.id, reward: reward.id)
+        }
+        for room in rooms {
+            if !room.acceptsReward { return HadesWorldExitChoice(room: room.id) }
+            if let reward = rewardTargets.first(where: \.enabled) {
+                return HadesWorldExitChoice(room: room.id, reward: reward.id)
+            }
+            if offersAnyReward(room) { return HadesWorldExitChoice(room: room.id) }
+        }
+        return nil
+    }
 }
 
 struct HadesWorldObservation: Decodable, Equatable {
     let roomId: String
     let doors: [HadesWorldDoor]
     let canFish: Bool
+    let fishingReason: String?
     let canChaos: Bool
+    let chaosReason: String?
     let objects: [String]
     let occurrenceTargets: [HadesWorldOccurrenceTarget]?
     let occurrence: HadesWorldOccurrenceLease?
@@ -220,6 +319,11 @@ struct HadesWorldObservation: Decodable, Equatable {
 struct HadesObservation: Decodable {
     let connected: Bool
     let pid: Int32?
+    let status: String?
+    let scene: String?
+    let version: String?
+    let roomName: String?
+    let runtimeRevision: String?
     let heroReady: Bool
     let invincible: Bool?
     let health: Double?
@@ -236,7 +340,13 @@ struct HadesObservation: Decodable {
     let activeFeatures: [String: Bool]?
     let dormantFeatures: [String: Bool]?
     let boonRarityTarget: String?
+    let boonForceLegendary: Bool?
+    let boonForceDuo: Bool?
+    let fishingChance: Double?
+    let chaosGateChance: Double?
+    let canOpenSellTraits: Bool?
     let resources: [String: Double]?
+    let resourceLocks: [String: Int]?
     let traits: [HadesCurrentTrait]?
     let world: HadesWorldObservation?
 }
@@ -293,9 +403,10 @@ struct HadesNumberDraft {
 enum HadesShortcutAction: String, CaseIterable, Identifiable {
     case invincibility, infiniteHealth, infiniteMoney, infiniteRerolls, fullGodGauge, infiniteAmmo, forceEnableRerolls
     case decreaseGameSpeed, increaseGameSpeed
-    case boonRarityEnabled, generateFishing
-    case applyWorldExit, applyWorldOccurrence, generateChamberObject, generateChaosGate
+    case boonRarityEnabled, openSellTraits
     case acquireChaosPair, acquireExactBoon
+    case moneyMultiplierEnabled, resourceMultiplierEnabled, generateFishing
+    case applyWorldExit, applyWorldOccurrence, generateChamberObject, generateChaosGate
     case spawnOlympian, spawnPickup, spawnSpecial
     case disableAll
     var id: String { rawValue }
@@ -304,6 +415,7 @@ enum HadesShortcutAction: String, CaseIterable, Identifiable {
         case .disableAll: "host.disableAll"
         case .decreaseGameSpeed: "hades.shortcut.decreaseGameSpeed"
         case .increaseGameSpeed: "hades.shortcut.increaseGameSpeed"
+        case .openSellTraits: "hades.shortcut.openPurgingPool"
         case .applyWorldExit: "hades.worldActions.modifyExit"
         case .applyWorldOccurrence: "hades.occurrence.title"
         case .generateChamberObject: "hades.chamberObject"
@@ -321,7 +433,7 @@ enum HadesShortcutAction: String, CaseIterable, Identifiable {
 }
 
 struct HadesShortcutStore {
-    static let currentLayoutVersion = 2
+    static let currentLayoutVersion = 5
     private static let moduleNamespace = "hades"
     static var layoutVersionKey: String { "\(moduleNamespace).shortcut.layoutVersion" }
 
@@ -338,9 +450,14 @@ struct HadesShortcutStore {
     private var core: TrainerShortcutStore<HadesShortcutAction>
 
     static func defaultLayout() -> [HadesShortcutAction: HotkeyChord] {
-        TrainerHotkeyLayout.defaultLayout(
+        let modifiers = HotkeyChord.controlModifier | HotkeyChord.optionModifier
+        return TrainerHotkeyLayout.defaultLayout(
             orderedActions: HadesWorkbenchCatalog.orderedShortcutActions,
-            dedicated: [.disableAll: TrainerHotkeyLayout.disableAllChord]
+            dedicated: [
+                .decreaseGameSpeed: HotkeyChord(keyCode: 27, modifiers: modifiers, keyLabel: "−"),
+                .increaseGameSpeed: HotkeyChord(keyCode: 24, modifiers: modifiers, keyLabel: "+"),
+                .disableAll: TrainerHotkeyLayout.disableAllChord,
+            ]
         )
     }
 
@@ -355,7 +472,7 @@ struct HadesShortcutStore {
         }
         let sortedAliases = legacyActionAliases.keys.sorted()
         let hasLegacyAliases = sortedAliases.contains { defaults.object(forKey: shortcutDefaultsKey(for: $0)) != nil }
-        guard hasLegacyAliases else {
+        guard storedVersion > 0 || hasLegacyAliases else {
             return nil
         }
 
@@ -410,6 +527,7 @@ struct HadesShortcutStore {
             storage: TrainerShortcutStorage(
                 moduleID: "hades",
                 defaults: defaults,
+                canWrite: { defaults.integer(forKey: Self.layoutVersionKey) <= Self.currentLayoutVersion },
                 finalizePersistence: {
                     Self.finalizePersistence(defaults)
                 }

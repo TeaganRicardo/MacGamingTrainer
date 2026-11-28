@@ -98,7 +98,9 @@ function IsRoomForced(run, room, data, args)
   return false
 end
 local roomGenerationCalls, randomValueCalls = 0, 0
+local lastCreateArgs
 function CreateRoom(data, args)
+  lastCreateArgs = clone(args)
   roomGenerationCalls = roomGenerationCalls + 1
   CurrentRun.RoomCreations[data.Name] = (CurrentRun.RoomCreations[data.Name] or 0) + 1
   local result = clone(data); result.RoomSetName = CurrentRun.CurrentRoom.RoomSetName or "Tartarus"
@@ -276,20 +278,27 @@ IsRoomRewardEligible = function(run, room, reward)
   end
   return originalRewardEligible(run, room, reward)
 end
-local function hasAthenaReward()
-  for _, target in ipairs(world().doors[1].targets or {}) do
-    if target.kind == "reward" and target.id == "AthenaUpgrade" then return true end
+local function findTarget(door, kind, id)
+  for _, target in ipairs(door.targets or {}) do
+    if target.kind == kind and target.id == id then return target end
   end
-  return false
+  return nil
+end
+local function hasTarget(door, kind, id)
+  local target = findTarget(door, kind, id)
+  return target ~= nil and target.enabled ~= false
 end
 local beforeRewardDraw = randomValueCalls
-assert(hasAthenaReward())
+assert(hasTarget(initialWorld.doors[1], "reward", "AthenaUpgrade"))
+assert(initialWorld.doors[1].roomKind == "combat", "missing roomKind on combat door")
 assert(SessionMapState == observationSession
     and SessionMapState.RequirementChecksThisFrame == 29
     and randomValueCalls == beforeRewardDraw,
   "native reward catalog changed the game's bookkeeping or RNG")
 rewardRequiresRandom = true
-assert(not hasAthenaReward(), "random-dependent reward target was presented as eligible")
+local rngAthena = findTarget(world().doors[1], "reward", "AthenaUpgrade")
+assert(rngAthena and rngAthena.enabled == true and rngAthena.warning == "reward_eligibility_requires_rng",
+  "random-dependent reward target did not retain availability with rng warning")
 assert(SessionMapState == observationSession
     and SessionMapState.RequirementChecksThisFrame == 29
     and randomValueCalls == beforeRewardDraw,
@@ -319,26 +328,25 @@ assert(world().doors[1].doorToken ~= idleDoorToken,
   "native unleased reward ABA revived the old exact exit token")
 fails("staleDoor", function()
   runtime.apply_world_exit({ roomId = originalRoomId, doorToken = idleDoorToken,
-    kind = "reward", targetID = "AthenaUpgrade", requestId = "idle-native-aba" })
+    room = "combat", reward = "AthenaUpgrade", requestId = "idle-native-aba" })
 end)
 
-local function hasTarget(door, kind, id)
-  for _, target in ipairs(door.targets or {}) do
-    if target.kind == kind and target.id == id then return true end
-  end
-  return false
-end
 assert(hasTarget(initialWorld.doors[1], "roomCategory", "story"))
+assert(findTarget(initialWorld.doors[1], "roomCategory", "combat").acceptsReward == true)
+assert(findTarget(initialWorld.doors[1], "roomCategory", "story").acceptsReward == false)
 assert(hasTarget(initialWorld.doors[2], "roomCategory", "combat"))
 assert(not hasTarget(initialWorld.doors[2], "roomCategory", "story"),
   "door-specific RoomSetName leaked the other door's route catalog")
 
 -- Native eligibility/force probes are read-only. If either native query tries
--- to sample RNG, the entire category override fails closed without a draw.
+-- to sample RNG, the targets remain buildable with an rng warning and zero draws.
 eligibilityUsesRandom = true
 local beforeEligibilityRandom = randomValueCalls
-assert(not hasTarget(world().doors[1], "roomCategory", "combat")
-    and not hasTarget(world().doors[1], "roomCategory", "story"))
+local rngWorld = world()
+local rngCombat = findTarget(rngWorld.doors[1], "roomCategory", "combat")
+local rngStory = findTarget(rngWorld.doors[1], "roomCategory", "story")
+assert(rngCombat and rngCombat.enabled == true and rngCombat.warning == "room_eligibility_requires_rng")
+assert(rngStory and rngStory.enabled == true and rngStory.warning == "room_eligibility_requires_rng")
 assert(randomValueCalls == beforeEligibilityRandom,
   "route eligibility inspection consumed native RNG")
 eligibilityUsesRandom = false
@@ -348,8 +356,8 @@ RoomSetData.Tartarus.A_ForcedRandom = {
 }
 forcedUsesRandom = true
 local beforeForcedRandomProbe = randomValueCalls
-assert(#world().doors[1].targets == 0,
-  "a random-dependent native force query exposed generic routes")
+assert(hasTarget(world().doors[1], "roomCategory", "combat"),
+  "a random-dependent native force query unexpectedly hid combat route")
 assert(randomValueCalls == beforeForcedRandomProbe,
   "native force inspection consumed GetRandomValue")
 forcedUsesRandom = false
@@ -361,11 +369,11 @@ assert(#world().doors[1].targets > 0)
 local firstPlanDoor, secondPlanDoor = world().doors[1], world().doors[2]
 runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = firstPlanDoor.doorToken,
-  kind = "roomCategory", targetID = "combat", requestId = "parallel-exit-a",
+  room = "combat", requestId = "parallel-exit-a",
 })
 runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = secondPlanDoor.doorToken,
-  kind = "roomCategory", targetID = "combat", requestId = "parallel-exit-b",
+  room = "combat", requestId = "parallel-exit-b",
 })
 local firstPlanLease = world().doors[1].activeLease
 local secondPlanLease = world().doors[2].activeLease
@@ -408,7 +416,7 @@ assert(ActivatedObjects[consumable.ObjectId] == consumable)
 local rewardDoor = world().doors[1]
 runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = rewardDoor.doorToken,
-  kind = "reward", targetID = "AthenaUpgrade", requestId = "athena-reward-1",
+  room = "combat", reward = "AthenaUpgrade", requestId = "athena-reward-1",
 })
 assert(firstDoor.Room == firstRoom and firstDoor.Room.ChosenRewardType == "Boon"
     and firstDoor.Room.ForceLootName == "AthenaUpgrade",
@@ -419,12 +427,14 @@ local rewardObserved = world().doors[1]
 assert(originalRoom.OfferedRewards[100].ForceLootName == "AthenaUpgrade"
     and rewardObserved.doorToken == rewardDoor.doorToken
     and rewardObserved.activeLease
+    and rewardObserved.activeLease.room == "combat"
+    and rewardObserved.activeLease.reward == "AthenaUpgrade"
     and rewardObserved.activeLease.leaseToken == "exit:athena-reward-1",
   "reward Apply changed stable exact-exit identity or lease feedback")
 fails("staleDoor", function()
   runtime.apply_world_exit({
     roomId = originalRoomId, doorToken = rewardObserved.doorToken,
-    kind = "reward", targetID = "AthenaUpgrade", requestId = "athena-reward-duplicate",
+    room = "combat", reward = "AthenaUpgrade", requestId = "athena-reward-duplicate",
   })
 end)
 runtime.cancel_world_exit({
@@ -435,17 +445,24 @@ assert(firstDoor.Room == firstRoom and world().doors[1].activeLease == nil)
 assert(firstDoor.CanBeRerolled == true,
   "reward Cancel did not restore native rerollability")
 local nativeGatedDoor = world().doors[1]
-fails("worldUnavailable", function()
-  runtime.apply_world_exit({
-    roomId = originalRoomId, doorToken = nativeGatedDoor.doorToken,
-    kind = "reward", targetID = "StackUpgrade", requestId = "gated-reward",
-  })
-end)
-assert(firstDoor.Room == firstRoom, "native reward-store gating was bypassed")
+local stackTarget = findTarget(nativeGatedDoor, "reward", "StackUpgrade")
+assert(stackTarget and stackTarget.warning == "reward_not_eligible",
+  "store-gated StackUpgrade should still be selectable with a warning")
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = nativeGatedDoor.doorToken,
+  room = "combat", reward = "StackUpgrade", requestId = "gated-reward",
+})
+assert(firstDoor.Room.ChosenRewardType == "StackUpgrade" and world().doors[1].activeLease.reward == "StackUpgrade",
+  "store-gated reward did not apply with warning")
+runtime.cancel_world_exit({
+  roomId = originalRoomId, doorToken = world().doors[1].doorToken,
+  leaseToken = world().doors[1].activeLease.leaseToken, requestId = "gated-reward-cancel",
+})
+assert(firstDoor.Room == firstRoom)
 local rerollDoor = world().doors[1]
 runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = rerollDoor.doorToken,
-  kind = "reward", targetID = "AthenaUpgrade", requestId = "athena-reroll",
+  room = "combat", reward = "AthenaUpgrade", requestId = "athena-reroll",
 })
 local beforeNativeReroll = world().doors[1]
 firstDoor.Room.ChosenRewardType = "RoomRewardMoneyDrop"; firstDoor.Room.ForceLootName = nil
@@ -461,7 +478,7 @@ end)
 fails("staleDoor", function()
   runtime.apply_world_exit({
     roomId = originalRoomId, doorToken = beforeNativeReroll.doorToken,
-    kind = "reward", targetID = "AthenaUpgrade", requestId = "stale-reroll-reapply",
+    room = "combat", reward = "AthenaUpgrade", requestId = "stale-reroll-reapply",
   })
 end)
 firstDoor.Room = firstRoom
@@ -471,8 +488,7 @@ local storyDoor = world().doors[1]
 runtime.apply_world_exit({
   roomId = originalRoomId,
   doorToken = storyDoor.doorToken,
-  kind = "roomCategory",
-  targetID = "story",
+  room = "story",
   requestId = "story-route-apply",
 })
 assert(firstDoor.Room == firstRoom,
@@ -487,8 +503,8 @@ assert(firstDoor.PreviewRoomName == firstRoom.Name
   "story reservation preview promised an uncommitted native story room or reward")
 local storyObserved = world().doors[1]
 assert(storyObserved.activeLease
-    and storyObserved.activeLease.kind == "roomCategory"
-    and storyObserved.activeLease.target == "story"
+    and storyObserved.activeLease.room == "story"
+    and storyObserved.activeLease.reward == nil
     and storyObserved.activeLease.leaseToken == "exit:story-route-apply",
   "route reservation was not projected as the authoritative active lease")
 runtime.cancel_world_exit({
@@ -511,7 +527,7 @@ assert(world().doors[1].activeLease == nil, "cancelled route lease remained acti
 local combatPreviewDoor = world().doors[1]
 runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = combatPreviewDoor.doorToken,
-  kind = "roomCategory", targetID = "combat", requestId = "neutral-combat-preview",
+  room = "combat", requestId = "neutral-combat-preview",
 })
 assert(firstDoor.Room == firstRoom and firstDoor.PreviewRoomName == firstRoom.Name
     and firstDoor.PreviewReward == "" and firstDoor.PreviewAnimation == "ExitPreview",
@@ -536,8 +552,7 @@ local combatDoor = world().doors[1]
 runtime.apply_world_exit({
   roomId = originalRoomId,
   doorToken = combatDoor.doorToken,
-  kind = "roomCategory",
-  targetID = "combat",
+  room = "combat",
   requestId = "combat-route-apply",
 })
 local combatCreationsBefore = CurrentRun.RoomCreations.A_Combat02 or 0
@@ -570,7 +585,7 @@ local siblingRewardDoor = world().doors[2]
 local originalSiblingOffer = originalRoom.OfferedRewards and originalRoom.OfferedRewards[101]
 runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = siblingRewardDoor.doorToken,
-  kind = "reward", targetID = "AthenaUpgrade", requestId = "unused-sibling-reward",
+  room = "combat", reward = "AthenaUpgrade", requestId = "unused-sibling-reward",
 })
 assert(secondDoor.Room.ForceLootName == "AthenaUpgrade" and world().doors[2].activeLease)
 local siblingDeparture = AttemptUseDoor(firstDoor)
@@ -718,26 +733,28 @@ RoomSetData.Tartarus.A_PreBoss01 = forcedRoom
 CurrentRun.BiomeDepthCache = 11
 assert(ChooseNextRoomData(CurrentRun, {}) == forcedRoom, "native depth-11 selection did not force its pre-boss")
 firstDoor.Room = clone(forcedRoom)
-local forcedTarget, beforeForcedAssignments = firstDoor.Room, assigned
-assert(#world().doors[1].targets == 0)
-local forcedDoor = world().doors[1]
-fails("worldUnavailable", function()
-  runtime.apply_world_exit({
-    roomId = originalRoomId, doorToken = forcedDoor.doorToken,
-    kind = "roomCategory", targetID = "combat", requestId = "forced-combat",
-  })
-end)
-fails("worldUnavailable", function()
-  runtime.apply_world_exit({
-    roomId = originalRoomId, doorToken = forcedDoor.doorToken,
-    kind = "reward", targetID = "AthenaUpgrade", requestId = "forced-reward",
-  })
-end)
-assert(firstDoor.Room == forcedTarget and assigned == beforeForcedAssignments)
+local forcedDoorObs = world().doors[1]
+assert(forcedDoorObs.roomKind == "" and forcedDoorObs.rewardWarning == "room_has_forced_reward",
+  "forced pre-boss door lacked roomKind/rewardWarning")
+local forcedCurrentTarget = findTarget(forcedDoorObs, "roomCategory", "current")
+assert(forcedCurrentTarget and forcedCurrentTarget.enabled == true and forcedCurrentTarget.acceptsReward == true,
+  "forced pre-boss door lacked fallback current target")
+local forcedCombatTarget = findTarget(forcedDoorObs, "roomCategory", "combat")
+assert(forcedCombatTarget and forcedCombatTarget.warning == "native_forced_room_present",
+  "forced progression did not attach native_forced_room_present warning")
+local beforeForcedApply = roomGenerationCalls
+runtime.apply_world_exit({
+  roomId = originalRoomId, doorToken = forcedDoorObs.doorToken,
+  room = "current", reward = "AthenaUpgrade", requestId = "forced-in-place",
+})
+assert(firstDoor.Room.ForceLootName == "AthenaUpgrade" and roomGenerationCalls == beforeForcedApply)
+runtime.cancel_world_exit({
+  roomId = originalRoomId, doorToken = world().doors[1].doorToken,
+  leaseToken = world().doors[1].activeLease.leaseToken, requestId = "forced-in-place-cancel",
+})
+assert(firstDoor.Room.ForcedFirstReward == "Shop" and firstDoor.Room.ChosenRewardType == "Shop",
+  "cancelling forced in-place edit did not restore ForcedFirstReward")
 firstDoor.Room = firstRoom
-assert(#world().doors[1].targets == 0, "a forced room outside World Actions was exposed")
-assert(#world().doors[1].targets == 0,
-  "forced exit unexpectedly exposed World Actions targets")
 CurrentRun.BiomeDepthCache = 8
 RoomSetData.Tartarus.A_PreBoss01 = nil
 assert(#world().doors[1].targets > 0)
@@ -746,7 +763,7 @@ local beforeForceDraws = randomDraws
 assert(ChooseNextRoomData(CurrentRun, {}) ~= RoomSetData.Tartarus.A_PreBossChance)
 assert(randomDraws == beforeForceDraws + 1, "the native selector lost its original chance draw")
 local beforeInspection = randomDraws
-assert(#world().doors[1].targets == 0, "potentially forced route was exposed as an override")
+assert(hasTarget(world().doors[1], "roomCategory", "combat"))
 runtime.disable_all()
 assert(randomDraws == beforeInspection and RandomChance == nativeRandomChance,
   "status or disabled inspection consumed native force RNG")
@@ -754,7 +771,10 @@ ChooseNextRoomData(CurrentRun, {})
 assert(randomDraws == beforeInspection + 1, "disabled native room selection changed its draw count")
 local beforeForceError = randomDraws
 forceError = true
-fails("injected native force failure", world)
+local probeErrWorld = world()
+local probeErrCombat = findTarget(probeErrWorld.doors[1], "roomCategory", "combat")
+assert(probeErrCombat and probeErrCombat.enabled == false and probeErrCombat.reason == "room_eligibility_probe_error",
+  "IsRoomForced probe failure did not disable room category with room_eligibility_probe_error")
 assert(RandomChance == nativeRandomChance and randomDraws == beforeForceError,
   "native force-query failure leaked its callback or consumed RNG")
 forceError = false
@@ -762,7 +782,7 @@ RoomSetData.Tartarus.A_PreBossChance = nil
 local cancelRouteDoor = world().doors[1]
 runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = cancelRouteDoor.doorToken,
-  kind = "roomCategory", targetID = "combat", requestId = "cancel-combat-route",
+  room = "combat", requestId = "cancel-combat-route",
 })
 local cancelRouteLease = world().doors[1].activeLease
 runtime.cancel_world_exit({
@@ -772,10 +792,13 @@ runtime.cancel_world_exit({
 assert(firstDoor.Room == firstRoom and world().doors[1].activeLease == nil)
 local beforeAssignments = assigned
 local shopDoor = world().doors[1]
+local shopTarget = findTarget(shopDoor, "roomCategory", "shop")
+assert(shopTarget and shopTarget.enabled == true and shopTarget.warning == "native_ineligible",
+  "ineligible shop room did not retain availability with warning")
 fails("worldUnavailable", function()
   runtime.apply_world_exit({
     roomId = originalRoomId, doorToken = shopDoor.doorToken,
-    kind = "roomCategory", targetID = "shop", requestId = "unavailable-shop",
+    room = "reprieve", requestId = "unavailable-reprieve",
   })
 end)
 assert(assigned == beforeAssignments)
@@ -786,7 +809,7 @@ runtime.apply_world_occurrence({
 local composedDoor = world().doors[1]
 runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = composedDoor.doorToken,
-  kind = "reward", targetID = "AthenaUpgrade", requestId = "reward-with-thanatos",
+  room = "combat", reward = "AthenaUpgrade", requestId = "reward-with-thanatos",
 })
 assert(world().occurrence and world().doors[1].activeLease
     and firstDoor.Room.ForceLootName == "AthenaUpgrade",
@@ -812,7 +835,7 @@ assert(ChooseEncounter(CurrentRun, firstDoor.Room).Name == "NativeDefault")
 -- a synthetic preview or a modified native reward behind.
 runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = world().doors[1].doorToken,
-  kind = "roomCategory", targetID = "story", requestId = "disable-all-route",
+  room = "story", requestId = "disable-all-route",
 })
 assert(firstDoor.PreviewRoomName == firstRoom.Name
     and firstDoor.PreviewReward == ""
@@ -824,7 +847,7 @@ assert(firstDoor.Room == firstRoom and firstDoor.PreviewRoomName == "A_Combat02"
   "Disable All left a synthetic route preview or route lease")
 runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = world().doors[1].doorToken,
-  kind = "reward", targetID = "AthenaUpgrade", requestId = "disable-all-reward",
+  room = "combat", reward = "AthenaUpgrade", requestId = "disable-all-reward",
 })
 assert(firstDoor.Room.ForceLootName == "AthenaUpgrade" and world().doors[1].activeLease)
 runtime.disable_all()
@@ -845,7 +868,7 @@ for _, injected in ipairs({ "create", "assign" }) do
   local previousGenerations, previousLeaves = roomGenerationCalls, leaveCalls
   runtime.apply_world_exit({
     roomId = originalRoomId, doorToken = world().doors[1].doorToken,
-    kind = "roomCategory", targetID = "combat", requestId = "failing-route-" .. injected,
+    room = "combat", requestId = "failing-route-" .. injected,
   })
   if injected == "create" then
     CreateRoom = function(data, args)
@@ -884,11 +907,11 @@ CurrentRun.CurrentRoom = originalRoom
 -- Its failure must not prevent the accepted native transition from finishing.
 runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = world().doors[1].doorToken,
-  kind = "roomCategory", targetID = "combat", requestId = "cleanup-primary",
+  room = "combat", requestId = "cleanup-primary",
 })
 runtime.apply_world_exit({
   roomId = originalRoomId, doorToken = world().doors[2].doorToken,
-  kind = "roomCategory", targetID = "combat", requestId = "cleanup-sibling",
+  room = "combat", requestId = "cleanup-sibling",
 })
 local originalPreview = CreateDoorRewardPreview
 CreateDoorRewardPreview = function(door)
@@ -983,6 +1006,352 @@ CurrentRun.Hero = clone(CurrentRun.Hero)
 assert(world().occurrence == nil and ChooseEncounter(CurrentRun, CurrentRun.CurrentRoom).Name == "NativeDefault",
   "hero identity replacement retained the previous run-scoped occurrence")
 assert(assigned > 0 and previews > 0)
+
+-- Conditional Fishing & Chaos Gate probabilities (0-100%, nil restore) and dynamic reasons.
+for _, bad in ipairs({ -1, 100.5, 0/0, 1/0, true, "50" }) do
+  fails("invalidValue", function() runtime.set_fishing_chance(bad) end)
+  fails("invalidValue", function() runtime.set_chaos_gate_chance(bad) end)
+end
+local prevBonusFn = GetTotalHeroTraitValue
+GetTotalHeroTraitValue = function(key) return key == "FishingPointChanceBonus" and 0.2 or 0 end
+GameState.ActiveMutators = {
+  { SecretSpawnChanceMultiplier = 2, FishingPointChanceMultiplier = 0.5 },
+}
+local st = runtime.set_fishing_chance(50)
+assert(st.fishingChance == 50)
+st = runtime.set_chaos_gate_chance(80)
+assert(st.chaosGateChance == 80)
+local rolledRoom = CreateRoom({
+  Name = "A_Combat03", RoomSetName = "Tartarus",
+  SecretSpawnChance = 0.08, FishingPointChance = 0.1,
+}, { ExistingArg = true })
+assert(math.abs(lastCreateArgs.RoomOverrides.SecretSpawnChance - 0.4) < 1e-6,
+  "SecretSpawnChance did not account for mutator multiplier")
+assert(math.abs(lastCreateArgs.RoomOverrides.FishingPointChance - 0.6) < 1e-6,
+  "FishingPointChance did not account for hero bonus and mutator multiplier")
+assert(math.abs(rolledRoom.SecretSpawnChance - 0.08) < 1e-6
+    and math.abs(rolledRoom.FishingPointChance - 0.1) < 1e-6,
+  "CreateRoom mutated base SecretSpawnChance / FishingPointChance on created room")
+
+-- Secrets / SecretSpawnChance == 0 rooms must keep native 0% Chaos gate suppression.
+lastCreateArgs = nil
+local zeroSecretRoom = CreateRoom({
+  Name = "A_PostBoss01", RoomSetName = "Tartarus", SecretSpawnChance = 0,
+}, {})
+assert(lastCreateArgs.RoomOverrides.SecretSpawnChance == nil,
+  "100/80% chaos override leaked into SecretSpawnChance=0 room")
+lastCreateArgs = nil
+CreateRoom({ Name = "RoomSecret01", RoomSetName = "Secrets", SecretSpawnChance = 0.1 }, {})
+assert(lastCreateArgs.RoomOverrides.SecretSpawnChance == nil,
+  "chaos override leaked into Secrets biome")
+
+-- 0% suppresses passive spawning via IsSecretDoorEligible and RoomChanceSuccess flags,
+-- while preserving explicit ForceSecretDoor and explicit one-shot Generate.
+runtime.set_fishing_chance(0)
+runtime.set_chaos_gate_chance(0)
+local suppressedRoom = CreateRoom({
+  Name = "A_Combat04", RoomSetName = "Tartarus", SecretSpawnChance = 0.08, FishingPointChance = 0.1,
+}, {})
+assert(suppressedRoom.FishingPointChanceSuccess == false and suppressedRoom.SecretChanceSuccess == false,
+  "0% did not clear FishingPointChanceSuccess / SecretChanceSuccess")
+suppressedRoom.SecretChanceSuccess = true
+CurrentRun.CurrentRoom = suppressedRoom
+assert(IsSecretDoorEligible(CurrentRun, suppressedRoom) == false,
+  "0% did not suppress uncommitted IsSecretDoorEligible check")
+suppressedRoom.ForceSecretDoor = true
+assert(IsSecretDoorEligible(CurrentRun, suppressedRoom) == true,
+  "0% blocked an explicit ForceSecretDoor room")
+
+-- Explicit Generate still works when probability override is 0%.
+inactivePoints = { 501 }
+secretPoints = { 601 }
+OfferedExitDoors = {}
+CurrentRun.LastFishingPointDepth = nil
+CurrentRun.LastSecretDepth = nil
+suppressedRoom.ForceSecretDoor = nil
+assert(world().canFish == true and world().canChaos == true,
+  "0% auto-spawn override blocked explicit one-shot Generate availability")
+runtime.generate_fishing(params())
+runtime.generate_chaos_gate(params())
+assert(activated == 501 and suppressedRoom.FishingPointId == 501 and CurrentRun.LastSecretDepth == 8)
+
+-- Dynamic fishingReason and chaosReason diagnostics.
+local prevCosmetics = GameState.Cosmetics
+assert(world().fishingReason == "existing" and world().chaosReason == "existing",
+  "expected existing reasons, got " .. tostring(world().fishingReason) .. " / " .. tostring(world().chaosReason))
+suppressedRoom.FishingPointId = nil
+suppressedRoom.CompletedFishing = nil
+suppressedRoom.ForceFishing = nil
+suppressedRoom.ForceSecretDoor = nil
+OfferedExitDoors = {}
+inactivePoints = {}
+assert(world().fishingReason == "placement", "expected placement, got " .. tostring(world().fishingReason))
+inactivePoints = { 501 }
+suppressedRoom.rodUnlocked = false
+suppressedRoom.FishingPointRequirements = { RequiredCosmetics = { "FishingUnlockItem" } }
+GameState.Cosmetics = {}
+assert(world().fishingReason == "rod", "expected rod, got " .. tostring(world().fishingReason))
+GameState.Cosmetics = { FishingUnlockItem = true }
+assert(world().fishingReason == "progression", "expected fishing progression, got " .. tostring(world().fishingReason))
+suppressedRoom.FishingPointRequirements = { RequiredMinRoomsSinceFishingPoint = 10 }
+CurrentRun.RunDepthCache = 12
+CurrentRun.LastFishingPointDepth = 8
+assert(world().fishingReason == "spacing", "expected fishing spacing, got " .. tostring(world().fishingReason))
+suppressedRoom.rodUnlocked = true
+
+secretPoints = {}
+assert(world().chaosReason == "placement", "expected chaos placement, got " .. tostring(world().chaosReason))
+secretPoints = { 601 }
+OfferedExitDoors[850] = { Name = "ShrinePointDoor", ObjectId = 850, Room = { Name = "RoomChallenge01" } }
+positions[601] = clone(positions[850])
+assert(world().chaosReason == "occupied", "expected occupied, got " .. tostring(world().chaosReason))
+OfferedExitDoors = {}
+CurrentRun.CurrentRoom.UsePreviousRoomSet = true
+assert(world().chaosReason == "route", "expected route, got " .. tostring(world().chaosReason))
+CurrentRun.CurrentRoom.UsePreviousRoomSet = nil
+suppressedRoom.SecretSpawnChance = 0
+assert(world().chaosReason == "room", "expected room, got " .. tostring(world().chaosReason))
+suppressedRoom.SecretSpawnChance = 0.08
+suppressedRoom.chaosUnlocked = false
+assert(world().chaosReason == "progression", "expected chaos progression, got " .. tostring(world().chaosReason))
+suppressedRoom.SecretDoorRequirements = { RequiredMinRoomsSinceSecretDoor = 10 }
+CurrentRun.RunDepthCache = 12
+CurrentRun.LastSecretDepth = 8
+assert(world().chaosReason == "spacing", "expected chaos spacing, got " .. tostring(world().chaosReason))
+suppressedRoom.chaosUnlocked = true
+
+runtime.set_fishing_chance(nil)
+runtime.set_chaos_gate_chance(nil)
+assert(runtime.fishingChance == nil and runtime.chaosGateChance == nil)
+GameState.Cosmetics = prevCosmetics
+GameState.ActiveMutators = nil
+GetTotalHeroTraitValue = prevBonusFn
+CurrentRun.RunDepthCache = nil
+CurrentRun.CurrentRoom = originalRoom
+inactivePoints = { 501 }
+secretPoints = { 601 }
+OfferedExitDoors = { [100] = firstDoor, [101] = secondDoor }
+CurrentRun.LastFishingPointDepth = nil
+CurrentRun.LastSecretDepth = nil
+positions[601] = { X = 100, Y = 50 }
+originalRoom.FishingPointId = nil
+originalRoom.WellShop = nil
+originalRoom.SellTraitShop = nil
+originalRoom.ChallengeSwitch = nil
+
+-- All 9 gods appear on modifiable combat doors (with warning = "god_not_eligible"
+-- when unlock/depth rules fail), House Contractor *RunProgress drops resolve and
+-- apply cleanly, and observation runs without redundant canModify calls.
+local allGodsLoot = {
+  ZeusUpgrade = { locked = true },
+  PoseidonUpgrade = { locked = true },
+  AthenaUpgrade = {},
+  AphroditeUpgrade = { locked = true },
+  AresUpgrade = {},
+  ArtemisUpgrade = {},
+  DionysusUpgrade = {},
+  DemeterUpgrade = { locked = true },
+  HermesUpgrade = { locked = true },
+  WeaponUpgrade = {},
+  StackUpgrade = {},
+}
+local previousLoot, previousStore, previousCosmetics, previousConsumables =
+  LootData, RewardStoreData, GameState.Cosmetics, ConsumableData
+local previousForcedFn = IsRoomForced
+LootData = allGodsLoot
+ConsumableData = {
+  RoomRewardMoneyDrop = {}, RoomRewardMaxHealthDrop = {},
+  RoomRewardMetaPointDropRunProgress = {}, GemDropRunProgress = {},
+  LockKeyDropRunProgress = {}, GiftDropRunProgress = {},
+}
+GameState.Cosmetics = {
+  RoomRewardMetaPointDropRunProgress = true,
+  GemDropRunProgress = true,
+  LockKeyDropRunProgress = true,
+  GiftDropRunProgress = true,
+}
+RewardStoreData = {
+  InvalidOverrides = { "Secrets" },
+  MetaProgress = {
+    { Name = "RoomRewardMetaPointDropRunProgress" },
+    { Name = "GemDropRunProgress" },
+    { Name = "LockKeyDropRunProgress" },
+    { Name = "GiftDropRunProgress" },
+  },
+  RunProgress = {
+    { Name = "Boon" },
+    { Name = "HermesUpgrade", locked = true },
+    { Name = "WeaponUpgrade" },
+    { Name = "StackUpgrade" },
+    { Name = "RoomRewardMaxHealthDrop" },
+    { Name = "RoomRewardMoneyDrop" },
+  },
+}
+CurrentRun.CurrentRoom = originalRoom
+firstDoor.Room = firstRoom
+OfferedExitDoors = { [100] = firstDoor }
+local forceChecks = 0
+IsRoomForced = function(...) forceChecks = forceChecks + 1; return previousForcedFn(...) end
+local godsWorld = world()
+IsRoomForced = previousForcedFn
+-- Route enumeration checks candidates once per room plus once for canModify(door),
+-- never 21x inside the reward loop.
+assert(forceChecks <= 8, "redundant canModify checks in world observation: " .. tostring(forceChecks))
+local byId = {}
+for _, target in ipairs(godsWorld.doors[1].targets or {}) do
+  if target.kind == "reward" then byId[target.id] = target end
+end
+for _, god in ipairs({
+  "ZeusUpgrade", "PoseidonUpgrade", "AthenaUpgrade", "AphroditeUpgrade",
+  "AresUpgrade", "ArtemisUpgrade", "DionysusUpgrade", "DemeterUpgrade", "HermesUpgrade",
+}) do
+  assert(byId[god], "missing god target on modifiable exit: " .. god)
+end
+assert(byId.ZeusUpgrade.warning == "god_not_eligible")
+assert(byId.PoseidonUpgrade.warning == "god_not_eligible")
+assert(byId.DemeterUpgrade.warning == "god_not_eligible")
+assert(byId.HermesUpgrade.warning == "god_not_eligible")
+assert(byId.AthenaUpgrade.warning == nil)
+assert(byId.RoomRewardMetaPointDrop and byId.GemDrop and byId.LockKeyDrop and byId.GiftDrop,
+  "House Contractor *RunProgress drops missing from exit targets")
+
+local hermesApply = runtime.apply_world_exit({
+  roomId = godsWorld.roomId, doorToken = godsWorld.doors[1].doorToken,
+  room = "combat", reward = "HermesUpgrade", requestId = "warned-hermes",
+})
+assert(firstDoor.Room.ChosenRewardType == "HermesUpgrade" and hermesApply.world.doors[1].activeLease.reward == "HermesUpgrade")
+runtime.cancel_world_exit({
+  roomId = hermesApply.world.roomId, doorToken = hermesApply.world.doors[1].doorToken,
+  leaseToken = hermesApply.world.doors[1].activeLease.leaseToken, requestId = "warned-hermes-cancel",
+})
+local darknessApply = runtime.apply_world_exit({
+  roomId = godsWorld.roomId, doorToken = world().doors[1].doorToken,
+  room = "combat", reward = "RoomRewardMetaPointDrop", requestId = "contractor-darkness",
+})
+assert(firstDoor.Room.ChosenRewardType == "RoomRewardMetaPointDropRunProgress")
+runtime.cancel_world_exit({
+  roomId = darknessApply.world.roomId, doorToken = darknessApply.world.doors[1].doorToken,
+  leaseToken = darknessApply.world.doors[1].activeLease.leaseToken, requestId = "contractor-darkness-cancel",
+})
+
+-- Combined room-type + reward reservation: when a door currently leads to a story room,
+-- picking combat + AthenaUpgrade previews AthenaUpgrade without CreateRoom, cancels cleanly,
+-- and late-commits combat + AthenaUpgrade on LeaveRoom.
+firstDoor.Room = { Name = "A_Story01", ChosenRewardType = "Story" }
+CurrentRun.CurrentRoom = originalRoom
+local storyDoorObs = world().doors[1]
+assert(storyDoorObs.roomKind == "story")
+local storyRoomTarget = findTarget(storyDoorObs, "roomCategory", "story")
+local combatRoomTarget = findTarget(storyDoorObs, "roomCategory", "combat")
+local currentFallbackTarget = findTarget(storyDoorObs, "roomCategory", "current")
+assert(storyRoomTarget and storyRoomTarget.acceptsReward == false)
+assert(combatRoomTarget and combatRoomTarget.acceptsReward == true)
+assert(currentFallbackTarget and currentFallbackTarget.acceptsReward == true)
+local combinedCreations = roomGenerationCalls
+local combinedApply = runtime.apply_world_exit({
+  roomId = storyDoorObs.roomId or godsWorld.roomId,
+  doorToken = storyDoorObs.doorToken,
+  room = "combat", reward = "AthenaUpgrade", requestId = "combined-combat-athena",
+})
+assert(roomGenerationCalls == combinedCreations, "combined route+reward Apply called CreateRoom early")
+assert(firstDoor.PreviewReward == "AthenaUpgrade", "combined route+reward Apply did not preview chosen reward")
+assert(combinedApply.world.doors[1].activeLease.room == "combat"
+    and combinedApply.world.doors[1].activeLease.reward == "AthenaUpgrade")
+runtime.cancel_world_exit({
+  roomId = combinedApply.world.roomId,
+  doorToken = combinedApply.world.doors[1].doorToken,
+  leaseToken = combinedApply.world.doors[1].activeLease.leaseToken,
+  requestId = "combined-combat-athena-cancel",
+})
+assert(firstDoor.PreviewReward == "Story", "cancelling combined route+reward did not restore Story preview")
+runtime.apply_world_exit({
+  roomId = godsWorld.roomId,
+  doorToken = world().doors[1].doorToken,
+  room = "combat", reward = "AthenaUpgrade", requestId = "combined-combat-athena-commit",
+})
+local combinedEntered = AttemptUseDoor(firstDoor)
+assert(combinedEntered.Name == "A_Combat02"
+    and combinedEntered.ChosenRewardType == "Boon"
+    and combinedEntered.ForceLootName == "AthenaUpgrade",
+  "combined route+reward did not materialize both room type and reward on LeaveRoom")
+CurrentRun.CurrentRoom = originalRoom
+firstDoor.Room = firstRoom
+OfferedExitDoors[100] = firstDoor
+
+-- Fine-grained probe error, god limit, sibling god exclusion, current-store warning, and room reasons.
+local originalEligibleFn = IsRoomRewardEligible
+IsRoomRewardEligible = function(run, room, reward)
+  if reward.Name == "StackUpgrade" then error("injected reward probe error") end
+  return originalEligibleFn(run, room, reward)
+end
+local errRewardTarget = findTarget(world().doors[1], "reward", "StackUpgrade")
+assert(errRewardTarget and errRewardTarget.enabled == false
+    and errRewardTarget.reason == "reward_eligibility_probe_error",
+  "throwing reward probe did not disable reward with reward_eligibility_probe_error")
+fails("worldUnavailable", function()
+  runtime.apply_world_exit({
+    roomId = godsWorld.roomId, doorToken = world().doors[1].doorToken,
+    room = "combat", reward = "StackUpgrade", requestId = "disabled-reward-probe",
+  })
+end)
+IsRoomRewardEligible = originalEligibleFn
+
+GetEligibleLootNames = function(excluded) return { "AthenaUpgrade" } end
+ReachedMaxGods = function(excluded) return true end
+CurrentRun.RewardStores = { RunProgress = { { Name = "Boon" } } }
+firstRoom.RewardStoreName = "RunProgress"
+originalRoom.OfferedRewards = { [100] = { Type = "Boon", ForceLootName = "AthenaUpgrade" }, [101] = { Type = "Boon", ForceLootName = "AresUpgrade" } }
+local fineWorld = world()
+local aresTarget = findTarget(fineWorld.doors[1], "reward", "AresUpgrade")
+local zeusLimitTarget = findTarget(fineWorld.doors[1], "reward", "ZeusUpgrade")
+local gemOtherStoreTarget = findTarget(fineWorld.doors[1], "reward", "GemDrop")
+assert(aresTarget and aresTarget.warning == "reward_not_available", "sibling god did not emit reward_not_available")
+assert(zeusLimitTarget and zeusLimitTarget.warning == "god_limit", "maxed god pool did not emit god_limit")
+assert(gemOtherStoreTarget and gemOtherStoreTarget.warning == "reward_not_in_current_store",
+  "off-store reward did not emit reward_not_in_current_store")
+GetEligibleLootNames = nil
+ReachedMaxGods = nil
+CurrentRun.RewardStores = nil
+firstRoom.RewardStoreName = nil
+originalRoom.OfferedRewards = {}
+
+RoomSetData.Tartarus.A_Story01.eligible = false
+RoomSetData.Tartarus.A_Story01.ForceAtBiomeDepthMin = 10
+assert(findTarget(world().doors[1], "roomCategory", "story").warning == "biome_depth_too_low")
+RoomSetData.Tartarus.A_Story01.ForceAtBiomeDepthMin = nil
+RoomSetData.Tartarus.A_Story01.eligible = true
+originalRoom.NextRoomSet = { "Asphodel" }
+assert(findTarget(world().doors[1], "roomCategory", "combat").warning == "source_next_room_set")
+originalRoom.NextRoomSet = nil
+
+-- Deferred world command machinery on Main.lua:_threads runs cleanly and
+-- cancels pending commands when paused without tainting the runtime.
+_threads = {}
+local cancelledWorld = runtime.submit_world_command("wcmd-cancel", "gain_resource",
+  { [1] = { resource = "Money", amount = 50 }, n = 1 })
+assert(cancelledWorld.state == "pending")
+cancelledWorld = runtime.cancel_world_command("wcmd-cancel")
+assert(cancelledWorld.state == "cancelled")
+
+_threads = {}
+local submittedWorld = runtime.submit_world_command("wcmd-run", "apply_world_exit",
+  { [1] = {
+    roomId = godsWorld.roomId, doorToken = world().doors[1].doorToken,
+    room = "combat", reward = "PoseidonUpgrade", requestId = "deferred-poseidon",
+  }, n = 1 })
+assert(submittedWorld.state == "pending" and #_threads == 1)
+assert(coroutine.resume(_threads[1].thread))
+local finishedWorld = runtime.world_command_result("wcmd-run")
+assert(finishedWorld.state == "complete" and firstDoor.Room.ForceLootName == "PoseidonUpgrade")
+runtime.cancel_world_exit({
+  roomId = finishedWorld.result.world.roomId,
+  doorToken = finishedWorld.result.world.doors[1].doorToken,
+  leaseToken = finishedWorld.result.world.doors[1].activeLease.leaseToken,
+  requestId = "deferred-poseidon-cancel",
+})
+
+LootData, RewardStoreData, GameState.Cosmetics, ConsumableData =
+  previousLoot, previousStore, previousCosmetics, previousConsumables
 print("hades_world_native_shaped_journeys_ok")
 '''
 harness = harness.replace('RUNTIME', lua_literal(str(ROOT / 'Backend/games/hades/runtime.lua')))
