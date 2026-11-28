@@ -1,5 +1,6 @@
 """Hades command semantics; debugger lifetime is isolated in its own sidecar."""
 from functools import partial
+from pathlib import Path
 
 from core.adapter import AdapterError, GameAdapter
 from core.errors import PresentableError
@@ -11,6 +12,7 @@ from core.target_probe import (
     locate_target,
     process_executable_path as process_executable_path,
 )
+from . import config
 from .catalog import catalog, get_entry, resource_catalog, trait_names
 from .preferences import HadesPreferenceStore
 from .recovery import HadesRecoveryJournal
@@ -20,8 +22,16 @@ from .profiles import HadesProfileStore
 from .diagnostics import build_diagnostics
 from .operation_budgets import LAUNCH_TIMEOUT_SECONDS, PROCESS_QUERY_TIMEOUT_SECONDS
 from .save_document import HadesSaveValueError
-from .schema import (DEFAULT_FEATURES, DEFAULT_PREFERENCES, LOCK_FIELDS, ONE_SHOT_COMMANDS,
-                     RESOURCE_IDS, feature_value, preference_value, invalid_value, number)
+from .schema import (DEFAULT_FEATURES, LOCK_FIELDS, ONE_SHOT_COMMANDS,
+                     RESOURCE_IDS, default_preferences, feature_value, preference_value, invalid_value, number)
+
+
+def _rarity_params(features):
+    return {
+        'target': features['boonRarityTarget'],
+        'forceLegendary': features['boonForceLegendary'],
+        'forceDuo': features['boonForceDuo'],
+    }
 
 
 def _locate_hades_target(context):
@@ -37,18 +47,26 @@ def _locate_hades_target(context):
 
 
 class HadesAdapter(GameAdapter):
-    def __init__(self, context, *, runtime=None, locate_process=None, preferences=None):
+    def __init__(self, context, *, runtime=None, locate_process=None, preferences=None, recovery=None):
         super().__init__(context)
         if runtime is None:
             from .client import HadesRuntimeClient
-            recovery = HadesRecoveryJournal(context.data_dir / 'runtime-request.json')
+            recovery = recovery or HadesRecoveryJournal(context.data_dir / 'runtime-request.json')
             runtime = HadesRuntimeClient(recovery=recovery)
         self.runtime = runtime
+        if recovery is not None:
+            self.recovery = recovery
+        else:
+            try:
+                self.recovery = object.__getattribute__(runtime, 'recovery')
+            except AttributeError:
+                self.recovery = None
         self.locate_process = locate_process or partial(_locate_hades_target, context)
         self.connected = False
+        self._connected_game_version = ''
         self.preferences = preferences or HadesPreferenceStore(context.data_dir / 'preferences.json')
         self.profiles = HadesProfileStore(self.preferences.path.parent / 'profiles')
-        self.features = dict(DEFAULT_PREFERENCES)
+        self.features = default_preferences()
         self._preferences_error = None
         try:
             self.features = self.preferences.load()
@@ -77,6 +95,21 @@ class HadesAdapter(GameAdapter):
                 'This control belongs to an earlier document baseline. Refresh the editor before editing.',
             ),
         )
+
+    def _reconcile_rarity_and_occurrence(self, state):
+        rarity = _rarity_params(self.features)
+        observed_rarity = {
+            'target': state.get('boonRarityTarget', 'Heroic'),
+            'forceLegendary': state.get('boonForceLegendary', False),
+            'forceDuo': state.get('boonForceDuo', False),
+        }
+        if observed_rarity != rarity:
+            state = self.runtime.command('set_boon_rarity', rarity)
+        for key, command in (('fishingChance', 'set_fishing_chance'), ('chaosGateChance', 'set_chaos_gate_chance')):
+            chance = self.features[key]
+            if chance is not None or state.get(key) is not None:
+                state = self.runtime.command(command, {'chance': chance})
+        return state
 
     @staticmethod
     def _hades_save_inventory(save_service, snapshot_id=None):
@@ -109,10 +142,7 @@ class HadesAdapter(GameAdapter):
                 try:
                     state = self.runtime.command('configure', {'features': runtime_features})
                     state = self._reconcile_locks(state)
-                    if features['boonRarityTarget'] != 'Heroic':
-                        state = self.runtime.command(
-                            'set_boon_rarity', {'target': features['boonRarityTarget']}
-                        )
+                    state = self._reconcile_rarity_and_occurrence(state)
                 except AdapterError as error:
                     if error.code in ('outcome_unknown', 'restart_required') or not self.runtime.connected:
                         self.connected = False
@@ -153,11 +183,10 @@ class HadesAdapter(GameAdapter):
             state = self.runtime.connect(*target, features=runtime_features)
             self.connected = state['connected']
             if self.connected:
+                game_app, executable, _ = config.resolve_game_install(Path(target[1]))
+                self._connected_game_version = config.read_build_version(game_app) if executable.is_file() else ''
                 state = self._reconcile_locks(state)
-            if self.connected and self.features['boonRarityTarget'] != 'Heroic':
-                state = self.runtime.command(
-                    'set_boon_rarity', {'target': self.features['boonRarityTarget']}
-                )
+                state = self._reconcile_rarity_and_occurrence(state)
             speed_error = self._reconcile_game_speed()
             if not self.connected:
                 if speed_error is not None:
@@ -186,12 +215,31 @@ class HadesAdapter(GameAdapter):
         if command == 'set_boon_rarity':
             self._require_known_desired_state()
             target = preference_value('boonRarityTarget', params.get('target'))
-            candidate = {**self.features, 'boonRarityTarget': target}
+            force_legendary = preference_value('boonForceLegendary', params.get('forceLegendary'))
+            force_duo = preference_value('boonForceDuo', params.get('forceDuo'))
+            candidate = {
+                **self.features,
+                'boonRarityTarget': target,
+                'boonForceLegendary': force_legendary,
+                'boonForceDuo': force_duo,
+            }
             self.preferences.save(candidate)
             self.features = candidate
             if not self.connected:
                 return self._observe({**self._offline(), 'features': self.features})
-            return self._observe(self.runtime.command('set_boon_rarity', {'target': target}))
+            return self._observe(self.runtime.command('set_boon_rarity', _rarity_params(self.features)))
+        if command in ('set_fishing_chance', 'set_chaos_gate_chance'):
+            self._require_known_desired_state()
+            if 'chance' not in params:
+                raise invalid_value()
+            key = 'fishingChance' if command == 'set_fishing_chance' else 'chaosGateChance'
+            value = preference_value(key, params['chance'])
+            candidate = {**self.features, key: value}
+            self.preferences.save(candidate)
+            self.features = candidate
+            if not self.connected:
+                return self._observe({**self._offline(), 'features': self.features})
+            return self._observe(self.runtime.command(command, {'chance': value}))
         if command == 'set_feature':
             self._require_known_desired_state()
             name = params.get('feature')
@@ -236,18 +284,31 @@ class HadesAdapter(GameAdapter):
                 runtime_params = {'vital': 'health', 'locked': locked, 'target': target}
                 key, state_key, flag_key = 'healthLock', 'healthLock', 'healthLocked'
             elif command == 'lock_resource':
-                if params.get('resource') != 'Money':
+                resource = params.get('resource')
+                if resource == 'Money':
+                    runtime_params = {'resource': 'Money', 'locked': locked, 'target': target}
+                    key, state_key, flag_key = 'moneyLock', 'moneyLock', 'moneyLocked'
+                elif isinstance(resource, str) and resource in RESOURCE_IDS:
+                    runtime_params = {'resource': resource, 'locked': locked, 'target': target}
+                    key, state_key, flag_key = 'resourceLocks', 'resourceLocks', None
+                else:
                     raise invalid_value()
-                runtime_params = {'resource': 'Money', 'locked': locked, 'target': target}
-                key, state_key, flag_key = 'moneyLock', 'moneyLock', 'moneyLocked'
             else:
                 runtime_params = {'locked': locked, 'target': target}
                 key, state_key, flag_key = 'rerollsLock', 'rerollsLock', 'rerollsLocked'
-            previous = dict(self.features)
+            previous = {**self.features, 'resourceLocks': dict(self.features.get('resourceLocks') or {})}
             state = self.runtime.command(command, runtime_params)
-            candidate = dict(self.features)
+            candidate = {**self.features, 'resourceLocks': dict(self.features.get('resourceLocks') or {})}
             try:
-                if state.get(flag_key) is True:
+                if flag_key is None:
+                    observed_locks = state.get(state_key)
+                    if not isinstance(observed_locks, dict):
+                        raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+                    validated_locks = preference_value('resourceLocks', observed_locks)
+                    if locked != (resource in validated_locks):
+                        raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+                    candidate[key] = validated_locks
+                elif state.get(flag_key) is True:
                     candidate[key] = (
                         preference_value('healthLock', state.get(state_key))
                         if key == 'healthLock'
@@ -272,11 +333,11 @@ class HadesAdapter(GameAdapter):
         if command == 'disable_all':
             persistence_error = None
             try:
-                self.preferences.save(DEFAULT_PREFERENCES)
+                self.preferences.save(default_preferences())
                 self._preferences_error = None
             except AdapterError as error:
                 persistence_error = error
-            self.features = dict(DEFAULT_PREFERENCES)
+            self.features = default_preferences()
             runtime_error = None
             speed_error = None
             state = {**self._offline(), 'features': self.features}
@@ -319,8 +380,30 @@ class HadesAdapter(GameAdapter):
                 mutation_input['requestId'] = request_id
             values = self._mutation_params(command, mutation_input)
             values['target'] = target
-            previous = dict(self.features)
+            previous = {**self.features, 'resourceLocks': dict(self.features.get('resourceLocks') or {})}
             state = self.runtime.command(command, values)
+            if command == 'set_resource':
+                res_name = values.get('resource')
+                if res_name in previous.get('resourceLocks', {}):
+                    observed_locks = state.get('resourceLocks')
+                    if not isinstance(observed_locks, dict):
+                        self._rollback_runtime_locks(previous)
+                        raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+                    try:
+                        validated_locks = preference_value('resourceLocks', observed_locks)
+                    except AdapterError as error:
+                        self._rollback_runtime_locks(previous)
+                        raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol') from error
+                    if validated_locks.get(res_name) != values.get('value'):
+                        self._rollback_runtime_locks(previous)
+                        raise AdapterError('debugger_protocol', 'hades.error.debuggerProtocol')
+                    candidate = {**self.features, 'resourceLocks': validated_locks}
+                    try:
+                        self.preferences.save(candidate)
+                    except AdapterError:
+                        self._rollback_runtime_locks(previous)
+                        raise
+                    self.features = candidate
             if command == 'set_value':
                 key = {
                     'health': 'healthLock',
@@ -372,6 +455,8 @@ class HadesAdapter(GameAdapter):
     def _mutation_params(command, params):
         if command in WORLD_COMMANDS:
             return world_mutation_params(command, params)
+        if command == 'open_sell_traits':
+            return {}
         if command == 'set_value':
             field = params.get('field')
             if field not in ('health', 'maxHealth', 'money', 'rerolls', 'godGauge'):
@@ -425,17 +510,23 @@ class HadesAdapter(GameAdapter):
 
     @staticmethod
     def _observed_locks(state):
-        return tuple(state.get(value) if state.get(flag) is True else None
+        base = tuple(state.get(value) if state.get(flag) is True else None
                      for flag, value in LOCK_FIELDS)
+        raw_res = state.get('resourceLocks')
+        res = dict(raw_res) if isinstance(raw_res, dict) else {}
+        return (*base, res)
 
     def _reconcile_locks(self, state):
         """Converge the resident's lock intent, which survives detach, on desired state."""
-        desired = (self.features['healthLock'], self.features['moneyLock'], self.features['rerollsLock'])
-        if self._observed_locks(state) == desired:
+        desired_res = dict(self.features.get('resourceLocks') or {})
+        desired = (self.features['healthLock'], self.features['moneyLock'], self.features['rerollsLock'], desired_res)
+        observed = self._observed_locks(state)
+        if observed == desired:
             return state
-        return self.runtime.command('configure_locks', {
-            'health': desired[0], 'money': desired[1], 'rerolls': desired[2],
-        })
+        params = {'health': desired[0], 'money': desired[1], 'rerolls': desired[2]}
+        if desired_res or observed[3]:
+            params['resourceLocks'] = desired_res
+        return self.runtime.command('configure_locks', params)
 
     def _rollback_runtime_locks(self, preferences):
         try:
@@ -443,6 +534,7 @@ class HadesAdapter(GameAdapter):
                 'health': preferences.get('healthLock'),
                 'money': preferences.get('moneyLock'),
                 'rerolls': preferences.get('rerollsLock'),
+                'resourceLocks': dict(preferences.get('resourceLocks') or {}),
             })
         except AdapterError:
             # The original persistence/protocol failure remains authoritative.
@@ -530,9 +622,85 @@ class HadesAdapter(GameAdapter):
             else:
                 state[value] = self.features.get(value)
                 state[flag] = state[value] is not None
+        if live and isinstance(state.get('resourceLocks'), dict):
+            state['resourceLocks'] = dict(state['resourceLocks'])
+        else:
+            state['resourceLocks'] = dict(self.features.get('resourceLocks') or {})
         if not (live and state.get('boonRarityTarget') in ('Common', 'Rare', 'Epic', 'Heroic')):
             state['boonRarityTarget'] = self.features.get('boonRarityTarget', 'Heroic')
+        for flag in ('boonForceLegendary', 'boonForceDuo'):
+            if not (live and type(state.get(flag)) is bool):
+                state[flag] = self.features.get(flag, False)
+        state['canOpenSellTraits'] = bool(state.get('canOpenSellTraits')) if live else False
+        for key in ('fishingChance', 'chaosGateChance'):
+            if live:
+                raw = state.get(key)
+                state[key] = float(raw) if type(raw) in (int, float) else None
+            else:
+                state[key] = self.features.get(key)
+        pending_recovery = self._describe_recovery()
+        state['recovery'] = pending_recovery
+        if live:
+            state['version'] = self._connected_game_version
+            raw_status = state.get('status')
+            if not isinstance(raw_status, str) or not raw_status:
+                state['status'] = 'ready' if state.get('heroReady') else 'waiting'
+            raw_scene = state.get('scene')
+            if not isinstance(raw_scene, str) or not raw_scene:
+                state['scene'] = 'unknown'
+        else:
+            located = None
+            locate_error = None
+            try:
+                located = self.locate_process()
+            except (AdapterError, BoundedCommandTimeoutError) as error:
+                locate_error = error
+            located_exe = Path(located[1]) if located is not None and len(located) > 1 and located[1] else None
+            if located_exe is not None and located_exe.is_file():
+                install = config.inspect_install(located_exe)
+                installed, compatible = install['installed'], install['compatible']
+                state['version'] = install['version']
+            else:
+                game_app, executable, _ = config.resolve_game_install()
+                installed = game_app.is_dir() and executable.is_file()
+                compatible = True
+                state['version'] = config.read_build_version(game_app) if installed else ''
+            observed_pid = located[0] if located is not None else state.get('pid')
+            state['pid'] = observed_pid
+            state['scene'] = 'unknown'
+            state['roomName'] = None
+            state['runtimeRevision'] = None
+            recovery_matches = (
+                pending_recovery is not None
+                and (
+                    pending_recovery.get('outcome') == 'unavailable'
+                    or observed_pid is None
+                    or pending_recovery.get('pid') == observed_pid
+                )
+            )
+            if recovery_matches:
+                state['status'] = 'restart_required'
+            elif located is not None:
+                if not compatible:
+                    state['status'] = 'incompatible'
+                else:
+                    state['status'] = 'disconnected'
+            elif locate_error is not None and getattr(locate_error, 'code', None) == 'ambiguous_target':
+                state['status'] = 'disconnected'
+            else:
+                state['status'] = 'not_running' if installed else 'not_installed'
         return state
+
+    def _describe_recovery(self):
+        if self.recovery is None or not callable(getattr(self.recovery, 'describe', None)):
+            return None
+        try:
+            return self.recovery.describe()
+        except AdapterError as error:
+            return {'outcome': 'unavailable', 'presentation': error.presentation}
+
+    def state_for_error(self):
+        return self._observe({**self._offline(), 'features': self.features})
 
     @staticmethod
     def _offline():

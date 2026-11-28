@@ -15,11 +15,19 @@ struct HadesTrainerView: View {
     @State private var gameSpeedInput = "1.0"
     @State private var gameSpeedPreview: Double?
     @State private var gameSpeedEditing = false
+    @State private var resourceSearch = ""
+    @State private var selectedResource = "MetaPoints"
     @State private var focusedField: EditField?
     @State private var drafts = TrainerObservedDrafts<EditField>()
 
     private static let heroValues: [HadesHeroValue] = [.health, .maxHealth, .money, .rerolls, .godGauge]
-    private static let multipliers = HadesFeature.allCases.filter { !$0.isToggle && $0 != .gameSpeed }
+    private static let multipliers = HadesFeature.allCases.filter {
+        !$0.isToggle && $0 != .gameSpeed && $0 != .moneyMultiplier && $0 != .resourceMultiplier
+    }
+    private static let economyMultipliers: [(HadesFeature, HadesFeature, HadesShortcutAction)] = [
+        (.moneyMultiplierEnabled, .moneyMultiplier, .moneyMultiplierEnabled),
+        (.resourceMultiplierEnabled, .resourceMultiplier, .resourceMultiplierEnabled),
+    ]
 
     private func text(_ key: String) -> String { localization.string(key) }
 
@@ -58,11 +66,11 @@ struct HadesTrainerView: View {
         for value in Self.heroValues {
             observed[.value(value)] = model.observed(value).map(HadesTrainerModel.displayText) ?? ""
         }
-        for feature in Self.multipliers {
+        for feature in HadesFeature.allCases where !feature.isToggle && feature != .gameSpeed {
             observed[.feature(feature)] = HadesTrainerModel.displayText(model.number(feature))
         }
-        for resource in Self.permanentResourceFallbacks {
-            observed[.resource(resource.id)] = model.resources[resource.id].map(HadesTrainerModel.displayText) ?? ""
+        if !selectedResource.isEmpty {
+            observed[.resource(selectedResource)] = model.resources[selectedResource].map(HadesTrainerModel.displayText) ?? ""
         }
         return observed
     }
@@ -147,7 +155,10 @@ struct HadesTrainerView: View {
         TrainerSection(title: text(HadesWorkbenchSection.common.titleKey),
                        icon: HadesWorkbenchSection.common.icon) {
             VStack(spacing: 1) {
-                ForEach(HadesFeature.allCases.filter { $0.isToggle && $0 != .boonRarityEnabled }) { feature in
+                ForEach(HadesFeature.allCases.filter {
+                    $0.isToggle && $0 != .boonRarityEnabled
+                        && $0 != .moneyMultiplierEnabled && $0 != .resourceMultiplierEnabled
+                }) { feature in
                     TrainerCheatToggleRow(
                         definition: feature.cheatDefinition,
                         state: featureState(feature),
@@ -265,6 +276,7 @@ struct HadesTrainerView: View {
         let definition = HadesFeature.boonRarityEnabled.cheatDefinition
         let title = definition.label.resolve(using: localization)
         let controlState = featureState(.boonRarityEnabled)
+        let forceEnabled = model.canEditIntent && model.isEnabled(.boonRarityEnabled)
         return TrainerLabeledControlRow(
             title: title,
             icon: definition.icon,
@@ -273,8 +285,26 @@ struct HadesTrainerView: View {
             opacity: controlState.opacity,
             helpText: definition.help?.resolve(using: localization) ?? ""
         ) {
+            HStack(spacing: 8) {
+                TrainerCheckboxControl(
+                    title: text("hades.rarity.forceLegendary"),
+                    isOn: model.effectiveBoonForceLegendary,
+                    enabled: forceEnabled,
+                    onChange: model.setBoonForceLegendary
+                )
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityIdentifier("hades.feature.forceLegendary")
+                TrainerCheckboxControl(
+                    title: text("hades.rarity.forceDuo"),
+                    isOn: model.effectiveBoonForceDuo,
+                    enabled: forceEnabled,
+                    onChange: model.setBoonForceDuo
+                )
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityIdentifier("hades.feature.forceDuo")
+            }
             Picker(text("hades.minimumRarity"), selection: Binding(
-                get: { model.boonRarityTarget },
+                get: { model.effectiveBoonRarityTarget },
                 set: model.setBoonRarityTarget
             )) {
                 ForEach(["Common", "Rare", "Epic", "Heroic"], id: \.self) { rarity in
@@ -301,6 +331,20 @@ struct HadesTrainerView: View {
                        icon: HadesWorkbenchSection.boons.icon) {
             boonRarityPanel
             HadesCurrentTraitsPanel(model: model)
+            TrainerLabeledControlRow(
+                title: text("hades.purgingPool"),
+                icon: HadesWorkbenchIcon.purge,
+                tint: model.canOpenSellTraitsAction ? theme.accent : theme.inactive,
+                emphasized: model.canOpenSellTraitsAction
+            ) {
+                TrainerShortcutBadgeSlot(text: model.shortcutText(.openSellTraits))
+                TrainerSecondaryActionButton(
+                    title: text("hades.open"),
+                    enabled: model.canOpenSellTraitsAction,
+                    widthRole: .compactRow
+                ) { _ = model.openSellTraits() }
+            }
+            .trainerGroupedRows()
             HadesCatalogView(model: model)
         }
     }
@@ -320,6 +364,8 @@ struct HadesTrainerView: View {
 
     /// All seven native resources always have independently visible edit rows.
     /// The catalog may arrive after the disconnected UI was first rendered.
+    private static let currencyResourceIDs: Set<String> = ["MetaPoints", "Gems", "LockKeys", "GiftPoints"]
+
     private var permanentResources: [HadesResourceDefinition] {
         let loaded = model.resourceCatalog.reduce(into: [String: HadesResourceDefinition]()) { result, entry in
             result[entry.id] = entry
@@ -327,34 +373,87 @@ struct HadesTrainerView: View {
         return Self.permanentResourceFallbacks.map { loaded[$0.id] ?? $0 }
     }
 
+    private var filteredResources: [HadesResourceDefinition] {
+        permanentResources.filter { resource in
+            resourceSearch.isEmpty
+                || resource.id.localizedCaseInsensitiveContains(resourceSearch)
+                || resource.names.values.contains { $0.localizedCaseInsensitiveContains(resourceSearch) }
+        }
+    }
+
+    private func resourceGroups(_ options: [HadesResourceDefinition]) -> [TrainerPickerSection<HadesResourceDefinition>] {
+        let currencies = options.filter { Self.currencyResourceIDs.contains($0.id) }
+        let bounties = options.filter { !Self.currencyResourceIDs.contains($0.id) }
+        var sections: [TrainerPickerSection<HadesResourceDefinition>] = []
+        if !currencies.isEmpty {
+            sections.append(TrainerPickerSection(id: 0, title: text("hades.resource.group.currencies"), items: currencies))
+        }
+        if !bounties.isEmpty {
+            sections.append(TrainerPickerSection(id: 1, title: text("hades.resource.group.bounties"), items: bounties))
+        }
+        return sections
+    }
+
+    private func repairSelectedResource() {
+        if filteredResources.contains(where: { $0.id == selectedResource })
+            && (model.resources.isEmpty || model.resources[selectedResource] != nil) {
+            return
+        }
+        selectedResource = filteredResources.first(where: { model.resources[$0.id] != nil })?.id
+            ?? filteredResources.first?.id
+            ?? ""
+    }
+
     private var resourcesSection: some View {
         TrainerSection(title: text(HadesWorkbenchSection.resources.titleKey),
                        icon: HadesWorkbenchSection.resources.icon) {
             VStack(spacing: 1) {
-                ForEach(permanentResources) { resource in
-                    TrainerLabeledControlRow(
-                        title: resourceLabel(resource),
-                        glyph: HadesResourceIcon.glyph(for: resource.id),
-                        tint: model.canMutate ? theme.accent : theme.inactive,
-                        emphasized: model.canMutate
+                ForEach(Self.economyMultipliers, id: \.0.id) { toggle, multiplier, shortcut in
+                    TrainerCheatMultiplierRow(
+                        definition: toggle.cheatDefinition,
+                        state: featureState(toggle),
+                        text: draft(.feature(multiplier)),
+                        onCommit: completing(.feature(multiplier)),
+                        onEditingChanged: TrainerTextField.editingTracker(
+                            $focusedField, equals: .feature(multiplier)
+                        ),
+                        shortcutText: model.shortcutText(shortcut)
                     ) {
-                        TrainerNumberField(
-                            text: draft(.resource(resource.id)),
-                            placeholder: "host.amount",
-                            accessibilityLabel: resourceLabel(resource),
-                            accessibilityIdentifier: "hades.resource.\(resource.id)",
-                            width: 110,
-                            enabled: model.canMutate && !model.busy && model.resources[resource.id] != nil,
-                            alignment: .leading,
-                            onEditingChanged: TrainerTextField.editingTracker(
-                                $focusedField, equals: .resource(resource.id)
-                            ),
-                            onCommit: completing(.resource(resource.id))
-                        )
+                        model.setFeature(toggle, value: !model.isEnabled(toggle))
                     }
                 }
             }
             .trainerGroupedRows()
+
+            let selectedLocked = model.resourceLocks[selectedResource] != nil
+            TrainerResourceEditor(
+                title: text("hades.resources"),
+                icon: TrainerSemanticIcon.Concept.item,
+                search: $resourceSearch,
+                selection: $selectedResource,
+                amount: draft(.resource(selectedResource)),
+                sections: resourceGroups(filteredResources),
+                enabled: model.canMutate && !model.busy && !model.resources.isEmpty,
+                lock: TrainerResourceLock(locked: selectedLocked) {
+                    guard !selectedResource.isEmpty else { return }
+                    model.lockResource(selectedResource, locked: !selectedLocked)
+                },
+                itemLabel: { resource in
+                    let label = resourceLabel(resource)
+                    let countText = model.resources[resource.id].map { " · \(HadesTrainerModel.displayText($0))" } ?? ""
+                    let lockText = model.resourceLocks[resource.id] != nil ? " · " + text("hades.vital.lockedSuffix") : ""
+                    return label + countText + lockText
+                },
+                onEditingChanged: TrainerTextField.editingTracker(
+                    $focusedField, equals: .resource(selectedResource)
+                ),
+                onCommit: completing(.resource(selectedResource))
+            )
+            .trainerPanel()
+            .onAppear { repairSelectedResource() }
+            .onChange(of: resourceSearch) { _, _ in repairSelectedResource() }
+            .onChange(of: model.resources.keys.sorted()) { _, _ in repairSelectedResource() }
+
             // Hades I's resource-gain action remains game-owned and visible.
             HadesGatheringPanel(model: model)
         }
@@ -446,13 +545,20 @@ private struct HadesCatalogView: View {
         return group.entries[0].source(language: localization.language.rawValue)
     }
 
+    private func selectExactSource(_ sourceID: String) {
+        guard let group = sourceGroups.first(where: { $0.id == sourceID }) else { return }
+        source = sourceID
+        if !group.entries.contains(where: { $0.id == model.selectedExactTrait }) {
+            model.selectedExactTrait = ""
+        }
+    }
     private func repairSelections() {
         if !sourceGroups.contains(where: { $0.id == source }) {
-            source = sourceGroups.first?.id ?? ""
+            let matchingGroup = sourceGroups.first { group in
+                group.entries.contains(where: { $0.id == model.selectedExactTrait })
+            }
+            source = matchingGroup?.id ?? sourceGroups.first?.id ?? ""
         }
-        repairItemSelection()
-    }
-    private func repairItemSelection() {
         if !selectedEntries.contains(where: { $0.id == model.selectedExactTrait }) {
             model.selectedExactTrait = selectedEntries.first?.id ?? ""
         }
@@ -512,6 +618,31 @@ private struct HadesCatalogView: View {
         }
     }
 
+    private static let exactBoonCaptionKeys = [
+        "hades.chaosBlessing", "hades.chaosCurse",
+        "hades.exactSource", "hades.selectTrait",
+    ]
+
+    /// Each dual-picker row splits what its two captions leave between its
+    /// pickers. Sizing every caption to the widest of the four, in the current
+    /// language, keeps all four pickers the same width and aligned.
+    private func exactBoonCaption(_ key: String) -> some View {
+        ZStack(alignment: .leading) {
+            ForEach(Self.exactBoonCaptionKeys, id: \.self) { Text(text($0)).hidden() }
+            Text(text(key))
+        }
+        .font(.caption).foregroundStyle(.secondary)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func exactBoonShortcut(_ action: HadesShortcutAction) -> some View {
+        ZStack(alignment: .leading) {
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair)).hidden()
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon)).hidden()
+            TrainerShortcutBadgeSlot(text: model.shortcutText(action))
+        }
+    }
+
     private var chaosRow: some View {
         VStack(alignment: .leading, spacing: 6) {
             TrainerDualInlinePickerLayout(
@@ -520,8 +651,7 @@ private struct HadesCatalogView: View {
             minimumShortcutWidth: theme.shortcutBadgeMinimumWidth,
             minimumActionWidth: theme.compactActionWidth
         ) {
-            Text(text("hades.chaosBlessing")).font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: true, vertical: false)
+            exactBoonCaption("hades.chaosBlessing")
             Picker(text("hades.chaosBlessing"), selection: $model.selectedChaosBlessing) {
                 if chaosBlessings.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
                 ForEach(chaosBlessings) { entry in
@@ -531,8 +661,7 @@ private struct HadesCatalogView: View {
             .labelsHidden()
             .trainerPicker(.layoutAllocated, state: model.canMutate && !chaosBlessings.isEmpty ? .interactive : .unavailable)
 
-            Text(text("hades.chaosCurse")).font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: true, vertical: false)
+            exactBoonCaption("hades.chaosCurse")
             Picker(text("hades.chaosCurse"), selection: $model.selectedChaosCurse) {
                 if chaosCurses.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
                 ForEach(chaosCurses) { entry in
@@ -542,7 +671,7 @@ private struct HadesCatalogView: View {
             .labelsHidden()
             .trainerPicker(.layoutAllocated, state: model.canMutate && !chaosCurses.isEmpty ? .interactive : .unavailable)
 
-            TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
+            exactBoonShortcut(.acquireChaosPair)
             TrainerSecondaryActionButton(
                 title: text("hades.acquire"),
                 enabled: model.canMutate && model.canAcceptRuntimeAction
@@ -585,9 +714,14 @@ private struct HadesCatalogView: View {
             minimumShortcutWidth: theme.shortcutBadgeMinimumWidth,
             minimumActionWidth: theme.compactActionWidth
         ) {
-            Text(text("hades.exactSource")).font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: true, vertical: false)
-            Picker(text("hades.exactSource"), selection: $source) {
+            exactBoonCaption("hades.exactSource")
+            Picker(
+                text("hades.exactSource"),
+                selection: Binding(
+                    get: { source },
+                    set: { selectExactSource($0) }
+                )
+            ) {
                 if sourceGroups.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
                 ForEach(sourceGroups) { group in
                     Text(sourceTitle(group)).tag(group.id)
@@ -596,10 +730,13 @@ private struct HadesCatalogView: View {
             .labelsHidden()
             .trainerPicker(.layoutAllocated, state: model.canMutate && !sourceGroups.isEmpty ? .interactive : .unavailable)
 
-            Text(text("hades.selectTrait")).font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: true, vertical: false)
+            exactBoonCaption("hades.selectTrait")
             Picker(text("hades.selectTrait"), selection: $model.selectedExactTrait) {
-                if selectedEntries.isEmpty { Text(text("hades.emptyCatalog")).tag("") }
+                if selectedEntries.isEmpty {
+                    Text(text("hades.emptyCatalog")).tag("")
+                } else if !selectedEntries.contains(where: { $0.id == model.selectedExactTrait }) {
+                    Text(text("hades.selectTraitPlaceholder")).tag("")
+                }
                 ForEach(selectedEntries) { entry in
                     Text(itemTitle(entry)).tag(entry.id)
                 }
@@ -607,11 +744,11 @@ private struct HadesCatalogView: View {
             .labelsHidden()
             .trainerPicker(.layoutAllocated, state: model.canMutate && !selectedEntries.isEmpty ? .interactive : .unavailable)
 
-            TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
+            exactBoonShortcut(.acquireExactBoon)
             TrainerSecondaryActionButton(
                 title: text("hades.acquire"),
                 enabled: selected?.acquirable != false
-                    && selected != nil && model.canMutate && model.canAcceptRuntimeAction,
+                    && selected != nil && model.canAcquireExactTrait,
                 widthRole: .compactRow
             ) {
                 _ = model.acquireSelectedTrait()
@@ -635,7 +772,6 @@ private struct HadesCatalogView: View {
             }
         }
         .onChange(of: matches.map(\.id), initial: true) { _, _ in repairSelections() }
-        .onChange(of: source) { _, _ in repairItemSelection() }
         .onChange(of: model.selectedExactTrait) { _, _ in model.activateAcquisition(.exact) }
         .onChange(of: model.selectedChaosBlessing) { _, _ in model.activateAcquisition(.chaos) }
         .onChange(of: model.selectedChaosCurse) { _, _ in model.activateAcquisition(.chaos) }
@@ -792,6 +928,7 @@ private struct HadesCurrentTraitPlaceholderRow: View {
                     .frame(width: 42, alignment: .trailing)
                 TrainerNumberField(
                     text: .constant(""),
+                    placeholder: "—",
                     accessibilityLabel: text("hades.level"),
                     width: theme.compactFieldWidth,
                     enabled: false,
@@ -840,6 +977,9 @@ private struct HadesCurrentTraitPlaceholderRow: View {
             Button(role: .destructive) {
             } label: {
                 Label(text("hades.remove"), systemImage: TrainerSemanticIcon.Action.remove)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
             .frame(width: TrainerManagedRowLayout.trailingActionWidth)
@@ -869,11 +1009,28 @@ private struct HadesCurrentTraitRow: View {
     private var rarities: [String] { entry?.rarities ?? [trait.rarity] }
     private func text(_ key: String) -> String { localization.string(key) }
 
+    static func suggestedLevel(for trait: HadesCurrentTrait, supportsLevel: Bool) -> String {
+        guard trait.canEdit && supportsLevel && trait.level < 100 else {
+            return String(trait.level)
+        }
+        return String(trait.level + 1)
+    }
+
+    static func suggestedRarity(for trait: HadesCurrentTrait, rarities: [String]) -> String {
+        guard trait.canEdit, let index = rarities.firstIndex(of: trait.rarity),
+              rarities.indices.contains(index + 1) else {
+            return trait.rarity
+        }
+        return rarities[index + 1]
+    }
+
     init(model: HadesTrainerModel, trait: HadesCurrentTrait) {
         self.model = model
         self.trait = trait
-        _rarity = State(initialValue: trait.rarity)
-        _level = State(initialValue: String(trait.level))
+        let catalogEntry = model.catalog.first { $0.id == trait.name }
+        let options = catalogEntry?.rarities ?? [trait.rarity]
+        _rarity = State(initialValue: Self.suggestedRarity(for: trait, rarities: options))
+        _level = State(initialValue: Self.suggestedLevel(for: trait, supportsLevel: catalogEntry?.supportsLevel != false))
         _owner = State(initialValue: model.target)
     }
 
@@ -895,9 +1052,8 @@ private struct HadesCurrentTraitRow: View {
             return text("hades.cancelTemporaryEffect")
         }
         if trait.level > 1 {
-            let prefix = text("hades.removeAllMatching")
             let name = model.traitName(trait, language: localization.language)
-            return localization.language == .zhCN ? prefix + name : prefix + " " + name
+            return localization.string("hades.removeAllMatching", arguments: [name])
         }
         return text("hades.remove")
     }
@@ -1011,12 +1167,41 @@ private struct HadesCurrentTraitRow: View {
             }
         }
         .onChange(of: trait) { old, updated in
-            if rarity == old.rarity { rarity = updated.rarity }
-            if level == String(old.level) { level = String(updated.level) }
-            owner = model.target
+            let supportsLevel = entry?.supportsLevel != false
+            let oldSuggestedRarity = Self.suggestedRarity(for: old, rarities: rarities)
+            let oldSuggestedLevel = Self.suggestedLevel(for: old, supportsLevel: supportsLevel)
+            let unchangedRarity = rarity == old.rarity || rarity == oldSuggestedRarity
+            let unchangedLevel = level == String(old.level) || level == oldSuggestedLevel
+            if unchangedRarity {
+                rarity = Self.suggestedRarity(for: updated, rarities: rarities)
+            }
+            if unchangedLevel {
+                level = Self.suggestedLevel(for: updated, supportsLevel: supportsLevel)
+            }
+            if unchangedRarity && unchangedLevel {
+                owner = model.target
+            }
+        }
+        .onChange(of: rarities) { oldOptions, updatedOptions in
+            let oldSuggestedRarity = Self.suggestedRarity(for: trait, rarities: oldOptions)
+            if rarity == trait.rarity || rarity == oldSuggestedRarity {
+                rarity = Self.suggestedRarity(for: trait, rarities: updatedOptions)
+            }
+        }
+        .onChange(of: entry?.supportsLevel) { oldSupports, supports in
+            let oldSuggestedLevel = Self.suggestedLevel(for: trait, supportsLevel: oldSupports != false)
+            if level == String(trait.level) || level == oldSuggestedLevel {
+                level = Self.suggestedLevel(for: trait, supportsLevel: supports != false)
+            }
         }
         .onChange(of: model.target) { _, target in
-            if rarity == trait.rarity && level == String(trait.level) { owner = target }
+            let supportsLevel = entry?.supportsLevel != false
+            let suggestedLevelValue = Self.suggestedLevel(for: trait, supportsLevel: supportsLevel)
+            let suggestedRarityValue = Self.suggestedRarity(for: trait, rarities: rarities)
+            if (rarity == trait.rarity || rarity == suggestedRarityValue)
+                && (level == String(trait.level) || level == suggestedLevelValue) {
+                owner = target
+            }
         }
     }
 }

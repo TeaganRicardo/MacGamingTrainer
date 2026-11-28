@@ -384,7 +384,18 @@ function SetTraitsOnLoot(loot, args)
   elseif allowed.Epic and (chances.Heroic or 0) >= 1 then rarity = "Heroic"
   elseif allowed.Epic and (chances.Epic or 0) >= 1 then rarity = "Epic"
   elseif allowed.Rare and (chances.Rare or 0) >= 1 then rarity = "Rare" end
-  loot.UpgradeOptions = { { ItemName = "ZeusTrait", Rarity = rarity } }
+  if type(loot.seedOptions) == "table" then
+    loot.UpgradeOptions = {}
+    for index, item in ipairs(loot.seedOptions) do
+      loot.UpgradeOptions[index] = {
+        ItemName = item.ItemName,
+        Type = item.Type or "Trait",
+        Rarity = item.Rarity or rarity,
+      }
+    end
+  else
+    loot.UpgradeOptions = { { ItemName = "ZeusTrait", Rarity = rarity } }
+  end
   loot.nativeArgs = args
   return "native", nil, rarity
 end
@@ -500,6 +511,124 @@ runtime.set_feature("boonRarityEnabled", false)
 SetTraitsOnLoot(olympian)
 assert(olympian.UpgradeOptions[1].Rarity == "Common", "turning rarity off did not restore natural rolls")
 runtime.set_feature("boonRarityEnabled", true)
+-- Forced Legendary & Duo: both share Rarity = "Legendary" natively and use
+-- TraitData.IsDuoBoon / ShopTier3Trait to distinguish eligibility.
+TraitData.ShopTier3Trait = { Cost = 120, RarityLevels = { Legendary = { MinMultiplier = 1, MaxMultiplier = 1 } } }
+TraitData.SynergyTrait = { IsDuoBoon = true, Frame = "Duo", RarityLevels = { Legendary = { MinMultiplier = 1, MaxMultiplier = 1 } } }
+TraitData.ZeusChargedBoltTrait = { Name = "ZeusChargedBoltTrait", InheritFrom = { "ShopTier3Trait" }, RarityLevels = { Legendary = {} } }
+TraitData.ZeusAthenaDuoTrait = { Name = "ZeusAthenaDuoTrait", IsDuoBoon = true, Frame = "Duo", InheritFrom = { "SynergyTrait" }, RarityLevels = { Legendary = {} } }
+TraitData.MagnetismTrait = { Name = "MagnetismTrait", InheritFrom = { "ShopTier3Trait" }, RarityLevels = { Legendary = {} } }
+TraitData.ZeusSecondTrait = { Name = "ZeusSecondTrait", RarityLevels = { Common = {}, Rare = {}, Epic = {}, Heroic = {} } }
+TraitData.ZeusThirdTrait = { Name = "ZeusThirdTrait", RarityLevels = { Common = {}, Rare = {}, Epic = {}, Heroic = {} } }
+local activeDevotion = false
+function GetEligibleUpgrades(upgradeOptions, loot, choiceData)
+  if loot.Name == "HermesUpgrade" then
+    return { { ItemName = "MagnetismTrait", Type = "Trait" } }
+  end
+  if loot.Name ~= "ZeusUpgrade" then return {} end
+  local pool = {
+    { ItemName = "ZeusChargedBoltTrait", Type = "Trait" },
+  }
+  if not activeDevotion then
+    pool[#pool + 1] = { ItemName = "ZeusAthenaDuoTrait", Type = "Trait" }
+  end
+  return pool
+end
+local function threeChoiceLoot(name, seedOptions)
+  return {
+    Name = name or "ZeusUpgrade",
+    RarityChances = { Rare = 0, Epic = 0, Heroic = 0, Legendary = 0 },
+    allowed = { Epic = true, Rare = true },
+    seedOptions = seedOptions,
+  }
+end
+local threeNormalSeeds = {
+  { ItemName = "ZeusTrait" },
+  { ItemName = "ZeusSecondTrait" },
+  { ItemName = "ZeusThirdTrait" },
+}
+-- Minimum target Common with forceLegendary=true forces Legendary while keeping Common offers intact.
+runtime.set_boon_rarity("Common", true, false)
+assert(runtime.status().boonForceLegendary == true and runtime.status().boonForceDuo == false)
+local forcedLegLoot = threeChoiceLoot("ZeusUpgrade", threeNormalSeeds)
+forcedLegLoot.allowed = {}
+SetTraitsOnLoot(forcedLegLoot)
+assert(#forcedLegLoot.UpgradeOptions == 3
+  and forcedLegLoot.UpgradeOptions[1].Rarity == "Common"
+  and forcedLegLoot.UpgradeOptions[2].Rarity == "Common"
+  and forcedLegLoot.UpgradeOptions[3].ItemName == "ZeusChargedBoltTrait"
+  and forcedLegLoot.UpgradeOptions[3].Rarity == "Legendary",
+  "forceLegendary did not insert Legendary on slot 3 even when minimum target is Common")
+-- 3 normal options with both forceLegendary=true and forceDuo=true inserts Duo on slot 2 and Legendary on slot 3.
+runtime.set_boon_rarity("Heroic", true, true)
+assert(runtime.status().boonForceLegendary == true and runtime.status().boonForceDuo == true)
+local forcedBothLoot = threeChoiceLoot("ZeusUpgrade", threeNormalSeeds)
+SetTraitsOnLoot(forcedBothLoot)
+assert(#forcedBothLoot.UpgradeOptions == 3
+  and forcedBothLoot.UpgradeOptions[1].ItemName == "ZeusTrait" and forcedBothLoot.UpgradeOptions[1].Rarity == "Heroic"
+  and forcedBothLoot.UpgradeOptions[2].ItemName == "ZeusAthenaDuoTrait" and forcedBothLoot.UpgradeOptions[2].Rarity == "Legendary"
+  and forcedBothLoot.UpgradeOptions[3].ItemName == "ZeusChargedBoltTrait" and forcedBothLoot.UpgradeOptions[3].Rarity == "Legendary",
+  "forcing both Legendary and Duo did not replace slots 3 and 2 without overwriting each other")
+-- Natural Duo offer (Rarity = "Legendary", IsDuoBoon = true) must NOT satisfy forceLegendary!
+local preRolledDuoLoot = threeChoiceLoot("ZeusUpgrade", {
+  { ItemName = "ZeusAthenaDuoTrait", Rarity = "Legendary" },
+  { ItemName = "ZeusSecondTrait" },
+  { ItemName = "ZeusThirdTrait" },
+})
+SetTraitsOnLoot(preRolledDuoLoot)
+assert(#preRolledDuoLoot.UpgradeOptions == 3
+  and preRolledDuoLoot.UpgradeOptions[1].ItemName == "ZeusAthenaDuoTrait"
+  and preRolledDuoLoot.UpgradeOptions[2].ItemName == "ZeusSecondTrait"
+  and preRolledDuoLoot.UpgradeOptions[3].ItemName == "ZeusChargedBoltTrait",
+  "natural Duo offer was misclassified as Legendary or got duplicated")
+-- Natural Legendary offer must NOT satisfy forceDuo and only forces Duo into slot 3!
+local preRolledLegLoot = threeChoiceLoot("ZeusUpgrade", {
+  { ItemName = "ZeusChargedBoltTrait", Rarity = "Legendary" },
+  { ItemName = "ZeusSecondTrait" },
+  { ItemName = "ZeusThirdTrait" },
+})
+SetTraitsOnLoot(preRolledLegLoot)
+assert(#preRolledLegLoot.UpgradeOptions == 3
+  and preRolledLegLoot.UpgradeOptions[1].ItemName == "ZeusChargedBoltTrait"
+  and preRolledLegLoot.UpgradeOptions[2].ItemName == "ZeusSecondTrait"
+  and preRolledLegLoot.UpgradeOptions[3].ItemName == "ZeusAthenaDuoTrait",
+  "natural Legendary offer blocked forced Duo or displaced wrong slot")
+-- Test ExclusionNames skipping rerolled Legendary while forcing Duo on a 3-choice loot:
+local excludedLoot = threeChoiceLoot("ZeusUpgrade", threeNormalSeeds)
+SetTraitsOnLoot(excludedLoot, { ExclusionNames = { "ZeusChargedBoltTrait" } })
+assert(#excludedLoot.UpgradeOptions == 3
+  and excludedLoot.UpgradeOptions[1].ItemName == "ZeusTrait"
+  and excludedLoot.UpgradeOptions[2].ItemName == "ZeusSecondTrait"
+  and excludedLoot.UpgradeOptions[3].ItemName == "ZeusAthenaDuoTrait"
+  and excludedLoot.UpgradeOptions[3].Rarity == "Legendary",
+  "ExclusionNames leaked excluded Legendary or Duo rarity was wrong")
+-- Hermes gets Legendary but gracefully skips Duo when none exist.
+local hermesLoot = threeChoiceLoot("HermesUpgrade", threeNormalSeeds)
+SetTraitsOnLoot(hermesLoot)
+assert(#hermesLoot.UpgradeOptions == 3 and hermesLoot.UpgradeOptions[3].ItemName == "MagnetismTrait"
+  and hermesLoot.UpgradeOptions[3].Rarity == "Legendary")
+-- Trial of the Gods (Devotion) excludes Duo via native GetEligibleUpgrades while keeping Legendary.
+activeDevotion = true
+local devotionLoot = threeChoiceLoot("ZeusUpgrade", threeNormalSeeds)
+SetTraitsOnLoot(devotionLoot)
+assert(#devotionLoot.UpgradeOptions == 3
+  and devotionLoot.UpgradeOptions[2].ItemName == "ZeusSecondTrait"
+  and devotionLoot.UpgradeOptions[3].ItemName == "ZeusChargedBoltTrait",
+  "Devotion room bypassed native GetEligibleUpgrades filter for Duo")
+activeDevotion = false
+-- ForceCommon & TrialUpgrade/WeaponUpgrade/StackUpgrade remain untouched when force flags are on.
+for _, name in ipairs({ "TrialUpgrade", "WeaponUpgrade", "StackUpgrade" }) do
+  local restricted = threeChoiceLoot(name)
+  SetTraitsOnLoot(restricted)
+  assert(#restricted.UpgradeOptions == 1 and restricted.UpgradeOptions[1].ItemName == "ZeusTrait")
+end
+local forceCommonLoot = { Name = "ZeusUpgrade", RarityChances = { Epic = 0 }, ForceCommon = true, allowed = { Epic = true } }
+SetTraitsOnLoot(forceCommonLoot)
+assert(#forceCommonLoot.UpgradeOptions == 1 and forceCommonLoot.UpgradeOptions[1].Rarity == "Common")
+expectError("invalidValue", function() runtime.set_boon_rarity("Heroic", "yes", false) end)
+expectError("invalidValue", function() runtime.set_boon_rarity("Heroic", false, 1) end)
+GetEligibleUpgrades = nil
+
 runtime.lock_resource("Money", true)
 runtime.lock_rerolls(true)
 runtime.disable_all()
@@ -507,6 +636,8 @@ assert(not runtime.status().moneyLocked and not runtime.status().rerollsLocked,
   "Disable All did not release fixed value locks")
 assert(runtime.status().features.boonRarityEnabled == false, "Disable All did not reset rarity policy")
 assert(runtime.status().boonRarityTarget == "Heroic", "Disable All did not reset rarity target")
+assert(runtime.status().boonForceLegendary == false and runtime.status().boonForceDuo == false,
+  "Disable All did not reset forced rarity flags")
 SetTraitsOnLoot(olympian)
 assert(olympian.UpgradeOptions[1].Rarity == "Common")
 expectError("invalidValue", function() runtime.set_feature("boonRarityEnabled", 1) end)
@@ -829,6 +960,44 @@ assert(runtime.status().heroId ~= baseline.heroId)
 CurrentRun = nil
 runtime.disable_all()
 assert(not runtime.status().features.invincibility)
+
+-- Scene / status / roomName classification (House, Courtyard, Run, Dying, Main Menu).
+-- Trap check: CurrentRun.CurrentRoom and IsDead remain set in the House of Hades;
+-- CurrentDeathAreaRoom must take precedence over CurrentRun.CurrentRoom and IsDead.
+CurrentRun = {
+  Hero = newHero(50),
+  Money = 0,
+  NumRerolls = 0,
+  InvulnerableFlags = {},
+  CurrentRoom = { Name = "D_Boss01" },
+}
+CurrentRun.Hero.IsDead = true
+CurrentDeathAreaRoom = { Name = "DeathArea" }
+local houseStatus = runtime.status()
+assert(houseStatus.scene == "house" and houseStatus.status == "ready"
+    and houseStatus.roomName == "DeathArea" and houseStatus.heroReady == true,
+  "House of Hades misclassified")
+CurrentDeathAreaRoom = { Name = "RoomPreRun" }
+local courtyardStatus = runtime.status()
+assert(courtyardStatus.scene == "courtyard" and courtyardStatus.status == "ready"
+    and courtyardStatus.roomName == "RoomPreRun",
+  "Skelly Courtyard misclassified")
+CurrentDeathAreaRoom = nil
+CurrentRun.Hero.IsDead = false
+CurrentRun.CurrentRoom = { Name = "A_Combat01" }
+local runStatus = runtime.status()
+assert(runStatus.scene == "run" and runStatus.status == "ready"
+    and runStatus.roomName == "A_Combat01",
+  "Active run misclassified")
+CurrentRun.Hero.IsDead = true
+local dyingStatus = runtime.status()
+assert(dyingStatus.scene == "loading" and dyingStatus.status == "waiting",
+  "Dying transition misclassified")
+CurrentRun = nil
+local menuStatus = runtime.status()
+assert(menuStatus.scene == "main_menu" and menuStatus.status == "waiting" and menuStatus.heroReady == false,
+  "Main menu misclassified")
+
 print(runtime.json(runtime.status()))
 print("hades_runtime_journeys_ok")
 '''
@@ -2272,3 +2441,113 @@ for name, case in scheduler_cases.items():
     proc = run_lua(script)
     assert proc.returncode == 0, name + ': ' + proc.stdout + '\n' + proc.stderr
 print('hades_runtime_native_scheduler_adoption_ok')
+
+sell_traits_case = r'''
+local runtime = assert(load(SOURCE))()
+local openedSellMenu = 0
+function OpenSellTraitMenu() openedSellMenu = openedSellMenu + 1 end
+CurrentDeathAreaRoom = nil
+CurrentRun.Hero.IsDead = false
+CurrentRun.CurrentRoom = { Name = "A_Combat01" }
+RoomSetData = RoomSetData or {}
+ActiveScreens = {}
+function IsScreenOpen() return false end
+
+local live = runtime.status()
+assert(live.canOpenSellTraits == true, "expected canOpenSellTraits in clean combat room")
+local afterOpen = runtime.open_sell_traits()
+assert(afterOpen.canOpenSellTraits == true and openedSellMenu == 1, "OpenSellTraitMenu did not run")
+
+ActiveScreens = { TraitTrayScreen = {} }
+assert(runtime.status().canOpenSellTraits == false)
+expectError("hades.error.sellScreenBusy", function() runtime.open_sell_traits() end)
+ActiveScreens = {}
+function IsScreenOpen(name) return name == "SellTraitMenu" end
+assert(runtime.status().canOpenSellTraits == false)
+expectError("hades.error.sellScreenBusy", function() runtime.open_sell_traits() end)
+function IsScreenOpen() return false end
+
+CurrentRun.Hero.IsDead = true
+assert(runtime.status().canOpenSellTraits == false)
+expectError("hades.error.worldUnavailable", function() runtime.open_sell_traits() end)
+CurrentRun.Hero.IsDead = false
+
+CurrentDeathAreaRoom = { Name = "DeathArea" }
+assert(runtime.status().canOpenSellTraits == false)
+expectError("hades.error.worldUnavailable", function() runtime.open_sell_traits() end)
+CurrentDeathAreaRoom = nil
+
+OpenSellTraitMenu = nil
+assert(runtime.status().canOpenSellTraits == false)
+expectError("hades.error.sellDataUnavailable", function() runtime.open_sell_traits() end)
+'''
+proc = run_lua(harness.split('\nlocal runtime = assert(load(SOURCE))()', 1)[0]
+               + native_setup + native_scheduler + sell_traits_case)
+assert proc.returncode == 0, 'sell_traits_case: ' + proc.stdout + '\n' + proc.stderr
+print('hades_runtime_open_sell_traits_ok')
+
+economy_case = r'''
+local addMoneyCalls, spendResourceCalls, addResourceCalls = {}, {}, {}
+function AddMoney(amount, source)
+  addMoneyCalls[#addMoneyCalls + 1] = { amount = amount, source = source }
+  CurrentRun.Money = (CurrentRun.Money or 0) + amount
+  UpdateMoneyUI(CurrentRun.Money)
+end
+function AddResource(name, amount, source)
+  addResourceCalls[#addResourceCalls + 1] = { name = name, amount = amount, source = source }
+  GameState.Resources[name] = (GameState.Resources[name] or 0) + amount
+  if type(UpdateResourceUI) == "function" then UpdateResourceUI(name, GameState.Resources[name]) end
+end
+function SpendResource(name, amount, source)
+  spendResourceCalls[#spendResourceCalls + 1] = { name = name, amount = amount, source = source }
+  GameState.Resources[name] = (GameState.Resources[name] or 0) - amount
+  if type(UpdateResourceUI) == "function" then UpdateResourceUI(name, GameState.Resources[name]) end
+end
+function UpdateResourceUI(name, value)
+  GameState.Resources.lastUI = { name = name, value = value }
+end
+local runtime = assert(load(SOURCE))()
+CurrentDeathAreaRoom = nil
+CurrentRun.Hero.IsDead = false
+CurrentRun.CurrentRoom = { Name = "A_Combat01" }
+CurrentRun.Money = 50
+GameState.Resources.Gems = 20
+GameState.Resources.MetaPoints = 100
+
+runtime.set_feature("moneyMultiplier", 3)
+runtime.set_feature("moneyMultiplierEnabled", true)
+runtime.set_feature("resourceMultiplier", 4)
+runtime.set_feature("resourceMultiplierEnabled", true)
+
+AddMoney(10, "RoomReward")
+assert(CurrentRun.Money == 80, "moneyMultiplierEnabled did not scale AddMoney: " .. tostring(CurrentRun.Money))
+AddMoney(10, "MacGamingTrainer.Hades")
+assert(CurrentRun.Money == 90, "trainer-sourced AddMoney must not be multiplied")
+
+AddResource("Gems", 5, "RoomReward")
+assert(GameState.Resources.Gems == 40, "resourceMultiplierEnabled did not scale AddResource: " .. tostring(GameState.Resources.Gems))
+AddResource("Gems", 5, "MacGamingTrainer.Hades")
+assert(GameState.Resources.Gems == 45, "trainer-sourced AddResource must not be multiplied")
+
+local locked = runtime.lock_resource("Gems", true)
+assert(locked.resourceLocks.Gems == 45, "lock_resource did not capture current Gems count")
+SpendResource("Gems", 15, "Shop")
+assert(GameState.Resources.Gems == 45, "SpendResource changed locked Gems")
+assert(spendResourceCalls[#spendResourceCalls].amount == 0, "SpendResource did not zero-amount native call")
+AddResource("Gems", 10, "RoomReward")
+assert(GameState.Resources.Gems == 45, "AddResource changed locked Gems")
+runtime.set_resource("Gems", 99)
+assert(runtime.status().resourceLocks.Gems == 99 and GameState.Resources.Gems == 99, "set_resource did not advance Gems lock")
+runtime.configure_locks(nil, nil, nil, { MetaPoints = 250 })
+assert(GameState.Resources.MetaPoints == 250 and GameState.Resources.Gems == 99, "configure_locks did not update resourceLocks")
+SpendResource("MetaPoints", 20, "Mirror")
+assert(GameState.Resources.MetaPoints == 250, "MetaPoints lock did not hold")
+local disabled = runtime.disable_all()
+assert(next(disabled.resourceLocks) == nil, "disable_all left resourceLocks behind")
+SpendResource("MetaPoints", 20, "Mirror")
+assert(GameState.Resources.MetaPoints == 230, "SpendResource still pinned after disable_all")
+'''
+proc = run_lua(harness.split('\nlocal runtime = assert(load(SOURCE))()', 1)[0]
+               + native_setup + economy_case)
+assert proc.returncode == 0, 'economy_case: ' + proc.stdout + '\n' + proc.stderr
+print('hades_runtime_economy_multipliers_and_resource_locks_ok')

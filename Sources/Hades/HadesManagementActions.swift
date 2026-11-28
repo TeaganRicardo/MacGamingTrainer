@@ -11,7 +11,7 @@ enum HadesManagementCatalog {
             localization.string(key)
         }
         let canUseBackend = { model.canUseBackend }
-        let canStartBackendAction = { canUseBackend() && !model.busy }
+        let canStartBackendAction = { model.hostActionsEnabled }
         return TrainerManagementCatalog(
             titles: .init(daily: text("hades.manage.daily"), settings: text("hades.manage.settings"),
                           maintenance: text("hades.manage.maintenance")),
@@ -19,7 +19,7 @@ enum HadesManagementCatalog {
                            enabled: canStartBackendAction, action: model.refreshFromHost),
             // Detached Hades can still reset its durable desired settings.
             disableAll: .init(.disableAll, localization: localization,
-                              enabled: canStartBackendAction, action: model.disableAll),
+                              enabled: canStartBackendAction, action: { model.disableAll() }),
             profiles: .init(id: "profiles", title: text("hades.manage.profiles"),
                             icon: TrainerSemanticIcon.Tool.profiles, enabled: canStartBackendAction) {
                 model.profilesPresented = true

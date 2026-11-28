@@ -6,6 +6,7 @@ from core.persistence import VersionedDocumentStore
 from .schema import (
     DEFAULT_PREFERENCES,
     PREFERENCE_SCHEMA_VERSION,
+    default_preferences,
     persisted_preference_document,
     preference_document,
 )
@@ -31,7 +32,7 @@ def _store_for(path):
         path,
         schema_version=PREFERENCE_SCHEMA_VERSION,
         compatibility_floor=1,
-        defaults=lambda: dict(DEFAULT_PREFERENCES),
+        defaults=default_preferences,
         normalize=lambda raw, version: persisted_preference_document(version, raw.get('features')),
         build_document=lambda features, version: {'schemaVersion': version, 'features': preference_document(features)},
         serialize=lambda document: json.dumps(document, allow_nan=False),
@@ -49,7 +50,7 @@ def refuse_replacing_newer_schema(path, error):
     store = VersionedDocumentStore(
         path,
         schema_version=PREFERENCE_SCHEMA_VERSION,
-        defaults=lambda: dict(DEFAULT_PREFERENCES),
+        defaults=default_preferences,
         normalize=lambda raw, version: raw,
         newer_schema_error=lambda _found, _supported: error(),
     )

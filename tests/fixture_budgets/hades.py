@@ -20,4 +20,5 @@ JOURNEY_BUDGETS: dict[str, float] = {
     "hades.disclosure": 60.0,
     "hades.search": 20.0,
     "hades.save_editor_frontend": 30.0,
+    "native.hades_run_log_watcher": 45.0,
 }

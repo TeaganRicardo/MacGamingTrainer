@@ -6,6 +6,14 @@ import TrainerCore
 
 final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var connected = false
+    @Published private(set) var pid: Int32?
+    @Published private(set) var version = ""
+    @Published private(set) var status = "disconnected"
+    @Published private(set) var scene = "unknown"
+    @Published private(set) var roomName: String?
+    @Published private(set) var exiting = false
+    @Published private(set) var recoveryText: TrainerTextToken?
+    private var recoveryTargetPID: Int?
     @Published private(set) var heroReady = false
     @Published private(set) var invincible = false
     /// Hero and save values are observations of a ready hero; nil means none.
@@ -24,9 +32,18 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     /// Optimistic toggle intent while its request is in flight. The reply's
     /// observation replaces it; a newer intent is never rolled back by an older reply.
     @Published private var pendingFeatureIntents: [HadesFeature: PendingFeatureIntent] = [:]
+    @Published private var pendingBoonRarityIntent: PendingBoonRarityIntent?
+    @Published private var pendingBlockingRequests = 0
+    @Published private var pendingRepeatableSpawns = 0
     @Published private(set) var boonRarityTarget = "Heroic"
+    @Published private(set) var boonForceLegendary = false
+    @Published private(set) var boonForceDuo = false
+    @Published private(set) var fishingChance: Double?
+    @Published private(set) var chaosGateChance: Double?
     @Published private(set) var resources: [String: Double] = [:]
+    @Published private(set) var resourceLocks: [String: Int] = [:]
     @Published private(set) var traits: [HadesCurrentTrait] = []
+    @Published private(set) var canOpenSellTraits = false
     @Published private(set) var world: HadesWorldObservation?
     @Published var selectedWorldExitToken = ""
     @Published var selectedWorldExitTarget = ""
@@ -75,9 +92,22 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private var diagnosticsReport: [String: Any]?
 
     private let services: TrainerModuleServices
+    private let runLogDirectoryURL: URL?
+    private let runLogSettleInterval: TimeInterval
+    private let playHotkeyFeedback: (TrainerHotkeyFeedback) -> Void
     private var subscriptions: Set<AnyCancellable> = []
     private var session: TrainerBackendSession { services.session }
     private var logSink: TrainerLogSink { services.logSink }
+    private var launchAttachGate = HadesLaunchAttachGate()
+    private var runLogTargetPID: pid_t?
+    private var pendingRunReadySignal = false
+    private var runLogSettleWorkItem: DispatchWorkItem?
+    private var terminationRequestedFromHost = false
+    private var terminationTargetObservation: TrainerTargetObservation?
+    private var backendRestartGeneration: UInt64 = 0
+    private lazy var runLogWatcher = HadesRunLogWatcher(directoryURL: runLogDirectoryURL) { [weak self] event in
+        self?.handleRunLogEvent(event)
+    }
     private var shortcuts: HadesShortcutStore
     private lazy var hotkeys = services.makeHotkeys(registrationChanged: { [weak self] failure in
         self?.shortcutRegistrationFailure = failure
@@ -89,10 +119,19 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     var operation: TrainerTextToken { backendStatus.operation }
     /// Backend-owned tools, such as Save documents, stay usable while a request runs.
     var canUseBackend: Bool { backendAvailable && backendStatus.protocolCompatible }
-    var hostActionsEnabled: Bool { canUseBackend && !busy }
+    var hostActionsEnabled: Bool { canUseBackend && !busy && pendingBlockingRequests == 0 }
     /// A new request for the current target lifetime: none is in flight and
     /// the session still trusts that target.
-    var canAcceptRuntimeAction: Bool { !busy && !backendStatus.requiresTargetRestart }
+    var canAcceptRuntimeAction: Bool {
+        !busy && pendingBlockingRequests == 0 && !backendStatus.requiresTargetRestart
+    }
+    private var canQueueAnotherSpawn: Bool {
+        !backendStatus.requiresTargetRestart && (
+            canAcceptRuntimeAction || (
+                pendingRepeatableSpawns > 0 && pendingRepeatableSpawns == pendingBlockingRequests
+            )
+        )
+    }
     private var requiresExplicitReconnect: Bool {
         ["outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost"]
             .contains(backendStatus.errorCode)
@@ -107,13 +146,19 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     var selectedWorldExitLease: HadesWorldActionLease? { selectedWorldExit?.activeLease }
     var selectedWorldExitTargetLocked: Bool { selectedWorldExitLease != nil }
+    var selectedWorldExitChoice: HadesWorldExitChoice? { HadesWorldExitChoice(id: selectedWorldExitTarget) }
     var canSelectWorldExit: Bool {
         canMutate && world?.doors.isEmpty == false
+    }
+    var canSelectWorldExitTarget: Bool {
+        guard canSelectWorldExit, !selectedWorldExitTargetLocked,
+              let exit = selectedWorldExit else { return false }
+        return exit.defaultChoice != nil
     }
     var selectedWorldExitActionAvailable: Bool {
         guard canMutate && canAcceptRuntimeAction, let exit = selectedWorldExit else { return false }
         if exit.activeLease != nil { return true }
-        return exit.worldActionTargets.contains { $0.stableID == selectedWorldExitTarget }
+        return selectedWorldExitChoice.map(exit.isEnabled) ?? false
     }
     var worldOccurrenceTargets: [HadesWorldOccurrenceTarget] {
         world?.worldOccurrenceTargets ?? []
@@ -134,21 +179,80 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         guard canMutate && canAcceptRuntimeAction else { return false }
         return world?.objects.contains(selectedChamberObject) == true
     }
-    var statusTitle: TrainerTextToken { TrainerTextToken(key: connected ? "host.connected" : "host.disconnected") }
+    var canOpenSellTraitsAction: Bool {
+        canMutate && canAcceptRuntimeAction && canOpenSellTraits
+    }
+    func showWorkbenchSection(_ section: HadesWorkbenchSection) {
+        if section == .values { numericControlsExpanded = true }
+        workbenchSearch = ""
+    }
+    var statusTitle: TrainerTextToken {
+        if exiting { return TrainerTextToken(key: "hades.manage.exiting") }
+        if backendStatus.isStartFailure || !backendAvailable {
+            return TrainerTextToken(key: "hades.status.backendStopped")
+        }
+        if backendStatus.requiresTargetRestart || recoveryText != nil || status == "restart_required" {
+            return TrainerTextToken(key: "hades.status.restartRequired")
+        }
+        switch status {
+        case "ready":
+            switch scene {
+            case "house": return TrainerTextToken(key: "hades.status.house")
+            case "courtyard": return TrainerTextToken(key: "hades.status.courtyard")
+            case "run": return TrainerTextToken(key: "hades.status.run")
+            default: return TrainerTextToken(key: "hades.status.operable")
+            }
+        case "waiting":
+            switch scene {
+            case "loading": return TrainerTextToken(key: "hades.status.loading")
+            case "main_menu": return TrainerTextToken(key: "hades.status.mainMenu")
+            default: return TrainerTextToken(key: "hades.status.awaitingScene")
+            }
+        case "not_running": return TrainerTextToken(key: "hades.status.notRunning")
+        case "not_installed": return TrainerTextToken(key: "hades.status.notInstalled")
+        case "incompatible": return TrainerTextToken(key: "hades.status.incompatible")
+        case "backend_stopped": return TrainerTextToken(key: "hades.status.backendStopped")
+        case "disconnected": return TrainerTextToken(key: "hades.status.disconnected")
+        default: return TrainerTextToken(key: status)
+        }
+    }
     var connectionDetailText: TrainerTextToken {
-        TrainerTextToken(key: connected ? (heroReady ? "hades.ready" : "hades.waitingForHero") : "hades.connectionHelp")
+        guard !version.isEmpty else {
+            return TrainerTextToken(key: "hades.status.awaitingDetect")
+        }
+        guard let pid else {
+            return TrainerTextToken(key: "hades.status.versionDetail", arguments: [version])
+        }
+        return TrainerTextToken(key: "hades.status.detailWithPID", arguments: [version, String(pid)])
     }
     var launchActionFromHost: (@MainActor () -> Void)? { { [weak self] in self?.send(.launch, operation: "host.launchGame") } }
 
-    init(services: TrainerModuleServices, defaults: UserDefaults = .standard) {
+    init(
+        services: TrainerModuleServices,
+        defaults: UserDefaults = .standard,
+        runLogDirectoryURL: URL? = nil,
+        runLogSettleInterval: TimeInterval = 0.2,
+        hotkeyFeedback: @escaping (TrainerHotkeyFeedback) -> Void = TrainerHotkeyFeedbackPlayer.play
+    ) {
         self.services = services
+        self.runLogDirectoryURL = runLogDirectoryURL
+        self.runLogSettleInterval = runLogSettleInterval
+        self.playHotkeyFeedback = hotkeyFeedback
         self.shortcuts = HadesShortcutStore(defaults: defaults)
         services.feedback.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &subscriptions)
         services.backendStatusTransitions
             .sink { [weak self] previous, current in
-                self?.receiveStatus(current, previous: previous)
+                guard let self else { return }
+                self.receiveStatus(current, previous: previous)
+                if !current.busy && !self.exiting && !self.terminationRequestedFromHost {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        self.consumeDeferredLaunchAttachIfPossible()
+                        self.consumeRunLogReadySignalIfPossible()
+                    }
+                }
             }
             .store(in: &subscriptions)
         DispatchQueue.main.async { [weak self] in
@@ -156,7 +260,20 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
+    func backendWillRestart() {
+        backendRestartGeneration &+= 1
+        pendingFeatureIntents.removeAll()
+        pendingBoonRarityIntent = nil
+        pendingBlockingRequests = 0
+        pendingRepeatableSpawns = 0
+        pendingRunReadySignal = false
+        cancelPendingRunLogSettle()
+        launchAttachGate.cancel()
+        services.feedback.clearNotice()
+    }
+
     func backendDidStart() {
+        runLogWatcher.start()
         refreshFromHost()
         send(.catalog, operation: "hades.catalog", announceSuccess: false)
     }
@@ -165,18 +282,166 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
 
     func connectFromHost(reason: TrainerHostConnectReason) {
         guard !connected, hostActionsEnabled else { return }
-        send(.connect, operation: "host.connectGame")
+        switch reason {
+        case .manual:
+            launchAttachGate.cancel()
+            connect()
+        case .automatic(let targetJustLaunched):
+            if launchAttachGate.deferUntilReady(
+                targetJustLaunched: targetJustLaunched,
+                canObserveLifecycle: runLogWatcher.canObserveLifecycle
+            ) {
+                runLogWatcher.start()
+                status = "waiting"
+                scene = "loading"
+                consumeDeferredLaunchAttachIfPossible()
+                return
+            }
+            connect()
+        }
+    }
+
+    private func connect() {
+        pendingRunReadySignal = false
+        cancelPendingRunLogSettle()
+        runLogWatcher.start()
+        send(.connect, operation: "host.connectGame") { [weak self] _ in
+            guard let self else { return }
+            self.runLogWatcher.start()
+            self.consumeRunLogReadySignalIfPossible()
+        }
     }
 
     func disconnectFromHost() {
         guard connected, hostActionsEnabled else { return }
+        launchAttachGate.cancel()
+        pendingRunReadySignal = false
+        cancelPendingRunLogSettle()
         send(.disconnect, operation: "host.disconnectGame")
     }
     func refreshFromHost() { send(.status, operation: "host.refreshStatus", announceSuccess: false) }
     func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
-        resetObservation()
+        // The definitive launch notification can follow discovery of this PID.
+        if observation.isRunning, let pid = observation.processIdentifier, pid == runLogTargetPID { return }
+        runLogTargetPID = observation.processIdentifier
+        if connected || pid != nil || recoveryText != nil {
+            resetObservation()
+            status = observation.isRunning ? "disconnected" : "not_running"
+        }
+        pid = observation.processIdentifier
+        recoveryText = nil
+        recoveryTargetPID = nil
+        launchAttachGate.targetLifetimeChanged()
+        pendingRunReadySignal = false
+        cancelPendingRunLogSettle()
+        runLogWatcher.targetLifetimeChanged(running: observation.isRunning)
+    }
+    func beginTerminationFromHost() {
+        guard !terminationRequestedFromHost else { return }
+        terminationRequestedFromHost = true
+        terminationTargetObservation = services.targetObservation
+        launchAttachGate.cancel()
+        pendingRunReadySignal = false
+        cancelPendingRunLogSettle()
+        runLogWatcher.stop()
     }
     func hostDidBecomeActive() { if connected && !busy { refreshFromHost() } }
+
+    private func cancelPendingRunLogSettle() {
+        runLogSettleWorkItem?.cancel()
+        runLogSettleWorkItem = nil
+    }
+
+    private func handleRunLogEvent(_ event: HadesRunLogEvent) {
+        guard !exiting, !terminationRequestedFromHost else { return }
+        switch event {
+        case .bootReady:
+            recordLaunchReadiness()
+        case .mainMenu:
+            cancelPendingRunLogSettle()
+            pendingRunReadySignal = false
+            recordLaunchReadiness()
+            guard connected else { return }
+            status = "waiting"
+            scene = "main_menu"
+            roomName = nil
+            activeFeatures = [:]
+        case .runtimeReset:
+            cancelPendingRunLogSettle()
+            pendingRunReadySignal = false
+            launchAttachGate.observeRuntimeReset()
+            guard connected else { return }
+            status = "waiting"
+            scene = "loading"
+            roomName = nil
+            activeFeatures = [:]
+        case .roomTransitionStarted:
+            cancelPendingRunLogSettle()
+            pendingRunReadySignal = false
+            launchAttachGate.observeRuntimeReset()
+            guard connected else { return }
+            status = "waiting"
+            scene = "loading"
+        case .roomLoaded:
+            recordLaunchReadiness()
+            guard connected else { return }
+            scheduleRunLogSettleRefresh()
+        }
+    }
+
+    private func recordLaunchReadiness() {
+        launchAttachGate.observeRuntimeReady()
+        guard launchAttachGate.isPending else { return }
+        // Let all events in this log batch settle before crossing into LLDB.
+        DispatchQueue.main.async { [weak self] in
+            self?.consumeDeferredLaunchAttachIfPossible()
+        }
+    }
+
+    private func scheduleRunLogSettleRefresh() {
+        cancelPendingRunLogSettle()
+        if runLogSettleInterval <= 0 {
+            pendingRunReadySignal = true
+            consumeRunLogReadySignalIfPossible()
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.runLogSettleWorkItem = nil
+            self.pendingRunReadySignal = true
+            self.consumeRunLogReadySignalIfPossible()
+        }
+        runLogSettleWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + runLogSettleInterval, execute: work)
+    }
+
+    private func consumeDeferredLaunchAttachIfPossible() {
+        guard !exiting, !terminationRequestedFromHost, !backendStatus.requiresTargetRestart else { return }
+        guard launchAttachGate.consumeIfEligible(
+            backendAvailable: backendAvailable,
+            busy: busy,
+            connected: connected,
+            exiting: exiting,
+            requiresTargetRestart: backendStatus.requiresTargetRestart
+        ) else { return }
+        connect()
+    }
+
+    private func consumeRunLogReadySignalIfPossible() {
+        guard !exiting, !terminationRequestedFromHost else { return }
+        guard HadesRunLogRefreshGate.shouldConsume(
+            pending: pendingRunReadySignal,
+            connected: connected,
+            backendAvailable: backendAvailable,
+            busy: busy,
+            exiting: exiting,
+            requiresTargetRestart: backendStatus.requiresTargetRestart
+        ) else { return }
+        pendingRunReadySignal = false
+        send(.status, operation: "host.refreshStatus", announceSuccess: false) { [weak self] _ in
+            self?.consumeRunLogReadySignalIfPossible()
+        }
+    }
 
     func isEnabled(_ feature: HadesFeature) -> Bool {
         pendingFeatureIntents[feature]?.enabled ?? features[feature.rawValue]?.bool ?? false
@@ -207,22 +472,91 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             canEditDesired: canEditIntent
         )
     }
+    var effectiveBoonRarityTarget: String { pendingBoonRarityIntent?.target ?? boonRarityTarget }
+    var effectiveBoonForceLegendary: Bool { pendingBoonRarityIntent?.forceLegendary ?? boonForceLegendary }
+    var effectiveBoonForceDuo: Bool { pendingBoonRarityIntent?.forceDuo ?? boonForceDuo }
     func setBoonRarityTarget(_ target: String) {
-        guard canEditIntent, ["Common", "Rare", "Epic", "Heroic"].contains(target) else { return }
-        send(.setBoonRarity(target: target), operation: "hades.boonRarityEnabled")
+        setBoonRarity(
+            target: target,
+            forceLegendary: effectiveBoonForceLegendary,
+            forceDuo: effectiveBoonForceDuo
+        )
     }
-    func setFeature(_ feature: HadesFeature, value: Any) {
-        guard canEditIntent else { return }
+    func setBoonForceLegendary(_ enabled: Bool) {
+        setBoonRarity(
+            target: effectiveBoonRarityTarget,
+            forceLegendary: enabled,
+            forceDuo: effectiveBoonForceDuo
+        )
+    }
+    func setBoonForceDuo(_ enabled: Bool) {
+        setBoonRarity(
+            target: effectiveBoonRarityTarget,
+            forceLegendary: effectiveBoonForceLegendary,
+            forceDuo: enabled
+        )
+    }
+    func setBoonRarity(target: String, forceLegendary: Bool, forceDuo: Bool, completion: ((Bool) -> Void)? = nil) {
+        guard canEditIntent, ["Common", "Rare", "Epic", "Heroic"].contains(target) else {
+            completion?(false)
+            return
+        }
+        let requestID = UUID()
+        pendingBoonRarityIntent = PendingBoonRarityIntent(
+            requestID: requestID,
+            target: target,
+            forceLegendary: forceLegendary,
+            forceDuo: forceDuo
+        )
+        send(
+            .setBoonRarity(target: target, forceLegendary: forceLegendary, forceDuo: forceDuo),
+            operation: "hades.boonRarityEnabled"
+        ) { [weak self] ok in
+            if let self, self.pendingBoonRarityIntent?.requestID == requestID {
+                self.pendingBoonRarityIntent = nil
+            }
+            completion?(ok)
+        }
+    }
+    func setFishingChance(_ chance: Double?, completion: ((Bool) -> Void)? = nil) {
+        guard canEditIntent, chance.map({ $0.isFinite && (0...100).contains($0) }) ?? true else {
+            completion?(false)
+            return
+        }
+        guard pendingBlockingRequests > 0 || chance != fishingChance else {
+            completion?(true)
+            return
+        }
+        send(.setFishingChance(chance), operation: "hades.fishing.probability", completion: completion)
+    }
+    func setChaosGateChance(_ chance: Double?, completion: ((Bool) -> Void)? = nil) {
+        guard canEditIntent, chance.map({ $0.isFinite && (0...100).contains($0) }) ?? true else {
+            completion?(false)
+            return
+        }
+        guard pendingBlockingRequests > 0 || chance != chaosGateChance else {
+            completion?(true)
+            return
+        }
+        send(.setChaosGateChance(chance), operation: "hades.chaosGate.probability", completion: completion)
+    }
+    func setFeature(_ feature: HadesFeature, value: Any, completion: ((Bool) -> Void)? = nil) {
+        guard canEditIntent else {
+            completion?(false)
+            return
+        }
         var requestID: UUID?
         if feature.isToggle, let enabled = value as? Bool {
             let intent = PendingFeatureIntent(requestID: UUID(), enabled: enabled)
             pendingFeatureIntents[feature] = intent
             requestID = intent.requestID
         }
-        send(.setFeature(feature: feature.rawValue, value: value), operation: feature.key) { [weak self] _ in
+        send(.setFeature(feature: feature.rawValue, value: value), operation: feature.key) { [weak self] ok in
             // The reply has been projected; only this request's intent retires.
-            guard let self, let requestID, self.pendingFeatureIntents[feature]?.requestID == requestID else { return }
-            self.pendingFeatureIntents[feature] = nil
+            if let self, let requestID, self.pendingFeatureIntents[feature]?.requestID == requestID {
+                self.pendingFeatureIntents[feature] = nil
+            }
+            completion?(ok)
         }
     }
     static func displayText(_ value: Double) -> String {
@@ -236,6 +570,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         let current: Double?
         var range = 0.0...1_000_000_000.0
         var integer = true
+        var optionalCurrent = false
         let available: Bool
         var heroOwned = true
         let apply: (Double) -> Void
@@ -251,11 +586,33 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             apply = { self.setResource(id, value: $0, target: captured) }
         case let .feature(feature):
             current = number(feature)
-            range = feature == .dashBonus ? 0...20 : 0.1...100
+            if feature == .dashBonus {
+                range = 0...20
+            } else if feature == .moneyMultiplier || feature == .resourceMultiplier {
+                range = 1...100
+            } else {
+                range = 0.1...100
+            }
             integer = feature == .dashBonus
             available = canEditIntent
             heroOwned = false
             apply = { self.setFeature(feature, value: $0) }
+        case .fishingChance:
+            current = fishingChance
+            range = 0...100
+            integer = false
+            optionalCurrent = true
+            available = canEditIntent
+            heroOwned = false
+            apply = { self.setFishingChance($0) }
+        case .chaosGateChance:
+            current = chaosGateChance
+            range = 0...100
+            integer = false
+            optionalCurrent = true
+            available = canEditIntent
+            heroOwned = false
+            apply = { self.setChaosGateChance($0) }
         }
         let restored = current.map(Self.displayText) ?? ""
         guard changed else { return restored }
@@ -264,7 +621,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             presentFeedback(TrainerTextToken(key: "hades.error.staleHero"), tone: .warning)
             return restored
         }
-        guard available && current != nil && !busy else {
+        guard available && (optionalCurrent || current != nil) && !busy else {
             onRejection("hades.input.unavailable")
             presentFeedback(TrainerTextToken(key: "hades.input.unavailable"), tone: .warning)
             return restored
@@ -284,6 +641,13 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     func setResource(_ resource: String, value: Double, target: HadesHeroTarget?) {
         sendToHero(.setResource(resource: resource, value: value), target: target, operation: "hades.resources")
+    }
+    func lockResource(_ resource: String, locked: Bool) {
+        sendToHero(
+            .lockResource(resource: resource, locked: locked),
+            target: target,
+            operation: "hades.resources"
+        )
     }
     func lockHealth(_ locked: Bool) {
         sendToHero(
@@ -313,12 +677,13 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
     @discardableResult
     func worldAction(_ request: HadesRequest, roomID: String?, operation: String,
-                     completion: ((Bool) -> Void)? = nil) -> Bool {
+                     repeatableSpawn: Bool = false, completion: ((Bool) -> Void)? = nil) -> Bool {
         guard let roomID, roomID == world?.roomId else {
             presentFeedback(TrainerTextToken(key: "hades.error.staleRoom"), tone: .warning)
             return false
         }
-        return sendToHero(request, extraParams: ["roomId": roomID], target: target, operation: operation, completion: completion)
+        return sendToHero(request, extraParams: ["roomId": roomID], target: target,
+                          operation: operation, repeatableSpawn: repeatableSpawn, completion: completion)
     }
 
     func repairWorldActionSelection() {
@@ -328,9 +693,9 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         }
         if let exit = selectedWorldExit {
             if let lease = exit.activeLease {
-                selectedWorldExitTarget = lease.kind + ":" + lease.target
-            } else if !exit.worldActionTargets.contains(where: { $0.stableID == selectedWorldExitTarget }) {
-                selectedWorldExitTarget = exit.worldActionTargets.first?.stableID ?? ""
+                selectedWorldExitTarget = lease.choice.id
+            } else if !(selectedWorldExitChoice.map(exit.isEnabled) ?? false) {
+                selectedWorldExitTarget = exit.defaultChoice?.id ?? ""
             }
         } else {
             selectedWorldExitTarget = ""
@@ -358,11 +723,11 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                 operation: "hades.worldActions.modifyExit", completion: completion
             )
         }
-        guard let selected = exit.worldActionTargets.first(where: { $0.stableID == selectedWorldExitTarget }) else {
+        guard let choice = selectedWorldExitChoice, exit.isEnabled(choice) else {
             return false
         }
         return worldAction(
-            .applyWorldExit(doorToken: exit.effectiveDoorToken, kind: selected.kind, targetID: selected.id),
+            .applyWorldExit(doorToken: exit.effectiveDoorToken, room: choice.room, reward: choice.reward),
             roomID: world?.roomId,
             operation: "hades.worldActions.modifyExit", completion: completion
         )
@@ -398,14 +763,19 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         )
     }
 
-    func generateFishing(completion: ((Bool) -> Void)? = nil) {
-        worldAction(.generateFishing, roomID: world?.roomId, operation: "hades.generateFishing", completion: completion)
+    @discardableResult
+    func generateFishing(completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canMutate && canAcceptRuntimeAction && world?.canFish == true else { return false }
+        return worldAction(.generateFishing, roomID: world?.roomId, operation: "hades.generateFishing", completion: completion)
     }
-    func generateChaosGate(completion: ((Bool) -> Void)? = nil) {
-        worldAction(.generateChaosGate, roomID: world?.roomId, operation: "hades.generateChaosGate", completion: completion)
+    @discardableResult
+    func generateChaosGate(completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canMutate && canAcceptRuntimeAction && world?.canChaos == true else { return false }
+        return worldAction(.generateChaosGate, roomID: world?.roomId, operation: "hades.generateChaosGate", completion: completion)
     }
     /// A Generate row acts for a ready hero in an observed room.
-    var canSpawnReward: Bool { canMutate && world != nil }
+    var canSpawnReward: Bool { canMutate && world != nil && canQueueAnotherSpawn }
+    var canAcquireExactTrait: Bool { canMutate && canQueueAnotherSpawn }
     /// One Generate row's rewards, in world-catalog order.
     func rewards(in group: HadesRewardGroup) -> [HadesWorldReward] { worldRewards.filter { $0.group == group } }
     /// Generates one reward of a row in the current room; false when the row cannot act on it.
@@ -413,7 +783,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     func spawnReward(_ reward: String, in group: HadesRewardGroup, completion: ((Bool) -> Void)? = nil) -> Bool {
         guard canSpawnReward, rewards(in: group).contains(where: { $0.id == reward }) else { return false }
         return worldAction(.spawnReward(reward), roomID: world?.roomId,
-                           operation: "hades.spawnReward", completion: completion)
+                           operation: "hades.spawnReward", repeatableSpawn: true, completion: completion)
     }
     private func acquisitionOption(_ target: HadesAcquisitionTarget) -> HadesCatalogEntry? {
         switch target {
@@ -478,7 +848,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
 
     @discardableResult
     func acquireSelectedTrait(completion: ((Bool) -> Void)? = nil) -> Bool {
-        guard canMutate && canAcceptRuntimeAction,
+        guard canAcquireExactTrait,
               let trait = acquisitionOption(.exact), trait.acquirable != false,
               activateAcquisition(.exact, confirmationRequired: true),
               let rarity = selectedAcquisitionRarity else { return false }
@@ -491,7 +861,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         }
         return sendToHero(
             .addTrait(trait: trait.id, rarity: rarity, level: level),
-            target: target, operation: "hades.acquire", completion: completion
+            target: target, operation: "hades.acquire", repeatableSpawn: true, completion: completion
         )
     }
 
@@ -507,6 +877,12 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             .addChaosPair(blessing: blessing.id, curse: selectedChaosCurse, rarity: rarity, encounters: encounters),
             target: target, operation: "hades.chaosPair", completion: completion
         )
+    }
+
+    @discardableResult
+    func openSellTraits(completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canOpenSellTraitsAction else { return false }
+        return sendToHero(.openSellTraits, target: target, operation: "hades.purgingPool", completion: completion)
     }
 
     func updateTrait(_ trait: HadesCurrentTrait, rarity: String, level: Int, target: HadesHeroTarget?) {
@@ -528,9 +904,12 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         sendToHero(.refreshTrait(instanceID: trait.instanceId), target: target,
                    operation: "hades.refreshEffect")
     }
-    func disableAll() {
-        guard hostActionsEnabled else { return }
-        send(.disableAll, operation: "host.disableAll")
+    func disableAll(completion: ((Bool) -> Void)? = nil) {
+        guard hostActionsEnabled else {
+            completion?(false)
+            return
+        }
+        send(.disableAll, operation: "host.disableAll", completion: completion)
     }
     func makeSaveEditorModel(snapshotID: String? = nil) -> HadesSaveEditorModel {
         HadesSaveEditorModel(session: session, snapshotID: snapshotID)
@@ -582,7 +961,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
 
     @discardableResult
     private func sendToHero(_ request: HadesRequest, extraParams: [String: Any] = [:], target captured: HadesHeroTarget?,
-                            operation: String, completion: ((Bool) -> Void)? = nil) -> Bool {
+                            operation: String, repeatableSpawn: Bool = false, completion: ((Bool) -> Void)? = nil) -> Bool {
         guard canMutate else { return false }
         guard let captured, captured == target else {
             presentFeedback(TrainerTextToken(key: "hades.error.staleHero"), tone: .warning)
@@ -590,7 +969,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         }
         var payload = extraParams
         payload["target"] = captured.payload
-        send(request, extraParams: payload, operation: operation, completion: completion)
+        send(request, extraParams: payload, operation: operation, repeatableSpawn: repeatableSpawn, completion: completion)
         return true
     }
 
@@ -613,7 +992,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         case .disableAll:
             return hostActionsEnabled
         case .generateFishing:
-            return canMutate && world?.canFish == true
+            return canMutate && canAcceptRuntimeAction && world?.canFish == true
         case .applyWorldExit:
             return selectedWorldExitActionAvailable
         case .applyWorldOccurrence:
@@ -621,9 +1000,13 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         case .generateChamberObject:
             return chamberObjectActionAvailable
         case .generateChaosGate:
-            return canMutate && world?.canChaos == true
-        case .acquireChaosPair, .acquireExactBoon:
+            return canMutate && canAcceptRuntimeAction && world?.canChaos == true
+        case .acquireChaosPair:
             return canMutate && canAcceptRuntimeAction
+        case .acquireExactBoon:
+            return canAcquireExactTrait
+        case .openSellTraits:
+            return canOpenSellTraitsAction
         default:
             return canEditIntent
         }
@@ -633,15 +1016,42 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func rejectShortcut(_ actionID: String) {
         logSink.append("shortcut.rejected action=\(actionID) reason=unavailable")
         presentFeedback(TrainerTextToken(key: "hades.shortcut.unavailable"), tone: .warning)
-        TrainerHotkeyFeedbackPlayer.play(.rejected)
+        playHotkeyFeedback(.rejected)
     }
 
-    private static func playOneShotShortcutResult(_ success: Bool) {
-        TrainerHotkeyFeedbackPlayer.play(success ? .completed : .rejected)
+    private func makeOneShotShortcutResult() -> (Bool) -> Void {
+        { [weak self] success in
+            self?.playHotkeyFeedback(success ? .completed : .rejected)
+        }
     }
 
-    private static func playDeferredShortcutResult(_ success: Bool) {
-        TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
+    private func makeDeferredShortcutResult() -> (Bool) -> Void {
+        { [weak self] success in
+            self?.playHotkeyFeedback(success ? .deferred : .rejected)
+        }
+    }
+
+    func featureHotkeyFeedback(_ feature: HadesFeature, targetEnabled: Bool) -> TrainerHotkeyFeedback {
+        guard targetEnabled else { return .disabled }
+        if activeFeatures[feature.rawValue] == true { return .enabled }
+        if dormantFeatures[feature.rawValue] == true || !connected || !heroReady { return .deferred }
+        return .unconfirmed
+    }
+
+    private func performFeatureShortcut(_ feature: HadesFeature) {
+        let targetEnabled = !isEnabled(feature)
+        setFeature(feature, value: targetEnabled) { [weak self] success in
+            guard let self else { return }
+            guard success else {
+                self.playHotkeyFeedback(.rejected)
+                return
+            }
+            let feedback = self.featureHotkeyFeedback(feature, targetEnabled: targetEnabled)
+            if case .unconfirmed = feedback {
+                self.presentFeedback(TrainerTextToken(key: "hades.shortcut.unconfirmed"), tone: .information)
+            }
+            self.playHotkeyFeedback(feedback)
+        }
     }
 
     func performShortcut(_ rawValue: String) {
@@ -651,37 +1061,43 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         // A Generate row's shortcut acts on the selection the row shows, under
         // the same gate as its button.
         if let group = action.rewardGroup {
-            if !spawnReward(selectedRewards[group] ?? "", in: group, completion: Self.playOneShotShortcutResult) {
+            if !spawnReward(selectedRewards[group] ?? "", in: group, completion: makeOneShotShortcutResult()) {
                 rejectShortcut(rawValue)
             }
             return
         }
         guard canPerformShortcut(action) else { rejectShortcut(rawValue); return }
         if action == .applyWorldExit {
-            if !toggleSelectedWorldExit(completion: Self.playDeferredShortcutResult) { rejectShortcut(rawValue) }
+            if !toggleSelectedWorldExit(completion: makeDeferredShortcutResult()) { rejectShortcut(rawValue) }
             return
         }
         if action == .applyWorldOccurrence {
-            if !toggleWorldOccurrence(completion: Self.playDeferredShortcutResult) { rejectShortcut(rawValue) }
+            if !toggleWorldOccurrence(completion: makeDeferredShortcutResult()) { rejectShortcut(rawValue) }
             return
         }
         if action == .generateChamberObject {
-            if !generateSelectedChamberObject(completion: Self.playOneShotShortcutResult) { rejectShortcut(rawValue) }
+            if !generateSelectedChamberObject(completion: makeOneShotShortcutResult()) { rejectShortcut(rawValue) }
             return
         }
         if action == .acquireExactBoon {
-            if !acquireSelectedTrait(completion: Self.playOneShotShortcutResult),
+            if !acquireSelectedTrait(completion: makeOneShotShortcutResult()),
                acquisitionRarityAdjustment == .none { rejectShortcut(rawValue) }
             return
         }
         if action == .acquireChaosPair {
-            if !acquireSelectedChaosPair(completion: Self.playOneShotShortcutResult),
+            if !acquireSelectedChaosPair(completion: makeOneShotShortcutResult()),
                acquisitionRarityAdjustment == .none { rejectShortcut(rawValue) }
             return
         }
-        if action == .generateFishing { generateFishing(completion: Self.playOneShotShortcutResult) }
-        else if action == .generateChaosGate { generateChaosGate(completion: Self.playOneShotShortcutResult) }
-        else if action == .decreaseGameSpeed || action == .increaseGameSpeed {
+        if action == .openSellTraits {
+            if !openSellTraits(completion: makeOneShotShortcutResult()) { rejectShortcut(rawValue) }
+            return
+        }
+        if action == .generateFishing {
+            if !generateFishing(completion: makeOneShotShortcutResult()) { rejectShortcut(rawValue) }
+        } else if action == .generateChaosGate {
+            if !generateChaosGate(completion: makeOneShotShortcutResult()) { rejectShortcut(rawValue) }
+        } else if action == .decreaseGameSpeed || action == .increaseGameSpeed {
             let delta = action == .decreaseGameSpeed ? -0.1 : 0.1
             let current = number(.gameSpeed)
             let next = min(10.0, max(0.0, (current + delta) * 10.0).rounded() / 10.0)
@@ -689,15 +1105,35 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                 rejectShortcut(rawValue)
                 return
             }
-            setFeature(.gameSpeed, value: next)
+            setFeature(.gameSpeed, value: next, completion: makeOneShotShortcutResult())
+        } else if action == .disableAll {
+            let wasConnected = connected
+            disableAll { [weak self] success in
+                guard let self else { return }
+                let confirmed = wasConnected && self.connected
+                self.playHotkeyFeedback(success ? (confirmed ? .disabled : .deferred) : .rejected)
+            }
+        } else if let feature = HadesFeature(rawValue: rawValue) {
+            performFeatureShortcut(feature)
         }
-        else if action == .disableAll { disableAll() }
-        else if let feature = HadesFeature(rawValue: rawValue) { setFeature(feature, value: !isEnabled(feature)) }
     }
 
     func prepareForTermination(completion: @escaping () -> Void) {
+        guard !exiting else { completion(); return }
+        exiting = true
+        terminationRequestedFromHost = true
+        let targetAtQuit = terminationTargetObservation ?? services.targetObservation
+        cancelPendingRunLogSettle()
+        launchAttachGate.cancel()
+        runLogWatcher.stop()
         guard backendAvailable else {
             completion()
+            return
+        }
+        if connected && services.targetObservation != targetAtQuit {
+            send(.disconnect, operation: "host.disconnectGame", announceSuccess: false) { _ in
+                completion()
+            }
             return
         }
         send(.disableAll, operation: "host.disableAll", announceSuccess: false) { [weak self] _ in
@@ -709,15 +1145,23 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func send(_ request: HadesRequest, extraParams: [String: Any] = [:], operation: String,
-                      announceSuccess: Bool = true, completion: ((Bool) -> Void)? = nil) {
+                      announceSuccess: Bool = true, repeatableSpawn: Bool = false,
+                      completion: ((Bool) -> Void)? = nil) {
         var payload = request.params
         for (key, value) in extraParams { payload[key] = value }
         let expectedPending = (request.command == .disableAll || request.command == .loadProfile) && !connected
+        let restartGeneration = backendRestartGeneration
+        pendingBlockingRequests += 1
+        if repeatableSpawn { pendingRepeatableSpawns += 1 }
         session.send(request.command.rawValue, params: payload, operation: operation,
                      announceSuccess: announceSuccess && !expectedPending,
                      timeout: request.command.timeout,
                      requiresTrustedTarget: request.command.requiresTrustedTarget(connected: connected),
                      completion: { [weak self] ok in
+            if let self, self.backendRestartGeneration == restartGeneration {
+                self.pendingBlockingRequests = max(0, self.pendingBlockingRequests - 1)
+                if repeatableSpawn { self.pendingRepeatableSpawns = max(0, self.pendingRepeatableSpawns - 1) }
+            }
             if announceSuccess, ok, let self, !self.connected,
                request.command == .disableAll || request.command == .loadProfile {
                 let noticeKey = request.command == .disableAll ? "hades.disableAllPending" : "hades.profile.pending"
@@ -730,7 +1174,10 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
     private func receiveStatus(_ status: TrainerBackendStatus, previous: TrainerBackendStatus) {
         objectWillChange.send()
         switch status.errorCode {
-        case "outcome_unknown", "restart_required", "debugger_protocol", "debugger_lost":
+        case "outcome_unknown", "restart_required":
+            resetObservation()
+            self.status = "restart_required"
+        case "debugger_protocol", "debugger_lost":
             resetObservation()
         default: break
         }
@@ -814,14 +1261,39 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
                 }
             }
         }
+        if acceptsTargetObservation && payload.keys.contains("recovery") {
+            applyRecoveryPatch(payload["recovery"])
+        }
         guard payload["connected"] != nil else { return }
         let state = try JSONDecoder().decode(HadesObservation.self, from: data)
         guard acceptsTargetObservation else {
-            applyDurableIntent(state)
+            applyDurableIntent(state, payload: payload)
             return
         }
+        logSink.updateCurrentSessionRuntimeIdentity(
+            gameVersion: state.version.flatMap { $0.isEmpty ? nil : $0 },
+            runtimeRevision: state.runtimeRevision
+        )
+        if let observedPID = state.pid, let recPID = recoveryTargetPID, Int(observedPID) != recPID {
+            recoveryText = nil
+            recoveryTargetPID = nil
+        }
+        if payload.keys.contains("pid") { pid = state.pid }
+        if payload.keys.contains("version") { version = state.version ?? "" }
+        if payload.keys.contains("recovery") { applyRecoveryPatch(payload["recovery"]) }
         connected = state.connected
         heroReady = state.heroReady
+        if recoveryText != nil && !state.connected {
+            status = "restart_required"
+        } else if let decodedStatus = state.status, !decodedStatus.isEmpty {
+            status = decodedStatus
+        } else {
+            status = state.connected
+                ? (state.heroReady ? "ready" : "waiting")
+                : (backendStatus.requiresTargetRestart ? "restart_required" : "disconnected")
+        }
+        scene = (state.scene?.isEmpty == false ? state.scene : nil) ?? "unknown"
+        roomName = state.roomName
         invincible = state.invincible ?? false
         // Without a ready hero the runtime and detached projections report
         // placeholder zeros; they are not observations.
@@ -840,13 +1312,19 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         activeFeatures = state.activeFeatures ?? [:]
         dormantFeatures = state.dormantFeatures ?? [:]
         boonRarityTarget = state.boonRarityTarget ?? boonRarityTarget
+        boonForceLegendary = state.boonForceLegendary ?? boonForceLegendary
+        boonForceDuo = state.boonForceDuo ?? boonForceDuo
+        if payload.keys.contains("fishingChance") { fishingChance = state.fishingChance }
+        if payload.keys.contains("chaosGateChance") { chaosGateChance = state.chaosGateChance }
         resources = heroObserved ? (state.resources ?? [:]) : [:]
+        resourceLocks = state.resourceLocks ?? [:]
         traits = state.traits ?? []
+        canOpenSellTraits = heroObserved && (state.canOpenSellTraits ?? false)
         world = state.world
         repairWorldActionSelection()
     }
 
-    private func applyDurableIntent(_ state: HadesObservation) {
+    private func applyDurableIntent(_ state: HadesObservation, payload: [String: Any]) {
         let speedKey = HadesFeature.gameSpeed.rawValue
         // The adapter always reports desired speed from preferences, even in a live snapshot.
         let speed = state.features?[speedKey]?.gameSpeedIntent(preservingRuntimeFrom: features[speedKey])
@@ -858,14 +1336,40 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
             healthLocked = state.healthLocked ?? healthLocked
             moneyLocked = state.moneyLocked ?? moneyLocked
             rerollsLocked = state.rerollsLocked ?? rerollsLocked
+            resourceLocks = state.resourceLocks ?? resourceLocks
             boonRarityTarget = state.boonRarityTarget ?? boonRarityTarget
+            boonForceLegendary = state.boonForceLegendary ?? boonForceLegendary
+            boonForceDuo = state.boonForceDuo ?? boonForceDuo
+            if payload.keys.contains("fishingChance") { fishingChance = state.fishingChance }
+            if payload.keys.contains("chaosGateChance") { chaosGateChance = state.chaosGateChance }
         } else if let speed {
             features[speedKey] = speed
         }
     }
 
+    private func applyRecoveryPatch(_ value: Any?) {
+        guard let recovery = value as? [String: Any] else {
+            recoveryText = nil
+            recoveryTargetPID = nil
+            return
+        }
+        let recoveryPID = recovery["pid"] as? Int
+        let observedPID = services.targetObservation.processIdentifier.map(Int.init) ?? pid.map(Int.init)
+        if let observedPID, let recoveryPID, observedPID != recoveryPID { return }
+        let key: String
+        switch recovery["outcome"] as? String {
+        case "unknown": key = "hades.error.restartRequired"
+        case "confirmed": key = "hades.error.commandResultConnectionLost"
+        default: key = "hades.error.recoveryFailed"
+        }
+        recoveryTargetPID = recoveryPID ?? observedPID
+        recoveryText = TrainerTextToken(key: key)
+    }
+
     private func resetObservation() {
         connected = false; heroReady = false; invincible = false
+        status = recoveryText != nil || backendStatus.requiresTargetRestart ? "restart_required" : "disconnected"
+        scene = "unknown"; roomName = nil
         health = nil; maxHealth = nil; money = nil; rerolls = nil
         // Fixed locks are durable desired state. A target/process observation
         // reset clears live values but keeps their desired lock indicators until
@@ -874,7 +1378,7 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
         target = nil
         let speedKey = HadesFeature.gameSpeed.rawValue
         if let speed = features[speedKey]?.gameSpeedIntent() { features[speedKey] = speed }
-        activeFeatures = [:]; dormantFeatures = [:]; resources = [:]; traits = []; world = nil
+        activeFeatures = [:]; dormantFeatures = [:]; resources = [:]; traits = []; canOpenSellTraits = false; world = nil
         selectedWorldExitToken = ""
         selectedWorldExitTarget = ""
         selectedWorldOccurrenceTarget = ""
@@ -885,6 +1389,13 @@ final class HadesTrainerModel: ObservableObject, TrainerHostModel {
 private struct PendingFeatureIntent {
     let requestID: UUID
     let enabled: Bool
+}
+
+private struct PendingBoonRarityIntent {
+    let requestID: UUID
+    let target: String
+    let forceLegendary: Bool
+    let forceDuo: Bool
 }
 
 struct HadesGameModule: TrainerGameModule {
@@ -900,7 +1411,9 @@ struct HadesGameModule: TrainerGameModule {
                 titleKey: section.titleKey,
                 icon: section.icon,
                 separatedFromPrevious: section == .management
-            )
+            ) {
+                model.showWorkbenchSection(section)
+            }
         }
     }
     static func workbenchSearch(model: HadesTrainerModel) -> TrainerWorkbenchSearchCatalog? {
@@ -932,7 +1445,10 @@ struct HadesGameModule: TrainerGameModule {
                         icon: entry.icon,
                         sectionID: entry.section.id,
                         onNavigate: {
-                            if entry.requiresExpandedMetrics { model.numericControlsExpanded = true }
+                            if entry.requiresExpandedMetrics || entry.section == .values {
+                                model.numericControlsExpanded = true
+                            }
+                            model.workbenchSearch = ""
                         }
                     )
                 }

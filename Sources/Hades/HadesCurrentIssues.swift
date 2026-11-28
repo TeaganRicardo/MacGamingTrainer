@@ -16,6 +16,11 @@ extension HadesTrainerModel {
             append("runtime.gameSpeed", TrainerTextToken(key: error, arguments: speed.errorArguments),
                    title: TrainerTextToken(key: HadesFeature.gameSpeed.key))
         }
+        if let recoveryText {
+            append("recovery", recoveryText)
+        } else if status == "restart_required" {
+            append("recovery", statusTitle)
+        }
         return issues
     }
 }

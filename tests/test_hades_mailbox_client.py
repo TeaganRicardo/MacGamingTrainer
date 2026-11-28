@@ -128,16 +128,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-mailbox-client-") as temporar
     t.join(timeout=2)
     assert not mb.tainted and mb._pending_sequence is None
 
-    # 4. Known Lua refusal key leaves mailbox untainted and retryable
-    t = run_consumer_once(ERROR, 2, b"runtime.lua:10: hades.error.staleDoor")
-    try:
-        mb.execute('return "{}"', mutating=True)
-    except AdapterError as error:
-        assert error.code == "runtime_not_ready" and error.presentation == "hades.error.staleDoor"
-    else:
-        raise AssertionError("staleDoor succeeded")
-    t.join(timeout=2)
-    assert not mb.tainted and mb._pending_sequence is None
+    # 4. Known Lua refusal keys leave mailbox untainted and retryable
+    for key in ("staleDoor", "sellDataUnavailable", "sellScreenBusy"):
+        t = run_consumer_once(ERROR, 2, f"runtime.lua:10: hades.error.{key}".encode())
+        try:
+            mb.execute('return "{}"', mutating=True)
+        except AdapterError as error:
+            assert error.code == "runtime_not_ready" and error.presentation == f"hades.error.{key}"
+        else:
+            raise AssertionError(f"{key} succeeded")
+        t.join(timeout=2)
+        assert not mb.tainted and mb._pending_sequence is None
 
     # 5. Unexpected mutating error poisons and refuses replay
     t = run_consumer_once(ERROR, 2, b"boom")
@@ -305,7 +306,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-mailbox-client-") as temporar
     worker.dispatch("apply_world_exit", {
         "target": {"heroId": "h1"}, "roomId": "a" * 32 + ":1:room:3",
         "doorToken": "4:5:" + reward + ":nil:6",
-        "kind": "reward", "targetID": reward, "requestId": "req-1",
+        "room": "combat", "reward": reward, "requestId": "req-1",
     })
     assert not any(
         re.search(r'submit_world_command\("[0-9a-f]{32}"', c) for c in mb_transport.calls
@@ -343,7 +344,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-mailbox-client-") as temporar
     fb_worker.dispatch("apply_world_exit", {
         "target": {"heroId": "h1"}, "roomId": "a" * 32 + ":1:room:3",
         "doorToken": "4:5:" + reward + ":nil:6",
-        "kind": "reward", "targetID": reward, "requestId": "req-2",
+        "room": "combat", "reward": reward, "requestId": "req-2",
     })
     assert any(
         re.search(r'submit_world_command\("[0-9a-f]{32}"', c) for c in fb_worker.transport.calls

@@ -80,6 +80,8 @@ _COMMAND_SPECS = (
         offline=True,
     ),
     _spec("set_boon_rarity", inner=SIDECAR_DEFAULT_TIMEOUT_SECONDS, offline=True),
+    _spec("set_fishing_chance", inner=SIDECAR_DEFAULT_TIMEOUT_SECONDS, offline=True),
+    _spec("set_chaos_gate_chance", inner=SIDECAR_DEFAULT_TIMEOUT_SECONDS, offline=True),
     _spec(
         "disable_all",
         timeout=FEATURE_AND_LOCK_COMMAND_TIMEOUT_SECONDS,
@@ -106,7 +108,11 @@ _COMMAND_SPECS = (
         timeout=FEATURE_AND_LOCK_COMMAND_TIMEOUT_SECONDS,
         inner=MUTATION_WITH_ROLLBACK_BUDGET_SECONDS,
     ),
-    _spec("set_resource"),
+    _spec(
+        "set_resource",
+        timeout=FEATURE_AND_LOCK_COMMAND_TIMEOUT_SECONDS,
+        inner=MUTATION_WITH_ROLLBACK_BUDGET_SECONDS,
+    ),
     _spec(
         "gain_resource",
         timeout=DEFERRED_TRAIT_COMMAND_TIMEOUT_SECONDS,
@@ -179,6 +185,7 @@ _COMMAND_SPECS = (
         timeout=DEFERRED_TRAIT_COMMAND_TIMEOUT_SECONDS,
         inner=SIDECAR_DEFERRED_TRAIT_TIMEOUT_SECONDS,
     ),
+    _spec("open_sell_traits"),
     _spec(
         "save_editor_inventory",
         timeout=SAVE_EDITOR_COMMAND_TIMEOUT_SECONDS,

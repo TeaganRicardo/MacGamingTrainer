@@ -268,7 +268,10 @@ assert(not detached.heroReady and not detached.invincible and runtime.features.i
 assert(#calls == 2)
 print('hades_runtime_ownership_ok')
 '''
-proc = subprocess.run([lua, '-e', 'local SOURCE=' + json.dumps(source) + '\n' + harness], capture_output=True, text=True)
+proc = subprocess.run(
+    [lua, '-'], input='local SOURCE=' + json.dumps(source) + '\n' + harness,
+    capture_output=True, text=True,
+)
 assert proc.returncode == 0, proc.stderr
 print(proc.stdout.strip())
 print('hades_module_ok')

@@ -182,6 +182,13 @@ for raw in sys.stdin:
         if state.get('diagnosticsMode')=='empty':checks=[]
         result={**state,'diagnostics':{'gameID':'hades','checks':checks}}
     else:
+        if command in ('spawn_reward','add_trait') and state.get('slowSpawn'):time.sleep(.25)
+        if command in ('spawn_reward','add_trait') and state.get('failSpawnUnknown'):
+            state['spawnUnknownCount']=state.get('spawnUnknownCount',0)+1
+            (folder/'state.json').write_text(json.dumps(state))
+            if state['spawnUnknownCount']==1:
+                emit({'type':'result','id':request['id'],'protocolVersion':HOST_VERSION,'moduleProtocolVersion':MODULE_VERSION,'gameID':args.game,'ok':False,'error':{'code':'outcome_unknown','presentation':'hades.error.outcomeUnknown','outcomeUnknown':True,'diagnostic':'Simulated unknown spawn outcome'}})
+                continue
         if command=='set_feature' and state.get('slowFeature'):time.sleep(.3)
         if command=='set_feature':
             feature=params.get('feature')
@@ -195,7 +202,24 @@ for raw in sys.stdin:
                     state['rerollsLocked']=False;state['rerollsLock']=None
             (folder/'state.json').write_text(json.dumps(state))
         if command=='set_boon_rarity':
+            if state.get('slowBoonRarity'):time.sleep(.25)
             state['boonRarityTarget']=params['target']
+            state['boonForceLegendary']=bool(params.get('forceLegendary',False))
+            state['boonForceDuo']=bool(params.get('forceDuo',False))
+            (folder/'state.json').write_text(json.dumps(state))
+        if command=='set_fishing_chance':
+            state['fishingChance']=params['chance']
+            (folder/'state.json').write_text(json.dumps(state))
+        if command=='set_chaos_gate_chance':
+            state['chaosGateChance']=params['chance']
+            (folder/'state.json').write_text(json.dumps(state))
+        if command=='disable_all':
+            state['boonRarityTarget']='Heroic'
+            state['boonForceLegendary']=False
+            state['boonForceDuo']=False
+            state['fishingChance']=None
+            state['chaosGateChance']=None
+            state['resourceLocks']={}
             (folder/'state.json').write_text(json.dumps(state))
         if command=='lock_vital':
             assert params.get('vital')=='health'
@@ -203,9 +227,17 @@ for raw in sys.stdin:
             state['healthLock']={'current':state['health'],'max':state['maxHealth']} if params['locked'] else None
             (folder/'state.json').write_text(json.dumps(state))
         if command=='lock_resource':
-            assert params.get('resource')=='Money'
-            state['moneyLocked']=bool(params['locked'])
-            state['moneyLock']=state['money'] if params['locked'] else None
+            resource=params.get('resource')
+            if resource=='Money':
+                state['moneyLocked']=bool(params['locked'])
+                state['moneyLock']=state['money'] if params['locked'] else None
+            else:
+                locks=dict(state.get('resourceLocks') or {})
+                if params['locked']:
+                    locks[resource]=int(state.get('resources',{}).get(resource,0))
+                else:
+                    locks.pop(resource,None)
+                state['resourceLocks']=locks
             (folder/'state.json').write_text(json.dumps(state))
         if command=='lock_rerolls':
             state['rerollsLocked']=bool(params['locked'])
@@ -220,7 +252,12 @@ for raw in sys.stdin:
             if params['field']=='rerolls' and state.get('rerollsLocked'):state['rerollsLock']=params['value']
             (folder/'state.json').write_text(json.dumps(state))
         if command=='set_resource':
-            state['resources'][params['resource']]=params['value']
+            res=params['resource']
+            state['resources'][res]=params['value']
+            locks=dict(state.get('resourceLocks') or {})
+            if res in locks:
+                locks[res]=int(params['value'])
+                state['resourceLocks']=locks
             (folder/'state.json').write_text(json.dumps(state))
         if command=='set_trait_uses':
             for trait in state['traits']:
@@ -387,10 +424,11 @@ func pump(_ seconds: TimeInterval = 0.1) {
         let defaults=InMemoryDefaults()
         let client=BackendClient(process:BackendProcess(executableURL:python,forceKillDelay:0.1))
         let session=TrainerBackendSession(client:client)
+        var resetFeedback: [TrainerHotkeyFeedback] = []
         let model = makeFixtureModel(HadesGameModule.self, session: session,
             logSink: TrainerLogSink(url:folder.appendingPathComponent("trainer.log")),
             backendScriptURL: folder.appendingPathComponent("worker.py")) {
-            HadesTrainerModel(services: $0, defaults: defaults)
+            HadesTrainerModel(services: $0, defaults: defaults, hotkeyFeedback: { resetFeedback.append($0) })
         }
         var diagnosticEditors: [(String,HadesSaveEditorModel)] = []
         var diagnosticWindows: [(String,NSWindow)] = []
@@ -497,6 +535,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 }
                 check(model.feedback?.text.key == (connected ? "host.backend.notice.completed" : "hades.disableAllPending"),
                     "Disable All feedback did not distinguish native cleanup from detached desired reset")
+                check(resetFeedback.last == (connected ? .disabled : .deferred),
+                    "Disable All hotkey sound did not distinguish native cleanup from detached desired reset")
                 let noticeID = model.feedback!.id
                 let feedbackRequests = commands().count
                 wait("real Hades feedback adapter exposes acknowledged receipt") { feedbackDismiss()?.enabled == true }
@@ -587,6 +627,49 @@ func pump(_ seconds: TimeInterval = 0.1) {
                 return !model.busy && model.currentIssues.isEmpty && !model.feedbackDetailsPresented
                     && closeDetails()==nil && accessibilityButton(named:issuesTitle,in:sidebarHost)==nil
             }
+
+            // Recovery visibility and granular status/version/PID detail in HadesCurrentIssues & Sidebar.
+            model.applyBackendPayload([
+                "connected": false, "heroReady": false, "pid": 42, "version": "38284",
+                "status": "restart_required", "scene": "unknown",
+                "recovery": ["outcome": "unknown", "method": "set_value", "pid": 42]
+            ])
+            check(model.currentIssues.map(\.id) == ["recovery"]
+                  && model.currentIssues.first?.text.key == "hades.error.restartRequired"
+                  && model.statusTitle.key == "hades.status.restartRequired"
+                  && model.connectionDetailText == TrainerTextToken(key: "hades.status.detailWithPID", arguments: ["38284", "42"]),
+                  "unknown recovery payload did not project restartRequired and version/PID detail")
+            // Preserved across sparse payload without "recovery" key and across backendDidStop().
+            model.applyBackendPayload(["profiles": []])
+            model.backendDidStop()
+            check(model.recoveryText?.key == "hades.error.restartRequired" && model.currentIssues.map(\.id) == ["recovery"],
+                  "sparse payload or backendDidStop dropped recovery issue")
+            // Confirmed record also maps to restart-required copy in Hades I.
+            model.applyBackendPayload(["connected": false, "heroReady": false, "pid": 42,
+                                       "recovery": ["outcome": "confirmed", "method": "add_trait", "pid": 42]])
+            check(model.recoveryText?.key == "hades.error.commandResultConnectionLost",
+                  "confirmed recovery did not map to commandResultConnectionLost")
+            // New PID clears stale recovery issue; explicit null clears recovery too.
+            model.applyBackendPayload(["connected": false, "heroReady": false, "pid": 99, "version": "38284",
+                                       "status": "disconnected", "recovery": NSNull()])
+            check(model.recoveryText == nil && model.statusTitle.key == "hades.status.disconnected"
+                  && model.connectionDetailText == TrainerTextToken(key: "hades.status.detailWithPID", arguments: ["38284", "99"]),
+                  "explicit null / new PID did not clear recovery and restore disconnected status")
+            // Granular scene status titles.
+            for (scene, expectedKey) in [("house", "hades.status.house"), ("courtyard", "hades.status.courtyard"), ("run", "hades.status.run")] {
+                model.applyBackendPayload(["connected": true, "heroReady": true, "pid": 99, "version": "38284",
+                                           "status": "ready", "scene": scene])
+                check(model.statusTitle.key == expectedKey, "unexpected ready statusTitle for \(scene): \(model.statusTitle.key)")
+            }
+            for (scene, expectedKey) in [("loading", "hades.status.loading"), ("main_menu", "hades.status.mainMenu")] {
+                model.applyBackendPayload(["connected": true, "heroReady": false, "pid": 99, "version": "38284",
+                                           "status": "waiting", "scene": scene])
+                check(model.statusTitle.key == expectedKey, "unexpected waiting statusTitle for \(scene): \(model.statusTitle.key)")
+            }
+            model.hostTargetLifetimeChanged(observation: .init(isRunning: false, launchGeneration: 2))
+            check(model.statusTitle.key == "hades.status.notRunning",
+                  "target exit did not update statusTitle to notRunning")
+
             sidebarWindow.contentView=nil;sidebarWindow.close()
             feedbackWindow.contentView = nil; feedbackWindow.close()
             stopBackend()
@@ -724,6 +807,37 @@ func pump(_ seconds: TimeInterval = 0.1) {
         wait("well-formed status resolves the protocol issue") {
             !model.busy && model.connected && !model.currentIssues.contains { $0.id=="observation" }
         }
+            try updateState(hero:"run:hero:2",health:30)
+            model.refreshFromHost()
+            wait("interlock hero ready before repeatable queue unknown-outcome test") { !model.busy && model.canMutate }
+            var queuedState = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
+            queuedState["slowSpawn"] = true
+            queuedState["failSpawnUnknown"] = true
+            queuedState["spawnUnknownCount"] = 0
+            try JSONSerialization.data(withJSONObject: queuedState).write(to: stateURL, options: .atomic)
+            let beforeUnknownBurst = commands().filter { $0["command"] as? String == "spawn_reward" }.count
+            var burstResults: [Bool] = []
+            check(model.spawnReward("ZeusUpgrade", in: .olympian, completion: { burstResults.append($0) }),
+                  "first repeatable spawn should be admitted")
+            check(model.canSpawnReward && model.canAcquireExactTrait,
+                  "repeatable spawn should leave repeatable queue open")
+            check(model.spawnReward("PoseidonUpgrade", in: .olympian, completion: { burstResults.append($0) }),
+                  "second repeatable spawn should queue")
+            wait("outcome_unknown cancels remaining queued repeatable spawns cleanly") {
+                burstResults.count == 2 && !model.busy
+            }
+            check(burstResults == [false, false],
+                  "queued spawn should cancel without executing after outcome_unknown: \(burstResults)")
+            check(commands().filter { $0["command"] as? String == "spawn_reward" }.count == beforeUnknownBurst + 1,
+                  "queued second spawn crossed backend after outcome_unknown")
+            check(!model.canSpawnReward && !model.canAcquireExactTrait && model.backendStatus.requiresTargetRestart,
+                  "outcome_unknown must lock repeatable spawns until reconnect")
+            queuedState["slowSpawn"] = false
+            queuedState["failSpawnUnknown"] = false
+            try JSONSerialization.data(withJSONObject: queuedState).write(to: stateURL, options: .atomic)
+            session.targetLifetimeChanged()
+            model.connectFromHost(reason: .manual)
+            wait("reconnect after queued unknown-outcome burst") { model.connected && !model.busy && model.canSpawnReward }
             stopBackend()
             print("hades_runtime_interlock_journey_ok")
             return
@@ -851,6 +965,20 @@ func pump(_ seconds: TimeInterval = 0.1) {
                         }
                     }.map { (id: $0.id, destination: $0.section.id) }
                 }, commands: commands)
+            model.workbenchSearch = "Speed"
+            model.numericControlsExpanded = false
+            HadesGameModule.workbenchSections(model: model).first { $0.id == HadesWorkbenchSection.values.id }?.onSelect?()
+            check(model.numericControlsExpanded && model.workbenchSearch.isEmpty,
+                  "selecting Values sidebar section did not expand numeric metrics or clear search")
+            if let searchCatalog = HadesGameModule.workbenchSearch(model: model) {
+                model.workbenchSearch = "Life"
+                model.numericControlsExpanded = false
+                let healthResult = searchCatalog.search("Life", localization).first { $0.sectionID == HadesWorkbenchSection.values.id }
+                check(healthResult != nil, "Values search result missing")
+                healthResult?.onNavigate()
+                check(model.numericControlsExpanded && model.workbenchSearch.isEmpty,
+                      "navigating Values search result did not expand numeric metrics or clear search")
+            }
             stopBackend()
             print("hades_workbench_search_native_ok")
             return
@@ -974,24 +1102,34 @@ func pump(_ seconds: TimeInterval = 0.1) {
             "workbench order lost the implemented native rooms panel")
         check(HadesWorkbenchCatalog.orderedShortcutActions == [.invincibility,.infiniteHealth,.infiniteMoney,
             .infiniteRerolls,.fullGodGauge,.infiniteAmmo,.forceEnableRerolls,.decreaseGameSpeed,.increaseGameSpeed,
-             .boonRarityEnabled,.generateFishing,.applyWorldExit,.applyWorldOccurrence,.generateChamberObject,
-             .generateChaosGate,.spawnOlympian,.spawnPickup,.spawnSpecial,
-             .acquireChaosPair,.acquireExactBoon,.disableAll],
+             .boonRarityEnabled,.openSellTraits,.acquireChaosPair,.acquireExactBoon,
+             .moneyMultiplierEnabled,.resourceMultiplierEnabled,.generateFishing,.applyWorldExit,
+             .applyWorldOccurrence,.generateChamberObject,.generateChaosGate,.spawnOlympian,.spawnPickup,
+             .spawnSpecial,.disableAll],
               "shortcut order drifted from the visible workbench")
         check(HadesShortcutAction.invincibility.defaultChord.displayText=="⌃⌥1"
               && HadesShortcutAction.infiniteHealth.defaultChord.displayText=="⌃⌥2",
               "retiring Heal did not shift derived shortcuts forward")
         // Room shortcuts follow visible room order before Chaos Gate/Generate rows.
-        check(HadesShortcutAction.generateFishing.defaultChord.displayText=="⌃⌥Q"
-              && HadesShortcutAction.applyWorldExit.defaultChord.displayText=="⌃⌥W"
-              && HadesShortcutAction.applyWorldOccurrence.defaultChord.displayText=="⌃⌥E"
-              && HadesShortcutAction.generateChamberObject.defaultChord.displayText=="⌃⌥R"
-              && HadesShortcutAction.generateChaosGate.defaultChord.displayText=="⌃⌥T",
-              "adding room shortcuts broke visible default key assignment")
+        check(HadesShortcutAction.openSellTraits.defaultChord.displayText=="⌃⌥9"
+              && HadesShortcutAction.moneyMultiplierEnabled.defaultChord.displayText=="⌃⌥W"
+              && HadesShortcutAction.resourceMultiplierEnabled.defaultChord.displayText=="⌃⌥E"
+              && HadesShortcutAction.generateFishing.defaultChord.displayText=="⌃⌥R"
+              && HadesShortcutAction.applyWorldExit.defaultChord.displayText=="⌃⌥T"
+              && HadesShortcutAction.applyWorldOccurrence.defaultChord.displayText=="⌃⌥Y"
+              && HadesShortcutAction.generateChamberObject.defaultChord.displayText=="⌃⌥U"
+              && HadesShortcutAction.generateChaosGate.defaultChord.displayText=="⌃⌥I"
+              && HadesShortcutAction.spawnSpecial.defaultChord.displayText=="⌃⌥A",
+              "adding shortcuts broke visible default key assignment")
         check(HadesWorkbenchCatalog.shortcutActions(in:.rooms)==[
             .applyWorldExit,.applyWorldOccurrence,.generateChamberObject,.generateChaosGate,
             .spawnOlympian,.spawnPickup,.spawnSpecial],
               "room action shortcuts left the rooms section or drifted from visible order")
+        check(HadesPresentation.text("hades.search", language: .zhCN) == "搜索官方中英文名或内部 ID"
+              && HadesPresentation.text("hades.search", language: .en) == "Search official name or internal ID"
+              && HadesPresentation.text("hades.shortcut.acquireExactBoon", language: .zhCN) == "获取所选奖励"
+              && HadesPresentation.text("hades.shortcut.acquireExactBoon", language: .en) == "Acquire Selected Reward",
+              "Exact Boons search/shortcut copy drifted from Hades II parity")
         func searchFunctions(_ query: String) -> [HadesWorkbenchEntry] {
             HadesWorkbenchCatalog.matches(query,resources:model.resourceCatalog,worldTerms:model.worldTerms) { key in
                 TrainerPresentationLanguage.allCases.map {
@@ -1055,8 +1193,23 @@ func pump(_ seconds: TimeInterval = 0.1) {
         let targetArgs = commands().last {
             $0["command"] as? String == "set_boon_rarity"
         }?["params"] as? [String:Any]
-        check(targetArgs?["target"] as? String == "Epic",
+        check(targetArgs?["target"] as? String == "Epic"
+              && targetArgs?["forceLegendary"] as? Bool == false
+              && targetArgs?["forceDuo"] as? Bool == false,
               "boon rarity target lost the selectable minimum-rarity semantics")
+        model.setBoonRarity(target: "Epic", forceLegendary: true, forceDuo: true)
+        wait("forced Legendary & Duo reply observed") {
+            !model.busy && model.boonForceLegendary && model.boonForceDuo
+        }
+        let forcedArgs = commands().last {
+            $0["command"] as? String == "set_boon_rarity"
+        }?["params"] as? [String:Any]
+        check(forcedArgs?["forceLegendary"] as? Bool == true && forcedArgs?["forceDuo"] as? Bool == true,
+              "setBoonRarity did not send forceLegendary/forceDuo parameters")
+        model.setBoonRarity(target: "Epic", forceLegendary: false, forceDuo: false)
+        wait("cleared forced Legendary & Duo") {
+            !model.busy && !model.boonForceLegendary && !model.boonForceDuo
+        }
         let speedBefore = model.number(.gameSpeed)
         model.performShortcut(HadesShortcutAction.increaseGameSpeed.rawValue)
         wait("game speed increase shortcut reply") {
@@ -1145,6 +1298,50 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(worldArgs?["roomId"] as? String == "run:room:1" && (worldArgs?["target"] as? [String:String])?["heroId"] == "run:hero:1", "world mutation lost room/hero ownership")
         model.performShortcut(HadesShortcutAction.generateFishing.rawValue)
         wait("generate_fishing shortcut reply: request received, trainer idle") { !model.busy && commands().contains { $0["command"] as? String == "generate_fishing" } }
+        // Repeatable spawn queueing: rapid spawn_reward + exact boon acquisition queue FIFO
+        // while keeping exclusive actions blocked; non-repeatable requests close the queue.
+        model.selectedExactTrait = "AmmoBoltTrait"
+        model.activateAcquisition(.exact)
+        var spawnQueueState = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
+        spawnQueueState["slowSpawn"] = true
+        spawnQueueState["slowFeature"] = true
+        try JSONSerialization.data(withJSONObject: spawnQueueState).write(to: stateURL, options: .atomic)
+        let beforeQueueSpawns = commands().filter { $0["command"] as? String == "spawn_reward" }.count
+        let beforeQueueTraits = commands().filter { $0["command"] as? String == "add_trait" }.count
+        var queueCompletions: [Bool] = []
+        check(model.spawnReward("ZeusUpgrade", in: .olympian, completion: { queueCompletions.append($0) }),
+              "first spawnReward failed to dispatch")
+        check(model.canSpawnReward && model.canAcquireExactTrait,
+              "repeatable spawns must stay enabled while a repeatable spawn is in flight")
+        check(!model.canAcceptRuntimeAction && !model.hostActionsEnabled,
+              "exclusive actions and host actions must block while a spawn is queued")
+        check(!model.generateFishing() && !model.generateChaosGate(),
+              "exclusive fishing and chaos gate actions must reject during repeatable burst")
+        model.performShortcut(HadesShortcutAction.spawnOlympian.rawValue)
+        check(model.acquireSelectedTrait(completion: { queueCompletions.append($0) }),
+              "exact boon acquisition must queue behind spawnReward")
+        model.performShortcut(HadesShortcutAction.acquireExactBoon.rawValue)
+        wait("queued repeatable spawn burst finished") {
+            !model.busy && queueCompletions.count == 2
+                && commands().filter { $0["command"] as? String == "spawn_reward" }.count == beforeQueueSpawns + 2
+                && commands().filter { $0["command"] as? String == "add_trait" }.count == beforeQueueTraits + 2
+        }
+        check(queueCompletions == [true, true], "queued spawns reported failure")
+        check(model.canAcceptRuntimeAction && model.canSpawnReward && model.canAcquireExactTrait,
+              "gates did not reopen after repeatable burst completed")
+        // An unrelated non-repeatable feature request must close canSpawnReward and canAcquireExactTrait.
+        let prevInvincibility = model.isEnabled(.invincibility)
+        model.setFeature(.invincibility, value: !prevInvincibility)
+        check(!model.canAcceptRuntimeAction && !model.canSpawnReward && !model.canAcquireExactTrait,
+              "non-repeatable in-flight request left repeatable spawn queue open")
+        wait("slow non-repeatable feature settled") { !model.busy && model.canSpawnReward }
+        spawnQueueState["slowSpawn"] = false
+        spawnQueueState["slowFeature"] = false
+        try JSONSerialization.data(withJSONObject: spawnQueueState).write(to: stateURL, options: .atomic)
+        model.setFeature(.invincibility, value: prevInvincibility)
+        wait("restored invincibility after queue check") { !model.busy && model.isEnabled(.invincibility) == prevInvincibility }
+        model.selectedExactTrait = ""
+        model.acquisitionRarity = "Heroic"
         let viewportHeight=min(CGFloat(780),NSScreen.main!.visibleFrame.height-80)
         let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1150,height:viewportHeight),styleMask:[.titled],backing:.buffered,defer:false)
         window.isReleasedWhenClosed=false
@@ -1160,6 +1357,119 @@ func pump(_ seconds: TimeInterval = 0.1) {
         host.layoutSubtreeIfNeeded();pump()
         check(fields(in:host).contains { $0.accessibilityLabel()==HadesPresentation.text("hades.money",language:.en) },
               "Obol metric missing from the compact run dashboard")
+        let legendaryBox = nativeAccessibilityControls(host).first { $0.identifier == "hades.feature.forceLegendary" }
+        let duoBox = nativeAccessibilityControls(host).first { $0.identifier == "hades.feature.forceDuo" }
+        check(legendaryBox?.enabled == true && duoBox?.enabled == true,
+              "forced rarity checkboxes missing or disabled while boonRarityEnabled is on")
+        _ = legendaryBox?.press()
+        wait("Force Legendary checkbox press observed") { !model.busy && model.boonForceLegendary }
+        _ = duoBox?.press()
+        wait("Force Duo checkbox press observed") { !model.busy && model.boonForceDuo }
+        var slowRarityState = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
+        slowRarityState["slowBoonRarity"] = true
+        try JSONSerialization.data(withJSONObject: slowRarityState).write(to: stateURL, options: .atomic)
+        let beforeRapidRarity = commands().filter { $0["command"] as? String == "set_boon_rarity" }.count
+        model.setBoonForceLegendary(false)
+        check(model.busy, "first boon rarity toggle did not enter in-flight state")
+        model.setBoonForceDuo(false)
+        wait("rapid consecutive boon rarity toggles coalesced without clobbering") {
+            !model.busy
+                && commands().filter { $0["command"] as? String == "set_boon_rarity" }.count >= beforeRapidRarity + 2
+                && !model.boonForceLegendary && !model.boonForceDuo
+        }
+        slowRarityState["slowBoonRarity"] = false
+        try JSONSerialization.data(withJSONObject: slowRarityState).write(to: stateURL, options: .atomic)
+
+        // Conditional Fishing & Chaos Gate probability fields + dynamic unavailable tooltips.
+        let fishProbLabel = HadesPresentation.text("hades.fishing.title", language: .en) + " "
+            + HadesPresentation.text("hades.fishing.probability", language: .en)
+        let chaosProbLabel = HadesPresentation.text("hades.chaosGate.title", language: .en) + " "
+            + HadesPresentation.text("hades.chaosGate.probability", language: .en)
+        let resetNativeLabel = HadesPresentation.text("hades.occurrence.resetToNative", language: .en)
+        guard let fishProbField = fields(in: host).first(where: { $0.accessibilityLabel() == fishProbLabel }) as? TrainerTextField.Field,
+              let fishCoordinator = fishProbField.delegate as? TrainerTextField.Coordinator,
+              let chaosProbField = fields(in: host).first(where: { $0.accessibilityLabel() == chaosProbLabel }) as? TrainerTextField.Field,
+              let chaosCoordinator = chaosProbField.delegate as? TrainerTextField.Coordinator else {
+            fatalError("Fishing or Chaos Gate probability field/coordinator missing from HadesTrainerView")
+        }
+        let beforeProbInvalid = commands().filter {
+            let cmd = $0["command"] as? String
+            return cmd == "set_fishing_chance" || cmd == "set_chaos_gate_chance"
+        }.count
+        fishCoordinator.begin()
+        fishCoordinator.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: fishProbField))
+        pump()
+        check(fishProbField.stringValue == "" && fishProbField.presentation != .invalid && model.feedback?.text.key != "hades.input.invalid",
+              "blurring unchanged empty Native fishing field altered text or showed error")
+        fishCoordinator.begin(); fishProbField.stringValue = "101"
+        fishCoordinator.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: fishProbField))
+        fishCoordinator.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: fishProbField))
+        pump()
+        check(fishProbField.presentation == .invalid
+              && fishProbField.validationMessage == HadesPresentation.text("hades.input.invalid", language: .en)
+              && fishProbField.accessibilityHelp() == fishProbField.validationMessage
+              && fishProbField.stringValue == "" && model.feedback?.text.key == "hades.input.invalid",
+              "out-of-range fishing chance did not surface field-local .invalid rejection and tooltip")
+        check(commands().filter {
+            let cmd = $0["command"] as? String
+            return cmd == "set_fishing_chance" || cmd == "set_chaos_gate_chance"
+        }.count == beforeProbInvalid, "invalid/noop chance edit hit backend")
+        fishCoordinator.begin(); fishProbField.stringValue = "37.5"
+        fishCoordinator.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: fishProbField))
+        fishCoordinator.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: fishProbField))
+        wait("fishing chance reply observed") { !model.busy && model.fishingChance == 37.5 }
+        check(fishProbField.stringValue == "37.5" && fishProbField.validationMessage == nil,
+              "fishing chance UI field did not display 37.5 or clear previous validation error")
+        fishCoordinator.begin(); fishProbField.stringValue = ""
+        fishCoordinator.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: fishProbField))
+        fishCoordinator.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: fishProbField))
+        pump()
+        check(fishProbField.stringValue == "37.5" && fishProbField.presentation == .invalid
+              && fishProbField.validationMessage == HadesPresentation.text("hades.input.invalid", language: .en)
+              && model.feedback?.text.key == "hades.input.invalid",
+              "clearing active fishing chance override accepted empty string instead of field-local rejection restoring 37.5")
+        chaosCoordinator.begin(); chaosProbField.stringValue = "0"
+        chaosCoordinator.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: chaosProbField))
+        chaosCoordinator.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: chaosProbField))
+        wait("chaos chance reply observed") { !model.busy && model.chaosGateChance == 0 }
+        check(chaosProbField.stringValue == "0", "chaos chance UI field did not display 0")
+        let resetButtons = nativeAccessibilityControls(host).filter { $0.role == "AXButton" && $0.label == resetNativeLabel }
+        check(resetButtons.count == 2, "expected two Reset to Native buttons for active fishing & chaos overrides")
+        _ = resetButtons[0].press()
+        wait("first reset restored Native chance") { !model.busy && (model.fishingChance == nil || model.chaosGateChance == nil) }
+        if model.fishingChance != nil {
+            model.setFishingChance(nil)
+            wait("fishing chance reset to Native") { !model.busy && model.fishingChance == nil }
+        }
+        if model.chaosGateChance != nil {
+            model.setChaosGateChance(nil)
+            wait("chaos gate chance reset to Native") { !model.busy && model.chaosGateChance == nil }
+        }
+
+        // Dynamic fishingReason and chaosReason help tooltips.
+        let fishBtnTitle = HadesPresentation.text("hades.generateFishing", language: .en)
+        let chaosBtnTitle = HadesPresentation.text("hades.generateChaosGate", language: .en)
+        var reasonState = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
+        var worldObj = reasonState["world"] as! [String: Any]
+        worldObj["canFish"] = false; worldObj["fishingReason"] = "spacing"
+        worldObj["canChaos"] = false; worldObj["chaosReason"] = "occupied"
+        reasonState["world"] = worldObj
+        try JSONSerialization.data(withJSONObject: reasonState).write(to: stateURL, options: .atomic)
+        model.refreshFromHost()
+        wait("dynamic fishingReason & chaosReason tooltips projected") {
+            host.layoutSubtreeIfNeeded()
+            return !model.busy
+                && accessibilityButton(named: fishBtnTitle, in: host)?.help == HadesPresentation.text("hades.fishing.unavailable.spacing", language: .en)
+                && accessibilityButton(named: chaosBtnTitle, in: host)?.help == HadesPresentation.text("hades.chaosGate.unavailable.occupied", language: .en)
+        }
+        worldObj["canFish"] = true; worldObj.removeValue(forKey: "fishingReason")
+        worldObj["canChaos"] = true; worldObj.removeValue(forKey: "chaosReason")
+        reasonState["world"] = worldObj
+        try JSONSerialization.data(withJSONObject: reasonState).write(to: stateURL, options: .atomic)
+        model.refreshFromHost()
+        wait("restored fishing & chaos availability after dynamic reason check") {
+            !model.busy && model.world?.canFish == true && model.world?.canChaos == true
+        }
         model.numericControlsExpanded=true;host.layoutSubtreeIfNeeded();pump()
         check(fields(in:host).contains { $0.accessibilityLabel()==HadesPresentation.text("hades.damageMultiplier",language:.en) },
               "expanded run dashboard lost damage multiplier")
@@ -1449,7 +1759,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
         wait("native Gems 80 save_editor_stage/query replies: one acknowledged action, editor idle") { !editor.busy && editor.review.count == 1 && !editor.queryLoading }
         check(editor.review.actions.first?.typedValue == .number(80),"completed native input did not enter Changes")
         editorWindow.contentView?.layoutSubtreeIfNeeded();pump(0.3)
-        let applyTitle=localization.string("hades.apply")
+        let applyTitle=localization.string("hades.saveEditor.apply")
         guard let applyControl=namedNativeControl(editorWindow.contentView!,role:"AXButton",name:applyTitle) else {
             fatalError("revealed Changes has no native Apply action")
         }
@@ -1949,7 +2259,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
                   "shortcut badge did not precede its row action: "+chord)
         }
         checkBadgePrecedes(model.shortcutText(.generateFishing),action:fishingTitle)
-        checkBadgePrecedes(model.shortcutText(.generateChaosGate),action:HadesPresentation.text("hades.generate",language:.en))
+        checkBadgePrecedes(model.shortcutText(.generateChaosGate),action:HadesPresentation.text("hades.generateChaosGate",language:.en))
         check(fishingButton()?.enabled==true && fishingButton()?.help==HadesPresentation.text("hades.fishingHelp",language:.en),
               "available fishing Generate lost its action help")
         func setFishing(_ available: Bool) throws {
@@ -2011,9 +2321,9 @@ func pump(_ seconds: TimeInterval = 0.1) {
             checkBadgePrecedes(model.shortcutText(group.shortcut),action:generateTitle)
             check(generateButton(near:model.shortcutText(group.shortcut))?.enabled==true,"Generate row action unavailable: "+key)
         }
-        check(HadesShortcutAction.spawnOlympian.defaultChord.displayText=="⌃⌥Y"
-              && HadesShortcutAction.spawnPickup.defaultChord.displayText=="⌃⌥U"
-              && HadesShortcutAction.spawnSpecial.defaultChord.displayText=="⌃⌥I",
+        check(HadesShortcutAction.spawnOlympian.defaultChord.displayText=="⌃⌥O"
+              && HadesShortcutAction.spawnPickup.defaultChord.displayText=="⌃⌥P"
+              && HadesShortcutAction.spawnSpecial.defaultChord.displayText=="⌃⌥A",
               "Generate row shortcuts did not take the next free derived defaults")
         // A real menu shows the catalog sections and moves the model-held
         // selection that both the button and the shortcut generate.
@@ -2069,7 +2379,7 @@ func pump(_ seconds: TimeInterval = 0.1) {
               "an unmodified shortcut was refused or not applied: \(String(describing:capture.issue))")
         checkBadgePrecedes("F6",action:generateTitle)
         model.resetShortcuts();host.layoutSubtreeIfNeeded();pump()
-        check(model.shortcutText(.spawnSpecial)=="⌃⌥I","shortcut reset did not restore the derived default")
+        check(model.shortcutText(.spawnSpecial)=="⌃⌥A","shortcut reset did not restore the derived default")
 
         // Core metric cards commit through Hades I's completion owner: a live
         // amount routes to the hero captured when its edit began, a multiplier
@@ -2164,8 +2474,18 @@ func pump(_ seconds: TimeInterval = 0.1) {
         worldState["world"]=[
             "roomId":"run:room:1",
             "doors":[[
-                "id":"door:1","doorToken":"fixture-exit:1","number":1,"reward":"RoomMoneyDrop",
-                "targets":[["kind":"reward","id":"MaxHealthDrop"]]
+                "id":"door:1","doorToken":"fixture-exit:1","number":1,
+                "roomName":"A_Combat02","roomKind":"combat","reward":"RoomRewardMoneyDrop",
+                "rewardWarning":"room_has_forced_reward",
+                "targets":[
+                    ["kind":"reward","id":"PoseidonUpgrade","enabled":true,"warning":"god_not_eligible"],
+                    ["kind":"reward","id":"ZeusUpgrade","enabled":true,"warning":"god_not_eligible"],
+                    ["kind":"reward","id":"StackUpgrade","enabled":false,"reason":"reward_eligibility_probe_error"],
+                    ["kind":"reward","id":"RoomRewardMaxHealthDrop","enabled":true],
+                    ["kind":"roomCategory","id":"combat","enabled":true,"acceptsReward":true],
+                    ["kind":"roomCategory","id":"miniboss","enabled":true,"acceptsReward":true,"warning":"native_forced_room_present"],
+                    ["kind":"roomCategory","id":"story","enabled":true,"acceptsReward":false]
+                ]
             ]],
             "canFish":true,"canChaos":true,"objects":[],
             "occurrenceTargets":[["id":"charon","kind":"shop","sourceId":"charon"]]
@@ -2174,6 +2494,101 @@ func pump(_ seconds: TimeInterval = 0.1) {
         model.refreshFromHost()
         wait("Hades world actions fixture observed") {
             !model.busy && model.canSelectWorldExit && model.canSelectWorldOccurrence
+        }
+        host.layoutSubtreeIfNeeded();pump()
+        // Verify Hades I Modify Exit left picker shows room type + reward, and right picker uses
+        // two-level nested submenus (room type -> Any Reward / Gods / Rewards), disabled reasons,
+        // and warnings in secondaryLabelColor.
+        if let hadesExitPopup = nativeAccessibilityControls(host).first(where: {
+            $0.role == "AXPopUpButton" && $0.identifier == "hades.worldActions.currentExit"
+        }) {
+            let nsExitPopup = (hadesExitPopup.object as? NSPopUpButton)
+                ?? (hadesExitPopup.object as? NSPopUpButtonCell)?.controlView as? NSPopUpButton
+            let exitTitle = hadesExitPopup.valueText ?? nsExitPopup?.title ?? hadesExitPopup.text ?? ""
+            let combatText = HadesPresentation.text("hades.worldActions.route.combat", language: localization.language)
+            check(exitTitle.contains(combatText),
+                  "Hades I currentExit did not show room kind: \(exitTitle)")
+        } else {
+            fatalError("Hades I Modify Exit currentExit missing AXPopUpButton")
+        }
+        if let hadesTargetPopup = nativeAccessibilityControls(host).first(where: {
+            $0.role == "AXPopUpButton" && $0.identifier == "hades.worldActions.target"
+        }) {
+            let nsPopup = (hadesTargetPopup.object as? NSPopUpButton)
+                ?? (hadesTargetPopup.object as? NSPopUpButtonCell)?.controlView as? NSPopUpButton
+            let menu = nsPopup?.menu
+            let topItems = menu?.items ?? []
+            let combatLabel = HadesPresentation.text("hades.worldActions.route.combat", language: localization.language)
+            let minibossLabel = HadesPresentation.text("hades.worldActions.route.miniboss", language: localization.language)
+            let storyLabel = HadesPresentation.text("hades.worldActions.route.story", language: localization.language)
+            let combatItem = topItems.first { $0.title == combatLabel }
+            let minibossItem = topItems.first { $0.title.hasPrefix(minibossLabel) }
+            let storyItem = topItems.first { $0.title == storyLabel }
+            check(combatItem?.submenu != nil && minibossItem?.submenu != nil && storyItem?.submenu == nil,
+                  "Hades I Modify Exit top-level menu did not nest combat/miniboss and keep story flat: \(topItems.map(\.title))")
+            let combatSubItems = combatItem?.submenu?.items ?? []
+            let subTitles = combatSubItems.map(\.title)
+            let anyRewardLabel = HadesPresentation.text("hades.worldActions.anyReward", language: localization.language)
+            let godsHeader = HadesPresentation.text("hades.worldActions.gods", language: localization.language)
+            let rewardsHeader = HadesPresentation.text("hades.worldActions.rewards", language: localization.language)
+            check(subTitles.contains(anyRewardLabel) && subTitles.contains(godsHeader) && subTitles.contains(rewardsHeader),
+                  "Hades I Modify Exit submenu missing Any Reward / Gods / Rewards: \(subTitles)")
+            if let zeusIdx = subTitles.firstIndex(where: { $0.contains("Zeus") || $0.contains("宙斯") }),
+               let posIdx = subTitles.firstIndex(where: { $0.contains("Poseidon") || $0.contains("波塞冬") }) {
+                check(zeusIdx < posIdx, "Hades I Modify Exit gods not in catalog order: \(subTitles)")
+                let zeusAttr = combatSubItems[zeusIdx].attributedTitle
+                let warnRange = (zeusAttr?.string as NSString?)?.range(of: " · ⚠︎ ") ?? NSRange(location: NSNotFound, length: 0)
+                check(warnRange.location != NSNotFound
+                      && (zeusAttr?.attribute(.foregroundColor, at: warnRange.location, effectiveRange: nil) as? NSColor) == NSColor.secondaryLabelColor,
+                      "Hades I Modify Exit warning suffix did not render in secondaryLabelColor")
+            } else {
+                fatalError("Hades I Modify Exit missing Zeus/Poseidon in combat submenu: \(subTitles)")
+            }
+            if let disabledItem = combatSubItems.first(where: { $0.title.contains("Pom") || $0.title.contains("石榴") }) {
+                check(!disabledItem.isEnabled && !disabledItem.title.contains("⚠︎"),
+                      "Hades I Modify Exit disabled reward item was enabled or used warning glyph: \(disabledItem.title)")
+            }
+            model.selectedWorldExitTarget = "miniboss>ZeusUpgrade"
+            host.layoutSubtreeIfNeeded();pump()
+            let updatedTitle = nsPopup?.attributedTitle.string ?? nsPopup?.title ?? ""
+            check(updatedTitle.contains(minibossLabel) && (updatedTitle.contains("Zeus") || updatedTitle.contains("宙斯")),
+                  "Hades I Modify Exit target button did not show room + reward: \(updatedTitle)")
+        } else {
+            fatalError("Hades I Modify Exit target missing AXPopUpButton")
+        }
+        // Verify Hades I Exact Boons UI parity: "Reward"/"奖励" label, aligned Chaos/Exact pickers,
+        // and Row 1 controls placed right next to the search field.
+        check(HadesPresentation.text("hades.selectTrait", language: .zhCN) == "奖励"
+              && HadesPresentation.text("hades.selectTrait", language: .en) == "Reward",
+              "Hades I selectTrait localization did not match Hades II parity")
+        let blessingPicker = namedNativeControl(host, role: "AXPopUpButton",
+            name: HadesPresentation.text("hades.chaosBlessing", language: localization.language))
+        let cursePicker = namedNativeControl(host, role: "AXPopUpButton",
+            name: HadesPresentation.text("hades.chaosCurse", language: localization.language))
+        let sourcePicker = namedNativeControl(host, role: "AXPopUpButton",
+            name: HadesPresentation.text("hades.exactSource", language: localization.language))
+        let exactPicker = namedNativeControl(host, role: "AXPopUpButton",
+            name: HadesPresentation.text("hades.selectTrait", language: localization.language))
+        if let b = blessingPicker, let c = cursePicker, let s = sourcePicker, let e = exactPicker {
+            check(abs(b.frame.width - s.frame.width) <= 2 && abs(c.frame.width - e.frame.width) <= 2,
+                  "Hades I Exact Boons pickers are not equal width: b=\(b.frame) c=\(c.frame) s=\(s.frame) e=\(e.frame)")
+        }
+        if let levelField = fields(in: host).first(where: { $0.accessibilityIdentifier() == "hades.acquisition.level" }) {
+            let levelScreen = window.convertToScreen(levelField.convert(levelField.bounds, to: nil))
+            let searchPlaceholder = HadesPresentation.text("hades.search", language: localization.language)
+            if let searchField = fields(in: host)
+                .filter({ $0.placeholderString == searchPlaceholder })
+                .min(by: {
+                    let y0 = window.convertToScreen($0.convert($0.bounds, to: nil)).midY
+                    let y1 = window.convertToScreen($1.convert($1.bounds, to: nil)).midY
+                    return abs(y0 - levelScreen.midY) < abs(y1 - levelScreen.midY)
+                }) {
+                let searchScreen = window.convertToScreen(searchField.convert(searchField.bounds, to: nil))
+                check(abs(levelScreen.midY - searchScreen.midY) < 20 && levelScreen.maxX < searchScreen.minX,
+                      "Hades I Exact Boons Row 1 controls misaligned with search: level=\(levelScreen) search=\(searchScreen)")
+            } else {
+                fatalError("Hades I Exact Boons Row 1 search field missing")
+            }
         }
         check(featureSwitch(.infiniteHealth)!.press(),"Infinite Life switch refused slow blocking press")
         wait("blocking request leaves canAcceptRuntimeAction false while keeping Hades world pickers interactive") {
@@ -2188,68 +2603,69 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(featureSwitch(.infiniteHealth)!.press(),"Infinite Life restore switch press failed")
         waitPhase(.infiniteHealth,.off,help:nil)
 
-        // All seven permanent resources use independent Core numeric inputs.
-        // No search or popup may gate direct editing, including while detached.
-        recordPhase("recovery: directly visible Core permanent resource rows")
-        let permanentResourceNames:[(String,String,String)] = [
-            ("MetaPoints","Darkness","黑暗"), ("Gems","Gemstones","宝石"),
-            ("LockKeys","Chthonic Key","冥府钥匙"), ("GiftPoints","Nectar","蜜露"),
-            ("SuperGems","Diamonds","钻石"), ("SuperGiftPoints","Ambrosia","仙酒"),
-            ("SuperLockKeys","Titan Blood","泰坦之血")
-        ]
-        func resourceField(_ id:String) -> NSTextField? {
-            guard let resource=permanentResourceNames.first(where:{$0.0==id}) else { return nil }
-            let primary=localization.language == .en ? resource.1 : resource.2
-            let secondary=localization.language == .en ? resource.2 : resource.1
-            return fields(in:host).first { $0.accessibilityLabel()=="\(primary) · \(secondary)" }
+        // Permanent resources use the Core TrainerResourceEditor (searchable, grouped, with per-resource lock).
+        recordPhase("recovery: Core TrainerResourceEditor permanent resource editing and locking")
+        let resourceEditorTitle = HadesPresentation.text("hades.resources", language: .en)
+        let resourcePlaceholder = localization.localized("host.amount")
+        func resourceAmountField() -> NSTextField? {
+            fields(in: host).first { $0.placeholderString == resourcePlaceholder }
         }
-        func checkAllResourceRows(observed:Bool) {
-            host.layoutSubtreeIfNeeded();pump()
-            for (id,_,_) in permanentResourceNames {
-                let field=resourceField(id)
-                check(field != nil,"missing always-visible resource input: \(id)")
-                let expected=id=="Gems" && observed ? "12" : ""
-                check(field?.stringValue==expected,
-                      "unexpected resource observation: \(id), expected=\(expected)")
-                check(field?.isEnabled == (id=="Gems" && observed),
-                      "resource availability is inconsistent: \(id)")
+        func resourceSearchField() -> NSTextField? {
+            let placeholder = localization.localized("host.resource.searchPlaceholder")
+            return fields(in: host).first { $0.placeholderString == placeholder }
+        }
+        func resourceLockButton() -> NativeAccessibilityControl? {
+            nativeAccessibilityControls(host).first { control in
+                control.role == "AXButton"
+                    && ((control.label ?? "").contains(resourceEditorTitle)
+                        || (control.label ?? "").contains(HadesPresentation.text("hades.resources", language: .zhCN)))
             }
         }
-        checkAllResourceRows(observed:true)
-        let resourceBaseline=requests("set_resource").count
-        nativeCommit(resourceField("Gems")!,"40")
-        wait("Core resource row set_resource reply: 40 Gemstones observed") {
-            !model.busy && model.resources["Gems"]==40
+        host.layoutSubtreeIfNeeded(); pump()
+        check(resourceSearchField() != nil && resourceAmountField() != nil && resourceLockButton() != nil,
+              "TrainerResourceEditor controls missing from Resources section")
+        check(resourceAmountField()?.stringValue == "12" && resourceAmountField()?.isEnabled == true,
+              "TrainerResourceEditor did not pre-select and observe live Gems count")
+        let resourceBaseline = requests("set_resource").count
+        nativeCommit(resourceAmountField()!, "40")
+        wait("Core resource editor set_resource reply: 40 Gemstones observed") {
+            !model.busy && model.resources["Gems"] == 40
         }
-        let resourceParams=requests("set_resource").last?["params"] as? [String:Any]
-        check(requests("set_resource").count==resourceBaseline+1 && resourceParams?["resource"] as? String == "Gems"
+        let resourceParams = requests("set_resource").last?["params"] as? [String: Any]
+        check(requests("set_resource").count == resourceBaseline + 1 && resourceParams?["resource"] as? String == "Gems"
               && resourceParams?["value"] as? Double == 40
-              && (resourceParams?["target"] as? [String:String])?["heroId"]==liveHero,
-              "Core resource commit lost its resource, amount or captured hero")
-        host.layoutSubtreeIfNeeded();pump()
-        check(resourceField("Gems")?.stringValue=="40","the Gems row did not refresh its committed count")
-        localization.language = .zhCN;host.layoutSubtreeIfNeeded();pump()
-        check(resourceField("Gems")?.accessibilityLabel()=="宝石 · Gemstones",
-              "the Chinese resource label was not 中文 · English")
-        for (id,_,_) in permanentResourceNames {
-            check(resourceField(id) != nil,"language change hid permanent resource: \(id)")
+              && (resourceParams?["target"] as? [String: String])?["heroId"] == liveHero,
+              "Core resource editor commit lost its resource, amount or captured hero")
+        host.layoutSubtreeIfNeeded(); pump()
+        check(resourceAmountField()?.stringValue == "40", "TrainerResourceEditor did not refresh its committed count")
+
+        let lockBaseline = requests("lock_resource").count
+        guard let initialLockBtn = resourceLockButton(), initialLockBtn.press() else {
+            fatalError("resource lock button missing or refused AX input")
         }
-        localization.language = .en;host.layoutSubtreeIfNeeded();pump()
-        let amountField=resourceField("Gems")!
-        let amountCoordinator=amountField.delegate as! TrainerTextField.Coordinator
-        amountCoordinator.begin();amountField.stringValue="41"
-        amountCoordinator.controlTextDidChange(Notification(name:NSControl.textDidChangeNotification,object:amountField))
-        try updateState(hero:"run:hero:3",health:model.health ?? 1)
-        model.refreshFromHost();wait("resource hero replacement status") { !model.busy && model.target?.heroId=="run:hero:3" }
-        amountCoordinator.controlTextDidEndEditing(Notification(name:NSControl.textDidEndEditingNotification,object:amountField));pump()
-        check(requests("set_resource").count==resourceBaseline+1 && amountField.stringValue=="40"
-              && model.feedback?.text.key=="hades.error.staleHero",
+        wait("per-resource lock reply: Gems locked at 40") {
+            !model.busy && model.resourceLocks["Gems"] == 40
+        }
+        check(requests("lock_resource").count == lockBaseline + 1, "per-resource lock did not send lock_resource")
+        guard let unlockBtn = resourceLockButton(), unlockBtn.press() else {
+            fatalError("resource unlock button missing or refused AX input")
+        }
+        wait("per-resource unlock reply: Gems unlocked") {
+            !model.busy && model.resourceLocks["Gems"] == nil
+        }
+
+        let amountField = resourceAmountField()!
+        let amountCoordinator = amountField.delegate as! TrainerTextField.Coordinator
+        amountCoordinator.begin(); amountField.stringValue = "41"
+        amountCoordinator.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: amountField))
+        try updateState(hero: "run:hero:3", health: model.health ?? 1)
+        model.refreshFromHost(); wait("resource hero replacement status") { !model.busy && model.target?.heroId == "run:hero:3" }
+        amountCoordinator.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification, object: amountField)); pump()
+        check(requests("set_resource").count == resourceBaseline + 1 && amountField.stringValue == "40"
+              && model.feedback?.text.key == "hades.error.staleHero",
               "a stale resource draft mutated the replacement hero or kept its draft")
-        try updateState(hero:liveHero,health:model.health ?? 1)
-        model.refreshFromHost();wait("resource editor hero restored") { !model.busy && model.target?.heroId==liveHero }
-        for (id,_,_) in permanentResourceNames {
-            check(resourceField(id) != nil,"editing a row hid permanent resource: \(id)")
-        }
+        try updateState(hero: liveHero, health: model.health ?? 1)
+        model.refreshFromHost(); wait("resource editor hero restored") { !model.busy && model.target?.heroId == liveHero }
 
         var lifetimeState=try JSONSerialization.jsonObject(with:Data(contentsOf:stateURL)) as! [String:Any]
         lifetimeState["traits"]=[["instanceId":"effect:temporary:1","name":"TemporaryImprovedWeaponTrait",
@@ -2290,6 +2706,137 @@ func pump(_ seconds: TimeInterval = 0.1) {
         check(usesRequests.count==1 && usesParams?["instanceId"] as? String == "effect:temporary:1"
             && (usesParams?["target"] as? [String:String])?["heroId"]=="run:hero:2",
             "remaining-use commit lost its selected effect or hero")
+
+        // #7: Empty chamber facility placeholder, accessibility identifier, and generate button metadata.
+        if let chamberPopup = nativeAccessibilityControls(host).first(where: {
+            $0.role == "AXPopUpButton" && $0.identifier == "hades.chamberObject.selection"
+        }) {
+            let emptyFacility = HadesPresentation.text("hades.chamberObject.empty", language: localization.language)
+            check(chamberPopup.valueText == emptyFacility,
+                  "offline/empty chamber facility picker did not show placeholder: \(chamberPopup.valueText ?? "nil")")
+        } else {
+            fatalError("chamberObject picker missing hades.chamberObject.selection identifier")
+        }
+        let chamberGenButton = accessibilityButton(named: HadesPresentation.text("hades.chamberObject", language: localization.language), in: host)
+        check(chamberGenButton?.help == HadesPresentation.text("hades.chamberObject.help", language: localization.language),
+              "chamber facility button missing help text")
+
+        // #8: Current Trait default upgrade prefill (+1 level & next rarity), unified remove copy, and Pool of Purging.
+        var traitState = try JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
+        traitState["canOpenSellTraits"] = true
+        traitState["traits"] = [
+            ["instanceId": "trait:ArtemisWeaponTrait:1", "name": "ArtemisWeaponTrait",
+             "rarity": "Common", "level": 1, "canEdit": true, "canRemove": true, "limitation": ""],
+        ]
+        try JSONSerialization.data(withJSONObject: traitState).write(to: stateURL, options: .atomic)
+        model.refreshFromHost()
+        wait("single trait upgrade prefill and Pool of Purging state observed") {
+            !model.busy && model.traits.count == 1 && model.canOpenSellTraits
+        }
+        host.layoutSubtreeIfNeeded(); pump()
+        check(fields(in: host).contains {
+            $0.accessibilityIdentifier() == "hades.currentTrait.level" && $0.stringValue == "2"
+        }, "Current Trait did not prefill level + 1")
+        let setLevelTitle = HadesPresentation.text("hades.setLevel", language: .en)
+        let setRarityTitle = HadesPresentation.text("hades.setRarity", language: .en)
+        check(nativeAccessibilityControls(host).contains { $0.role == "AXButton" && $0.label == setLevelTitle && $0.enabled },
+              "Current Trait Set Level button did not start enabled with prefilled level + 1")
+        check(nativeAccessibilityControls(host).contains { $0.role == "AXButton" && $0.label == setRarityTitle && $0.enabled },
+              "Current Trait Set Rarity button did not start enabled with prefilled next rarity")
+        let singleRemoveEN = HadesPresentation.text("hades.remove", language: .en)
+        let purgeOpenTitle = HadesPresentation.text("hades.open", language: .en)
+        let beforePurge = commands().filter { $0["command"] as? String == "open_sell_traits" }.count
+        check(accessibilityButton(named: singleRemoveEN, in: host) != nil, "single-stack remove button missing")
+        localization.language = .zhCN; host.layoutSubtreeIfNeeded(); pump()
+        check(accessibilityButton(named: HadesPresentation.text("hades.remove", language: .zhCN), in: host)?.label == "移除",
+              "Chinese single-stack remove label was not unified to 移除")
+        localization.language = .en; host.layoutSubtreeIfNeeded(); pump()
+
+        traitState["traits"] = [
+            ["instanceId": "trait:ArtemisSecondaryTrait:1,2", "name": "ArtemisSecondaryTrait",
+             "rarity": "Heroic", "level": 2, "canEdit": true, "canRemove": true, "limitation": ""],
+        ]
+        try JSONSerialization.data(withJSONObject: traitState).write(to: stateURL, options: .atomic)
+        model.refreshFromHost()
+        wait("multi-stack trait observed") {
+            !model.busy && model.traits.first?.level == 2
+        }
+        host.layoutSubtreeIfNeeded(); pump()
+        check(fields(in: host).contains {
+            $0.accessibilityIdentifier() == "hades.currentTrait.level" && $0.stringValue == "3"
+        }, "Level 2 Current Trait did not prefill level + 1")
+        let multiNameEN = model.traitName(model.traits[0], language: .en)
+        check(accessibilityButton(named: localization.string("hades.removeAllMatching", arguments: [multiNameEN], language: .en), in: host) != nil,
+              "multi-stack Remove all {0} button missing")
+        localization.language = .zhCN; host.layoutSubtreeIfNeeded(); pump()
+        let multiNameZH = model.traitName(model.traits[0], language: .zhCN)
+        check(accessibilityButton(named: localization.string("hades.removeAllMatching", arguments: [multiNameZH], language: .zhCN), in: host)?.label == "移除全部同名的 \(multiNameZH)",
+              "Chinese multi-stack remove label did not use 移除全部同名的 {0}")
+        localization.language = .en; host.layoutSubtreeIfNeeded(); pump()
+
+        check(accessibilityButton(named: purgeOpenTitle, in: host)?.press() == true,
+              "Pool of Purging Open button refused native AX click")
+        wait("open_sell_traits command completed") {
+            !model.busy && commands().filter { $0["command"] as? String == "open_sell_traits" }.count == beforePurge + 1
+        }
+        model.performShortcut(HadesShortcutAction.openSellTraits.rawValue)
+        wait("open_sell_traits shortcut completed") {
+            !model.busy && commands().filter { $0["command"] as? String == "open_sell_traits" }.count == beforePurge + 2
+        }
+
+        // #9: Switching Exact Boons source clears selectedExactTrait to placeholder when item isn't in new source.
+        if let srcPicker = nativeAccessibilityControls(host).first(where: {
+            $0.role == "AXPopUpButton" && $0.label == HadesPresentation.text("hades.exactSource", language: localization.language)
+        }) {
+            model.selectedExactTrait = "ArtemisWeaponTrait"
+            selectNativePicker(srcPicker, in: window, moving: 1, opening: .accessibility); pump()
+            check(model.selectedExactTrait == "",
+                  "switching Exact Boons source did not clear selectedExactTrait to placeholder: \(model.selectedExactTrait)")
+        }
+
+        // #12: backendWillRestart clears transient state, and prepareForTermination guards re-entrancy & changed PID.
+        model.backendWillRestart()
+        check(model.feedback == nil, "backendWillRestart did not clear transient notice")
+        let changedTargetSession = TrainerBackendSession(client: BackendClient(
+            process: BackendProcess(executableURL: python, forceKillDelay: 0.1)))
+        let termLog = TrainerLogSink(url: folder.appendingPathComponent("term.log"))
+        let termServices = TrainerModuleServices(
+            descriptor: HadesGameModule.descriptor,
+            session: changedTargetSession,
+            logSink: termLog,
+            targetObservation: TrainerTargetObservation(isRunning: true, launchGeneration: 1, processIdentifier: 42)
+        )
+        let termModel = HadesTrainerModel(services: termServices, defaults: InMemoryDefaults(), hotkeyFeedback: { _ in })
+        try changedTargetSession.start(
+            descriptor: HadesGameModule.descriptor,
+            backendScriptURL: folder.appendingPathComponent("worker.py"),
+            applyPayload: { [weak termModel] in termModel?.applyBackendPayload($0) },
+            resetGameState: { [weak termModel] in termModel?.backendDidStop() },
+            log: { termLog.append($0) },
+            backendLog: { termLog.append($0, source: "BACKEND") }
+        )
+        termModel.backendDidStart()
+        wait("termination guard model ready") { termModel.connected && !termModel.busy }
+        termModel.beginTerminationFromHost()
+        termServices.targetObservation = TrainerTargetObservation(isRunning: true, launchGeneration: 2, processIdentifier: 999)
+        var termComplete1 = false, termComplete2 = false
+        let disableBeforeMismatch = commands().filter { $0["command"] as? String == "disable_all" }.count
+        termModel.prepareForTermination {
+            changedTargetSession.stop()
+            termComplete1 = true
+        }
+        termModel.prepareForTermination {
+            termComplete2 = true
+        }
+        wait("re-entrant prepareForTermination completed") { termComplete1 && termComplete2 }
+        check(commands().filter { $0["command"] as? String == "disable_all" }.count == disableBeforeMismatch,
+              "prepareForTermination sent disable_all to a different PID after terminationTargetObservation")
+
+        traitState["canOpenSellTraits"] = false
+        traitState["traits"] = lifetimeState["traits"]!
+        try JSONSerialization.data(withJSONObject: traitState).write(to: stateURL, options: .atomic)
+        model.refreshFromHost()
+        wait("restored pre-check state") { !model.busy }
         for connected in [true,false] {
             try setConnection(connected,heroReady:false)
             model.refreshFromHost();wait("no-hero status reply: connected=\(connected), trainer idle") { !model.busy && model.connected==connected && !model.heroReady }
@@ -2308,11 +2855,8 @@ func pump(_ seconds: TimeInterval = 0.1) {
             let desiredDash=fields(in:host).first { $0.accessibilityLabel()==HadesPresentation.text("hades.dashBonus",language:.en) }
             check(desiredDash?.stringValue=="3" && desiredDash?.isEnabled==true,
                   "the desired multiplier was hidden or gated by the missing hero (connected=\(connected))")
-            for (id,_,_) in permanentResourceNames {
-                let field=resourceField(id)
-                check(field != nil && field?.stringValue=="" && field?.isEnabled==false,
-                      "an offline or unobserved permanent resource was hidden/editable: \(id), connected=\(connected)")
-            }
+            check(resourceAmountField()?.stringValue == "" && resourceAmountField()?.isEnabled == false,
+                  "an offline or unobserved TrainerResourceEditor fabricated value or stayed editable (connected=\(connected))")
             model.numericControlsExpanded=false;host.layoutSubtreeIfNeeded();pump()
             let beforeOneShot=commands().count
             let issuesBeforeOneShot=model.currentIssues

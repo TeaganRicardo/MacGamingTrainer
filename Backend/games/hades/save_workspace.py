@@ -37,8 +37,9 @@ _ELIGIBILITY = StructuredSaveEligibility(
 
 
 _CATALOG = json.loads(Path(__file__).with_name('save_catalog.json').read_text())
-DOMAINS = ('resources', 'progression', 'equipment', 'relationships', 'narrative',
-           'statistics', 'history', 'advanced')
+_ORDINARY_DOMAINS = ('resources', 'progression', 'equipment', 'relationships',
+                     'narrative', 'statistics', 'history')
+DOMAINS = ('all',) + _ORDINARY_DOMAINS + ('advanced',)
 _PAIRS = {
     'GameState': ('长期进度', 'Persistent progress'), 'CurrentRun': ('当前挑战', 'Current run'),
     'RunHistory': ('挑战历史', 'Run history'), 'Resources': ('资源库存', 'Resource balances'),
@@ -289,7 +290,7 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
 
     def _semantic_rows(self, domain, language):
         rows = []
-        if domain == 'resources':
+        if domain in ('all', 'resources'):
             try: owner = logical(self.document, ('GameState', 'Resources'))
             except KeyError: owner = LuaTable()
             except ValueError: owner = None
@@ -306,7 +307,7 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
                         'operations': ['set'], 'constraints': {'min': 0, 'max': 9007199254740991, 'integer': True},
                         'warning': ('直接设置库存；累计获得、消耗和赠礼事件保持为独立记录。' if language == 'zh-CN' else
                                     'Sets the balance directly. Lifetime gains, spending and gift events are separate records.')})
-        if domain == 'progression':
+        if domain in ('all', 'progression'):
             for index, names in enumerate(_CATALOG['mirrorRows'], 1):
                 try:
                     owner = logical(self.document, ('GameState', 'MetaUpgradesUnlocked'))
@@ -326,7 +327,7 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
                     'editable': True, 'hasChildren': False, 'operations': ['set'],
                     'warning': ('直接设置成对解锁状态；资源消耗与剧情资格保持为独立记录。' if language == 'zh-CN' else
                                 'Sets the paired unlock state. Resource spending and story eligibility are separate records.')})
-        if domain == 'equipment':
+        if domain in ('all', 'equipment'):
             for weapon, aspects in _CATALOG['weapons'].items():
                 try:
                     owner = logical(self.document, ('GameState', 'LastWeaponUpgradeData'))
@@ -371,10 +372,18 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
     def _domain_roots(self, domain):
         if domain == 'advanced':
             return [((index,), []) for index in range(len(self.document.lua_values))]
-        result = []
-        for keys in NATIVE_OWNERS[domain]:
-            try: result.append((physical(self.document, keys), list(keys)))
-            except (KeyError, ValueError): continue
+        domains = _ORDINARY_DOMAINS if domain == 'all' else (domain,)
+        result, seen = [], set()
+        for sub in domains:
+            for keys in NATIVE_OWNERS[sub]:
+                token = tuple(keys)
+                if token in seen:
+                    continue
+                seen.add(token)
+                try:
+                    result.append((physical(self.document, keys), list(keys)))
+                except (KeyError, ValueError):
+                    continue
         return result
 
     def query(self, domain='resources', language='en', query='', parentId=None, offset=0, limit=100):
@@ -410,7 +419,7 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
                 child = path + (index * 2 + 1,)
                 child_keys = [*keys, key]
                 if domain != 'advanced' and ordinary_purpose(child_keys, _CATALOG) is None: continue
-                if not (parentId is None and domain == 'resources' and keys == ['GameState', 'Resources']
+                if not (parentId is None and domain in ('all', 'resources') and keys == ['GameState', 'Resources']
                         and type(key) is str and any(row['id'] == 'resource:' + key for row in rows)):
                     row = self._row(child, child_keys, language)
                     if domain == 'advanced':
@@ -606,6 +615,10 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
                 'after': (values.display(values.from_typed(wire)) if operation == 'set' else '∅' if operation == 'unset' else
                           '+ ' + values.display(values.from_typed(wire['key'])) + ': ' + values.display(values.from_typed(wire['value']))),
                 'operation': operation, 'valueType': row['valueType'],
+                'owner': row['owner'], 'group': row['group'], 'operations': row['operations'],
+                'hasChildren': row['hasChildren'],
+                **({'choices': row['choices']} if 'choices' in row else {}),
+                **({'warning': row['warning']} if row.get('warning') else {}),
                 'typedValue': wire['value'] if operation == 'append' else wire,
                 **({'typedKey': wire['key']} if operation == 'append' else {}),
                 'effects': [write['effect'] for write in writes[start:] if write['effect']['id'] != identifier
@@ -700,9 +713,39 @@ class HadesSaveWorkspace(CoreSaveWorkspace):
             raise HadesSaveValueError('hades.saveEditor.error.invalidQuery', 'Unsupported editor language.')
         return self._plan(tuple(self.pending.values()), language)[1]
 
-    def apply(self, *, baseline_generation):
+    @property
+    def document(self):
+        preview = getattr(self, '_preview_document', None)
+        return preview if preview is not None else super().document
+
+    def _continuous_drafts(self, candidate, draft_entry_ids):
+        if not draft_entry_ids:
+            return []
+        continuous = []
+        pending_ids = set(self.pending.keys())
+        self._preview_document = candidate
+        try:
+            for entry_id in draft_entry_ids:
+                if not isinstance(entry_id, str) or entry_id in pending_ids or entry_id.startswith('p:'):
+                    continue
+                try:
+                    row = self.detail(entry_id, 'en')['row']
+                except HadesSaveValueError:
+                    continue
+                if row.get('editable'):
+                    continuous.append(entry_id)
+        finally:
+            self._preview_document = None
+        return continuous
+
+    def apply(self, *, baseline_generation, draft_entry_ids=()):
         self.require_baseline(baseline_generation)
         if not self.pending:
             raise HadesSaveValueError('hades.saveEditor.error.noChanges', 'There are no staged changes to apply.')
+        change_count = len(self.pending)
         candidate, _ = self._plan(tuple(self.pending.values()), 'en')
-        return self.commit_candidate(candidate)
+        continuous = self._continuous_drafts(candidate, draft_entry_ids)
+        return self.commit_candidate(
+            candidate,
+            extra={'continuousDraftEntryIds': continuous, 'changeCount': change_count},
+        )

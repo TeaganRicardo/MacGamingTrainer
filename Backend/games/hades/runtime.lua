@@ -9,12 +9,20 @@ local trainerFlag = "MacGamingTrainer.Hades"
 local defaults = {
   invincibility = false, moneyNoDecrease = false, rerollsNoDecrease = false,
   fullGodGauge = false, fullHealth = false, infiniteAmmo = false, forceRerolls = false,
-  boonRarityEnabled = false, damageMultiplier = 1, incomingDamageMultiplier = 1, moveSpeedMultiplier = 1,
-  attackSpeedMultiplier = 1, dashBonus = 0,
+  boonRarityEnabled = false, moneyMultiplierEnabled = false, resourceMultiplierEnabled = false,
+  damageMultiplier = 1, incomingDamageMultiplier = 1, moveSpeedMultiplier = 1,
+  attackSpeedMultiplier = 1, dashBonus = 0, moneyMultiplier = 2, resourceMultiplier = 2,
 }
 local resourceNames = {
   "MetaPoints", "Gems", "SuperGems", "LockKeys", "SuperLockKeys", "GiftPoints", "SuperGiftPoints",
 }
+local function knownResource(name)
+  if type(name) ~= "string" then return false end
+  for _, resource in ipairs(resourceNames) do
+    if resource == name then return true end
+  end
+  return false
+end
 -- Shipped LootData.lua: only normal Olympian and Hermes offer pools.
 -- TrialUpgrade/Chaos, Hammer, Pom and forced-Common rooms use other native rules.
 local rarityLootNames = {
@@ -29,6 +37,9 @@ local runtime = {
   movementOwners = setmetatable({}, { __mode = "k" }),
   rerollDoors = setmetatable({}, { __mode = "k" }),
   boonRarityTarget = "Heroic",
+  boonForceLegendary = false, boonForceDuo = false,
+  fishingChance = nil, chaosGateChance = nil,
+  resourceLocks = {},
 }
 runtime.generationId = tostring(runtime)
 for name, value in pairs(defaults) do runtime.features[name] = value end
@@ -49,6 +60,12 @@ local function requireHero()
 end
 local function sameOwner(run, unit)
   return CurrentRun == run and hero() == unit
+end
+local function enforceResource(name)
+  local target = runtime.resourceLocks and runtime.resourceLocks[name]
+  if not finite(target) or type(GameState) ~= "table" or type(GameState.Resources) ~= "table" then return end
+  GameState.Resources[name] = target
+  if type(UpdateResourceUI) == "function" then UpdateResourceUI(name, target) end
 end
 local function healthLockValid(lock)
   return type(lock) == "table" and finite(lock.current) and finite(lock.max)
@@ -259,6 +276,9 @@ local function mount(unit, rebuilt)
   if finite(runtime.rerollsLock) and finite(CurrentRun.NumRerolls) then
     CurrentRun.NumRerolls = runtime.rerollsLock
     if type(UpdateRerollUI) == "function" then UpdateRerollUI(runtime.rerollsLock) end
+  end
+  for name, _ in pairs(runtime.resourceLocks or {}) do
+    enforceResource(name)
   end
   fillGauge(unit)
 end
@@ -626,31 +646,131 @@ local function installHooks()
       return table.unpack(result, 1, result.n)
     end
   end)
+  local function traitSpecialRarity(traitName)
+    local data = type(TraitData) == "table" and TraitData[traitName] or nil
+    if type(data) ~= "table" then return nil end
+    if data.IsDuoBoon or data.Frame == "Duo" then return "Duo" end
+    local inherited = data.InheritFrom
+    if type(inherited) == "string" then inherited = { inherited } end
+    if type(inherited) == "table" then
+      for _, parent in pairs(inherited) do
+        if parent == "SynergyTrait" then return "Duo" end
+        if parent == "ShopTier3Trait" then return "Legendary" end
+      end
+    end
+    local levels = data.RarityLevels
+    if type(levels) == "table" and type(levels.Legendary) == "table"
+        and levels.Common == nil and levels.Rare == nil
+        and levels.Epic == nil and levels.Heroic == nil then
+      return "Legendary"
+    end
+    return nil
+  end
+  local function specialOptionKind(option)
+    if type(option) ~= "table" then return nil end
+    local kind = traitSpecialRarity(option.ItemName)
+    if kind ~= nil then return kind end
+    if option.Rarity == "Legendary" then return "Legendary" end
+    return nil
+  end
+  local function hasSpecialBoonOption(loot, wanted)
+    if type(loot) ~= "table" or type(loot.UpgradeOptions) ~= "table" then return false end
+    for _, option in ipairs(loot.UpgradeOptions) do
+      if specialOptionKind(option) == wanted then return true end
+    end
+    return false
+  end
+  local function forceSpecialBoonOption(loot, args, wanted)
+    if wanted == "Legendary" and not runtime.boonForceLegendary then return false end
+    if wanted == "Duo" and not runtime.boonForceDuo then return false end
+    if type(loot) ~= "table" or type(loot.UpgradeOptions) ~= "table" then return false end
+    if not rarityLootNames[loot.Name] or loot.ForceCommon then return false end
+    if type(args) == "table" and args.ForceCommon then return false end
+    if hasSpecialBoonOption(loot, wanted) then return true end
+    if type(GetEligibleUpgrades) ~= "function" then return false end
+    local choiceData = type(LootData) == "table" and LootData[loot.Name] or loot
+    local ok, eligible = pcall(GetEligibleUpgrades, loot.UpgradeOptions, loot, choiceData)
+    if not ok or type(eligible) ~= "table" then return false end
+    local selected, excluded = {}, {}
+    for _, option in ipairs(loot.UpgradeOptions) do
+      if type(option) == "table" and type(option.ItemName) == "string" then selected[option.ItemName] = true end
+    end
+    if type(args) == "table" and type(args.ExclusionNames) == "table" then
+      for _, excludedName in pairs(args.ExclusionNames) do
+        if type(excludedName) == "string" then excluded[excludedName] = true end
+      end
+    end
+    local candidate = nil
+    for _, option in ipairs(eligible) do
+      if type(option) == "table" and type(option.ItemName) == "string"
+          and not selected[option.ItemName] and not excluded[option.ItemName]
+          and traitSpecialRarity(option.ItemName) == wanted then
+        -- In Hades I both Legendary and Duo boons share Rarity = "Legendary";
+        -- Duo presentation/frame comes from TraitData[ItemName].IsDuoBoon.
+        candidate = { ItemName = option.ItemName, Type = option.Type or "Trait", Rarity = "Legendary" }
+        break
+      end
+    end
+    if candidate == nil then return false end
+    local replacement = nil
+    for index = #loot.UpgradeOptions, 1, -1 do
+      if specialOptionKind(loot.UpgradeOptions[index]) == nil then replacement = index; break end
+    end
+    if replacement ~= nil then
+      loot.UpgradeOptions[replacement] = candidate
+    elseif #loot.UpgradeOptions < 3 then
+      loot.UpgradeOptions[#loot.UpgradeOptions + 1] = candidate
+    else
+      return false
+    end
+    return true
+  end
   hook("SetTraitsOnLoot", function(original)
-    return function(loot, ...)
-      if runtime.features.boonRarityEnabled and runtime.boonRarityTarget ~= "Common"
-          and type(loot) == "table" and rarityLootNames[loot.Name] and not loot.ForceCommon
-          and type(loot.RarityChances) == "table" then
-        -- Native TraitScripts.lua selects the highest legal rarity whose chance
-        -- succeeds. Raise only tiers at or below the configured minimum, leaving
-        -- higher native odds (especially Legendary) untouched.
-        local odds = loot.RarityChances
-        local boosted = {}
-        for key, value in pairs(odds) do boosted[key] = value end
-        boosted.Rare = 1
-        if runtime.boonRarityTarget == "Epic" or runtime.boonRarityTarget == "Heroic" then
-          boosted.Epic = 1
+    return function(loot, args, ...)
+      local active = runtime.features.boonRarityEnabled
+        and type(loot) == "table" and rarityLootNames[loot.Name] and not loot.ForceCommon
+        and not (type(args) == "table" and args.ForceCommon)
+      if active then
+        local odds = type(loot.RarityChances) == "table" and loot.RarityChances or nil
+        local boosted = nil
+        if odds and runtime.boonRarityTarget ~= "Common" then
+          -- Native TraitScripts.lua selects the highest legal rarity whose chance
+          -- succeeds. Raise only tiers at or below the configured minimum, leaving
+          -- higher native odds (especially Legendary) untouched.
+          boosted = {}
+          for key, value in pairs(odds) do boosted[key] = value end
+          boosted.Rare = 1
+          if runtime.boonRarityTarget == "Epic" or runtime.boonRarityTarget == "Heroic" then
+            boosted.Epic = 1
+          end
+          if runtime.boonRarityTarget == "Heroic" then boosted.Heroic = 1 end
+          loot.RarityChances = boosted
         end
-        if runtime.boonRarityTarget == "Heroic" then boosted.Heroic = 1 end
-        loot.RarityChances = boosted
         -- The native selection path is synchronous; restore the exact native
         -- odds on both success and a rejected/failed native offer generation.
-        local result = table.pack(pcall(original, loot, ...))
-        loot.RarityChances = odds
+        local result = table.pack(pcall(original, loot, args, ...))
+        if boosted then loot.RarityChances = odds end
         if not result[1] then error(result[2], 0) end
+        forceSpecialBoonOption(loot, args, "Legendary")
+        forceSpecialBoonOption(loot, args, "Duo")
         return table.unpack(result, 2, result.n)
       end
-      return original(loot, ...)
+      return original(loot, args, ...)
+    end
+  end)
+  hook("AddMoney", function(original)
+    return function(amount, source, ...)
+      local unit = hero()
+      if runtime.features.moneyMultiplierEnabled and unit and source ~= trainerFlag
+          and finite(amount) and amount > 0 then
+        amount = math.floor(amount * runtime.features.moneyMultiplier + 0.5)
+      end
+      local result = table.pack(original(amount, source, ...))
+      if hero() and finite(runtime.moneyLock) and type(CurrentRun) == "table" and finite(CurrentRun.Money) then
+        CurrentRun.Money = runtime.moneyLock
+        if type(UpdateMoneyUI) == "function" then UpdateMoneyUI(runtime.moneyLock) end
+      end
+      return table.unpack(result, 1, result.n)
     end
   end)
   hook("UpdateMoneyUI", function(original)
@@ -673,6 +793,39 @@ local function installHooks()
         UpdateMoneyUI(run.Money)
       end
       return table.unpack(result, 1, result.n)
+    end
+  end)
+  hook("AddResource", function(original)
+    return function(name, amount, source, ...)
+      if runtime.features.resourceMultiplierEnabled and knownResource(name)
+          and source ~= trainerFlag and finite(amount) and amount > 0 then
+        amount = math.floor(amount * runtime.features.resourceMultiplier + 0.5)
+      end
+      local result = table.pack(original(name, amount, source, ...))
+      enforceResource(name)
+      return table.unpack(result, 1, result.n)
+    end
+  end)
+  hook("SpendResource", function(original)
+    return function(name, amount, source, ...)
+      if finite(runtime.resourceLocks[name]) and finite(amount) and amount > 0 then
+        local result = table.pack(original(name, 0, source, ...))
+        enforceResource(name)
+        return table.unpack(result, 1, result.n)
+      end
+      local result = table.pack(original(name, amount, source, ...))
+      enforceResource(name)
+      return table.unpack(result, 1, result.n)
+    end
+  end)
+  hook("UpdateResourceUI", function(original)
+    return function(name, value, ...)
+      if finite(runtime.resourceLocks[name]) and type(GameState) == "table"
+          and type(GameState.Resources) == "table" then
+        GameState.Resources[name] = runtime.resourceLocks[name]
+        value = runtime.resourceLocks[name]
+      end
+      return original(name, value, ...)
     end
   end)
   local function rerollHook(name, getRun, getCost)
@@ -749,6 +902,22 @@ end
 
 local world
 
+local function sceneName()
+  -- CurrentRun.CurrentRoom stays non-nil in the House of Hades and IsDead stays
+  -- true there; inspect CurrentDeathAreaRoom before CurrentRun.CurrentRoom.
+  if type(CurrentDeathAreaRoom) == "table" then
+    return CurrentDeathAreaRoom.Name == "RoomPreRun" and "courtyard" or "house"
+  end
+  local unit = hero()
+  if unit ~= nil then
+    if unit.HandlingDeath == true or unit.IsDead == true then return "loading" end
+    if type(CurrentRun.CurrentRoom) == "table" then return "run" end
+    return "loading"
+  end
+  if type(CurrentRun) == "table" then return "loading" end
+  return "main_menu"
+end
+
 function runtime.status()
   installHooks()
   world.install()
@@ -768,6 +937,8 @@ function runtime.status()
   activeFeatures.infiniteAmmo = activeFeatures.infiniteAmmo and type(unit.Weapons) == "table"
     and (unit.Weapons.RangedWeapon or unit.Weapons.GunWeapon) and true or false
   activeFeatures.fullGodGauge = activeFeatures.fullGodGauge and not unit.SuperActive and type(IsSuperValid) == "function" and IsSuperValid() or false
+  activeFeatures.moneyMultiplierEnabled = activeFeatures.moneyMultiplierEnabled and runtime.hooks.AddMoney ~= nil or false
+  activeFeatures.resourceMultiplierEnabled = activeFeatures.resourceMultiplierEnabled and runtime.hooks.AddResource ~= nil or false
   local mounted = ready and runtime.mounted
   for feature, field in pairs({ damageMultiplier = "OutgoingDamageModifiers", incomingDamageMultiplier = "IncomingDamageModifiers" }) do
     local modifier = ready and damageModifier(unit, field)
@@ -795,6 +966,10 @@ function runtime.status()
   for _, name in ipairs(resourceNames) do
     resources[name] = type(GameState) == "table" and type(GameState.Resources) == "table" and tonumber(GameState.Resources[name]) or 0
   end
+  local resourceLocks = {}
+  for name, target in pairs(runtime.resourceLocks or {}) do
+    resourceLocks[name] = target
+  end
   if ready then
     for _, group in ipairs(traitGroups(unit)) do
       local limitation = group.limitation
@@ -809,7 +984,12 @@ function runtime.status()
       }
     end
   end
+  local scene = sceneName()
+  local roomName = type(CurrentDeathAreaRoom) == "table" and CurrentDeathAreaRoom.Name
+    or (type(CurrentRun) == "table" and type(CurrentRun.CurrentRoom) == "table" and CurrentRun.CurrentRoom.Name or nil)
+  local status = (ready and (scene == "house" or scene == "courtyard" or scene == "run")) and "ready" or "waiting"
   return {
+    status = status, scene = scene, roomName = roomName,
     heroReady = ready, heroId = ready and (runtime.generationId .. ":" .. instanceId(CurrentRun) .. ":" .. instanceId(unit) .. ":" .. tostring(unit.ObjectId)) or "",
     invincible = ready and type(unit.InvulnerableFlags) == "table" and unit.InvulnerableFlags[trainerFlag] == true or false,
     health = ready and tonumber(unit.Health) or 0, maxHealth = ready and tonumber(unit.MaxHealth) or 0,
@@ -818,8 +998,12 @@ function runtime.status()
     healthLocked = healthLockValid(runtime.healthLock), healthLock = runtime.healthLock,
     moneyLocked = runtime.moneyLock ~= nil, moneyLock = runtime.moneyLock,
     rerollsLocked = runtime.rerollsLock ~= nil, rerollsLock = runtime.rerollsLock,
+    resourceLocks = resourceLocks,
     features = features, activeFeatures = activeFeatures, dormantFeatures = dormantFeatures,
     boonRarityTarget = runtime.boonRarityTarget,
+    boonForceLegendary = runtime.boonForceLegendary, boonForceDuo = runtime.boonForceDuo,
+    fishingChance = runtime.fishingChance, chaosGateChance = runtime.chaosGateChance,
+    canOpenSellTraits = world and world.canOpenSellTraits and world.canOpenSellTraits() or false,
     resources = resources, traits = traits, world = world.observation(),
   }
 end
@@ -830,6 +1014,8 @@ local function validateFeature(name, value)
     assert(type(value) == "boolean", "hades.error.invalidValue")
   elseif name == "dashBonus" then
     assert(finite(value) and value == math.floor(value) and value >= 0 and value <= 20, "hades.error.invalidValue")
+  elseif name == "moneyMultiplier" or name == "resourceMultiplier" then
+    assert(finite(value) and value >= 1 and value <= 100, "hades.error.invalidValue")
   else
     assert(finite(value) and value >= 0.1 and value <= 100, "hades.error.invalidValue")
   end
@@ -840,6 +1026,8 @@ function runtime.configure(features)
   installHooks()
   for name, value in pairs(features) do runtime.features[name] = value end
   runtime.boonRarityTarget = "Heroic"
+  runtime.boonForceLegendary, runtime.boonForceDuo = false, false
+  runtime.fishingChance, runtime.chaosGateChance = nil, nil
   if runtime.features.moneyNoDecrease then runtime.moneyLock = nil end
   if runtime.features.rerollsNoDecrease then runtime.rerollsLock = nil end
   if not runtime.features.forceRerolls then restoreRerollDoors() end
@@ -858,14 +1046,37 @@ function runtime.set_feature(name, value)
   if unit then mount(unit, false) end
   return runtime.status()
 end
-function runtime.set_boon_rarity(target)
+function runtime.set_boon_rarity(target, forceLegendary, forceDuo)
   assert(target == "Common" or target == "Rare" or target == "Epic" or target == "Heroic",
     "hades.error.invalidValue")
+  if forceLegendary ~= nil then assert(type(forceLegendary) == "boolean", "hades.error.invalidValue") end
+  if forceDuo ~= nil then assert(type(forceDuo) == "boolean", "hades.error.invalidValue") end
   installHooks()
   runtime.boonRarityTarget = target
+  runtime.boonForceLegendary = forceLegendary == true
+  runtime.boonForceDuo = forceDuo == true
   return runtime.status()
 end
-function runtime.configure_locks(health, money, rerolls)
+local function validateSpawnChance(value)
+  if value == nil then return nil end
+  assert(finite(value) and value >= 0 and value <= 100, "hades.error.invalidValue")
+  return value
+end
+function runtime.set_fishing_chance(chance)
+  chance = validateSpawnChance(chance)
+  installHooks()
+  world.install()
+  runtime.fishingChance = chance
+  return runtime.status()
+end
+function runtime.set_chaos_gate_chance(chance)
+  chance = validateSpawnChance(chance)
+  installHooks()
+  world.install()
+  runtime.chaosGateChance = chance
+  return runtime.status()
+end
+function runtime.configure_locks(health, money, rerolls, resourceLocks)
   if health ~= nil then
     assert(healthLockValid(health), "hades.error.invalidValue")
   end
@@ -879,6 +1090,16 @@ function runtime.configure_locks(health, money, rerolls)
       "hades.error.invalidValue")
     assert(not runtime.features.rerollsNoDecrease, "hades.error.invalidValue")
   end
+  local nextResourceLocks = {}
+  if resourceLocks ~= nil then
+    assert(type(resourceLocks) == "table", "hades.error.invalidValue")
+    for resourceName, resourceValue in pairs(resourceLocks) do
+      assert(knownResource(resourceName) and finite(resourceValue)
+        and resourceValue == math.floor(resourceValue)
+        and resourceValue >= 0 and resourceValue <= 1000000000, "hades.error.invalidValue")
+      nextResourceLocks[resourceName] = resourceValue
+    end
+  end
   installHooks()
   local unit = hero()
   local releasingHealth = health == nil and healthLockValid(runtime.healthLock)
@@ -888,6 +1109,7 @@ function runtime.configure_locks(health, money, rerolls)
     runtime.healthLock = health and { current = health.current, max = health.max } or nil
   end
   runtime.moneyLock, runtime.rerollsLock = money, rerolls
+  runtime.resourceLocks = nextResourceLocks
   if unit then mount(unit, false) end
   return runtime.status()
 end
@@ -909,14 +1131,28 @@ function runtime.lock_vital(name, locked)
 end
 function runtime.lock_resource(name, locked)
   local unit = requireHero()
-  assert(name == "Money" and type(locked) == "boolean", "hades.error.invalidValue")
-  if locked then
-    assert(not runtime.features.moneyNoDecrease and finite(CurrentRun.Money),
-      "hades.error.invalidValue")
-    runtime.moneyLock = CurrentRun.Money
+  assert(type(locked) == "boolean", "hades.error.invalidValue")
+  if name == "Money" then
+    if locked then
+      assert(not runtime.features.moneyNoDecrease and finite(CurrentRun.Money),
+        "hades.error.invalidValue")
+      runtime.moneyLock = CurrentRun.Money
+    else
+      runtime.moneyLock = nil
+    end
+  elseif knownResource(name) then
+    assert(type(GameState) == "table" and type(GameState.Resources) == "table", "hades.error.unsupportedRuntime")
+    if locked then
+      local current = tonumber(GameState.Resources[name]) or 0
+      assert(finite(current) and current >= 0 and current <= 1000000000, "hades.error.invalidValue")
+      runtime.resourceLocks[name] = math.floor(current)
+    else
+      runtime.resourceLocks[name] = nil
+    end
   else
-    runtime.moneyLock = nil
+    error("hades.error.invalidValue")
   end
+  installHooks()
   mount(unit, false)
   return runtime.status()
 end
@@ -937,10 +1173,13 @@ function runtime.disable_all()
   world.clearPending()
   for name, value in pairs(defaults) do runtime.features[name] = value end
   runtime.boonRarityTarget = "Heroic"
+  runtime.boonForceLegendary, runtime.boonForceDuo = false, false
+  runtime.fishingChance, runtime.chaosGateChance = nil, nil
   local unit = hero()
   if healthLockValid(runtime.healthLock) then releaseHealthLock(unit)
   else runtime.healthLock = nil end
   runtime.moneyLock, runtime.rerollsLock = nil, nil
+  runtime.resourceLocks = {}
   restoreRerollDoors()
   if unit then mount(unit, false) end
   return runtime.status()
@@ -1004,7 +1243,8 @@ function runtime.set_resource(name, value)
     "hades.error.invalidValue")
   assert(type(GameState) == "table" and type(GameState.Resources) == "table", "hades.error.unsupportedRuntime")
   GameState.Resources[name] = value
-  UpdateResourceUI(name, value)
+  if runtime.resourceLocks[name] ~= nil then runtime.resourceLocks[name] = value end
+  if type(UpdateResourceUI) == "function" then UpdateResourceUI(name, value) end
   return runtime.status()
 end
 local function validateTrait(unit, name, rarity, level)
@@ -1040,6 +1280,9 @@ local function beginDeferredMutation(slot)
 end
 local function beginTraitMutation()
   beginDeferredMutation("traitCommand")
+end
+local function beginWorldMutation()
+  beginDeferredMutation("worldCommand")
 end
 local function closeTraitMenu()
   local menu = type(ScreenAnchors) == "table" and ScreenAnchors.TraitTrayScreen
@@ -1292,7 +1535,7 @@ local function cancelDeferredCommand(slot, id, timeoutMessage)
   elseif command.state == "running" then
     command.state = "unknown"
     command.error = timeoutMessage
-    runtime.propertyDepth = command.propertyDepth
+    if command.propertyDepth ~= nil then runtime.propertyDepth = command.propertyDepth end
   end
   return deferredCommandResult(slot, id)
 end
@@ -1411,6 +1654,8 @@ world = (function()
   local occurrenceGeneration
   local occurrencePendingRoom
   local occurrenceSelectedRooms = setmetatable({}, { __mode = "k" })
+  local chaosRooms = setmetatable({}, { __mode = "k" })
+  local directBypassQuery = nil
   local occurrenceTargetOrder = {
     "npc:Sisyphus", "npc:Eurydice", "npc:Patroclus", "npc:Thanatos", "shop:Charon",
   }
@@ -1653,106 +1898,235 @@ world = (function()
     end
     return original(pool, ...)
   end
+  local routeOrder = { "combat", "miniboss", "story", "shop", "reprieve" }
   local function routeKind(name)
+    if type(name) ~= "string" then return nil end
     if name:find("_Story", 1, true) then return "story" end
     if name:find("_Shop", 1, true) then return "shop" end
     if name:find("_Reprieve", 1, true) then return "reprieve" end
     if name:find("_MiniBoss", 1, true) then return "miniboss" end
     if name:find("_Combat", 1, true) then return "combat" end
   end
-  -- Native eligibility/force/reward requirements may draw RNG or count
-  -- attempts in SessionMapState. Query them through one non-advancing gate.
-  -- A stochastic predicate fails closed: a catalog is never a promise about
-  -- an outcome that depends on the native game's next random sample.
-  local function nativeEligibilityProbe(callback, positiveChanceMeansForced, ...)
-    local randomChance, randomValue = RandomChance, GetRandomValue
-    local randomInt, randomFloat = RandomInt, RandomFloat
-    local sourceSession = SessionMapState
-    local usedRandom = false
-    if type(sourceSession) == "table" then
-      local probeSession = {}
-      for key, value in pairs(sourceSession) do probeSession[key] = value end
-      SessionMapState = probeSession
-    end
-    RandomChance = function(chance)
-      if type(chance) == "number" and chance > 0 then
-        usedRandom = true
-        return positiveChanceMeansForced
-      end
-      return false
-    end
-    GetRandomValue = function(values, ...)
-      usedRandom = true
-      if type(values) == "table" then return values[1] end
-      return values
-    end
-    if type(randomInt) == "function" then
-      RandomInt = function(minimum) usedRandom = true; return minimum end
-    end
-    if type(randomFloat) == "function" then
-      RandomFloat = function(minimum) usedRandom = true; return minimum end
-    end
-    local ok, result = pcall(callback, ...)
-    SessionMapState = sourceSession
-    RandomChance, GetRandomValue = randomChance, randomValue
-    if type(randomInt) == "function" then RandomInt = randomInt end
-    if type(randomFloat) == "function" then RandomFloat = randomFloat end
-    if not ok then error(result, 0) end
-    return result, usedRandom
+  local function copyTbl(t)
+    local c = {}
+    if type(t) == "table" then for k, v in pairs(t) do c[k] = v end end
+    return c
   end
-  local function couldBeForced(room, args)
-    local forced, stochastic = nativeEligibilityProbe(
-      IsRoomForced, true, CurrentRun, CurrentRun.CurrentRoom, room, args or {}
-    )
-    return stochastic or forced
+  local function hasVal(list, w)
+    if type(list) ~= "table" then return false end
+    for _, v in pairs(list) do if v == w then return true end end
+    return false
   end
-  local function eligibleWithoutRandom(room, data, args)
-    local eligible, stochastic = nativeEligibilityProbe(
-      IsRoomEligible, false, CurrentRun, room, data, args or {}
-    )
-    return not stochastic and eligible
+  local function hasAll(list, req)
+    if type(ContainsAll) == "function" then return ContainsAll(list, req) end
+    if type(list) ~= "table" or type(req) ~= "table" then return false end
+    for _, v in pairs(req) do if not hasVal(list, v) then return false end end
+    return true
   end
-  local function routeRooms(room, door)
-    local result = {}
-    local args = type(door) == "table" and door.ChooseRoomArgs or {}
-    if type(args) ~= "table" then return end
-    if room.NextRoomSet or room.NextRoomSetNoGenerate or room.UsePreviousRoomSet
-        or room.LinkedRoom or room.LinkedRooms or room.LinkedRoomByPactLevel
-        or room.ForceNextRoom or room.ForceNextRoomSet or room.NextRoomSetName
-        or args.RoomDataSet or args.NextRoomSet or args.NextRoomSetNoGenerate
-        or args.UsePreviousRoomSet or args.ForceNextRoom or args.ForceNextRoomSet
-        or (type(door) == "table" and (door.ForceRoomName or door.ReturnToPreviousRoom
-          or door.ReturnToPreviousRoomName or door.UsePreviousRoomSet)) then return end
-    local roomSetName = args.RoomSetName or room.RoomSetName or "Tartarus"
-    local roomSet = RoomSetData[roomSetName]
-    if type(roomSet) ~= "table" then return end
-    for name, data in pairs(roomSet) do
-      if eligibleWithoutRandom(room, data, args) then
-        if couldBeForced(data, args) then return end
+  local function nativeEligibilityProbe(cb, posForced, ...)
+    local rc, rv, ri, rf, src = RandomChance, GetRandomValue, RandomInt, RandomFloat, SessionMapState
+    local used = false
+    if type(src) == "table" then SessionMapState = copyTbl(src) end
+    RandomChance = function(ch) if type(ch) == "number" and ch > 0 then used = true; return posForced end return false end
+    GetRandomValue = function(vals) used = true; return type(vals) == "table" and vals[1] or vals end
+    if type(ri) == "function" then RandomInt = function(m) used = true; return m end end
+    if type(rf) == "function" then RandomFloat = function(m) used = true; return m end end
+    local ok, res = pcall(cb, ...)
+    SessionMapState, RandomChance, GetRandomValue = src, rc, rv
+    if type(ri) == "function" then RandomInt = ri end
+    if type(rf) == "function" then RandomFloat = rf end
+    if not ok then error(res, 0) end
+    return res, used
+  end
+  local function routeSourceSafe(door)
+    local src = currentRoom()
+    if type(src) ~= "table" then return false, "source_unavailable" end
+    if type(door) ~= "table" then return false, "door_unavailable" end
+    local a = type(door.ChooseRoomArgs) == "table" and door.ChooseRoomArgs or {}
+    if ForceNextRoom ~= nil then return false, "global_forced_destination" end
+    if door.ForceRoomName ~= nil or a.ForceNextRoom ~= nil or src.ForceNextRoom ~= nil then return false, "door_forced_destination" end
+    if a.ForceNextRoomSet ~= nil or a.RoomDataSet ~= nil then return false, "door_forced_room_set" end
+    if src.ForceNextRoomSet ~= nil then return false, "source_forced_room_set" end
+    if src.NextRoomSet or src.NextRoomSetNoGenerate or a.NextRoomSet or a.NextRoomSetNoGenerate or src.NextRoomSetName then
+      return false, "source_next_room_set"
+    end
+    if src.UsePreviousRoomSet or a.UsePreviousRoomSet or door.UsePreviousRoomSet then return false, "source_uses_previous_room_set" end
+    if src.LinkedRoom or src.LinkedRooms or src.LinkedRoomByPactLevel then return false, "source_linked_destination" end
+    if src.PersistentExitDoorRewards then return false, "source_persistent_door_rooms" end
+    if door.ReturnToPreviousRoom or door.ReturnToPreviousRoomName then return false, "door_returns_to_previous_room" end
+    return true, "safe"
+  end
+  local function regionFor(door, src, args)
+    if type(args.RoomSetName) == "string" and type(RoomSetData[args.RoomSetName]) == "table" then return args.RoomSetName end
+    local own = type(door.Room) == "table" and door.Room.RoomSetName or nil
+    if type(own) == "string" and type(RoomSetData[own]) == "table" then return own end
+    return src.RoomSetName or "Tartarus"
+  end
+  local function couldBeForced(data, args)
+    if type(IsRoomForced) ~= "function" then return true, false end
+    local forced, stoch = nativeEligibilityProbe(IsRoomForced, true, CurrentRun, currentRoom(), data, copyTbl(args))
+    return not not forced, stoch
+  end
+  local function routeCandidatesWithDiagnostics(door, diag)
+    diag = diag or {}
+    local src = currentRoom()
+    if type(src) ~= "table" or type(RoomSetData) ~= "table" then return nil end
+    local args = type(door) == "table" and type(door.ChooseRoomArgs) == "table" and door.ChooseRoomArgs or {}
+    local _, safety = routeSourceSafe(door)
+    diag.sourceSafety = safety
+    local roomSet = RoomSetData[regionFor(door, src, args)]
+    if type(roomSet) ~= "table" then return nil end
+    diag.eligibilityUnavailable = type(IsRoomEligible) ~= "function" or nil
+    local res = {}
+    for key, data in pairs(roomSet) do
+      if type(data) == "table" and not data.DebugOnly then
+        local name = type(data.Name) == "string" and data.Name or tostring(key)
         local kind = routeKind(name)
+        local probe = copyTbl(data); if probe.Name == nil then probe.Name = name end
+        local eligible, failed, forced = false, false, false
+        if not diag.eligibilityUnavailable then
+          local ok, val, rnd = pcall(nativeEligibilityProbe, IsRoomEligible, false, CurrentRun, src, probe, copyTbl(args))
+          if not ok then failed = true
+          elseif rnd then diag.randomEligibilityRooms = diag.randomEligibilityRooms or {}; diag.randomEligibilityRooms[name] = true
+          else eligible = val and true or false end
+        end
+        if eligible then
+          local fOk, fVal, fRnd = pcall(couldBeForced, probe, args)
+          if not fOk then failed = true
+          elseif fRnd then diag.randomForceRoom = diag.randomForceRoom or name
+          elseif fVal then forced = true; diag.forcedRoom = diag.forcedRoom or name end
+        end
         if kind then
-          result[kind] = result[kind] or {}
-          table.insert(result[kind], data)
+          local b = res[kind] or { all = {}, eligible = {}, forced = {}, probeErrors = 0 }; res[kind] = b
+          if failed then b.probeErrors = b.probeErrors + 1
+          else
+            b.all[#b.all + 1] = data
+            if eligible then b.eligible[#b.eligible + 1] = data end
+            if forced then b.forced[#b.forced + 1] = data end
+          end
         end
       end
     end
-    return result
+    local function byName(a, b) return tostring(a.Name) < tostring(b.Name) end
+    for _, b in pairs(res) do table.sort(b.all, byName); table.sort(b.eligible, byName); table.sort(b.forced, byName) end
+    return res
   end
-  local function chanceEligible(room, key, callback)
+  local function routeRooms(b)
+    if type(b) ~= "table" then return nil end
+    return #b.forced > 0 and b.forced or (#b.eligible > 0 and b.eligible or b.all)
+  end
+  local function roomUnavailableReason(data, door, rDiag)
+    rDiag = rDiag or {}
+    if type(data) ~= "table" then return "native_ineligible" end
+    local name = tostring(data.Name or "")
+    if rDiag.randomEligibilityRooms and rDiag.randomEligibilityRooms[name] then return "room_eligibility_requires_rng" end
+    local run, src = type(CurrentRun) == "table" and CurrentRun or {}, currentRoom() or {}
+    local a = type(door) == "table" and type(door.ChooseRoomArgs) == "table" and door.ChooseRoomArgs or {}
+    if (type(a.ExcludedNames) == "table" and a.ExcludedNames[name])
+        or (type(a.ExcludedTypes) == "table" and a.ExcludedTypes[data.Type])
+        or (type(a.ExcludedRewards) == "table" and type(data.RewardTypes) == "table"
+          and #data.RewardTypes > 0 and hasAll(a.ExcludedRewards, data.RewardTypes)) then
+      return "room_excluded_by_exit_rules"
+    end
+    local depth = finite(run.BiomeDepthCache) and run.BiomeDepthCache or 0
+    if data.ForceAtBiomeDepth ~= nil and depth ~= data.ForceAtBiomeDepth then
+      return depth < data.ForceAtBiomeDepth and "biome_depth_too_low" or "biome_depth_too_high"
+    end
+    if data.ForceAtBiomeDepthMin ~= nil and depth < data.ForceAtBiomeDepthMin then return "biome_depth_too_low" end
+    if src.Name == name then return "room_same_as_source" end
+    if data.Starting and not src.AllowNextRoomStarting then return "room_starting_not_allowed" end
+    if data.RequiresLinked and src.LinkedRoom ~= name and not hasVal(src.LinkedRooms, name) then return "room_linked_route_required" end
+    if src.RequireWingEndMiniBoss and data.WingEndRoom and not data.WingEndMiniBoss and not data.AllowAsAnyWingEnd then return "room_wrong_wing_end" end
+    if not src.RequireWingEndMiniBoss and data.WingEndRoom and data.WingEndMiniBoss and not data.AllowAsAnyWingEnd then return "room_miniboss_wing_required" end
+    if data.MaxAppearancesThisRun and type(run.RoomCountCache) == "table" and finite(run.RoomCountCache[name]) and run.RoomCountCache[name] >= data.MaxAppearancesThisRun then return "room_max_appearances_this_run" end
+    if data.MaxAppearancesThisBiome and type(run.BiomeRoomCountCache) == "table" and finite(run.BiomeRoomCountCache[name]) and run.BiomeRoomCountCache[name] >= data.MaxAppearancesThisBiome then return "max_appearances_this_biome" end
+    if data.MaxCreationsThisRun and type(run.RoomCreations) == "table" and finite(run.RoomCreations[name]) and run.RoomCreations[name] >= data.MaxCreationsThisRun then return "max_creations_this_run" end
+    if data.GameStateRequirements ~= nil then
+      if type(IsGameStateEligible) ~= "function" then return "game_state_requirements" end
+      local ok, el, rnd = pcall(nativeEligibilityProbe, IsGameStateEligible, false, CurrentRun, copyTbl(data), data.GameStateRequirements, copyTbl(a))
+      if not ok then return "room_eligibility_probe_error" end
+      if rnd then return "room_eligibility_requires_rng" end
+      if not el then return "game_state_requirements" end
+    end
+    return "native_ineligible"
+  end
+  local function routeWarning(b, door, rDiag)
+    if rDiag.sourceSafety ~= nil and rDiag.sourceSafety ~= "safe" then return rDiag.sourceSafety end
+    if #b.eligible == 0 then return rDiag.eligibilityUnavailable and "room_eligibility_unavailable" or roomUnavailableReason(b.all[1], door, rDiag) end
+    if rDiag.forcedRoom ~= nil and #b.forced == 0 then return "native_forced_room_present" end
+    return nil
+  end
+  local function chanceEligible(room, key, callback, bypassQuery)
     local previous = room[key]
+    local previousBypass = directBypassQuery
     room[key] = true
+    if bypassQuery then directBypassQuery = bypassQuery end
     local ok, result = pcall(callback, CurrentRun, room)
     room[key] = previous
+    directBypassQuery = previousBypass
     if not ok then error(result, 0) end
     return result
   end
-  local function canFish(room)
-    return not room.CompletedFishing and not room.FishingPointId
-      and #GetInactiveIdsByType({ Name = "FishingPoint" }) > 0
-      and chanceEligible(room, "FishingPointChanceSuccess", IsFishingEligible)
+  local function isHubScene()
+    local unit = hero()
+    return type(CurrentDeathAreaRoom) == "table" or (unit ~= nil and unit.IsDead == true)
   end
-  local function availableSecretPoints()
-    local points = GetIdsByType({ Name = "SecretPoint" })
+  local function containsValue(list, target)
+    if type(list) ~= "table" then return false end
+    for _, value in pairs(list) do if value == target then return true end end
+    return false
+  end
+  local function hasEligibleSecretDestination()
+    if type(RoomSetData) ~= "table" or type(RoomSetData.Secrets) ~= "table" then return false end
+    for _, entry in pairs(RoomSetData.Secrets) do
+      if type(entry) == "table" and not entry.DebugOnly then return true end
+    end
+    return false
+  end
+  local function inspectFishing(room)
+    if type(room) ~= "table" or isHubScene() then return false, "scene" end
+    if type(GetInactiveIdsByType) ~= "function" or type(IsFishingEligible) ~= "function"
+        or type(Activate) ~= "function" or type(GetRandomValue) ~= "function"
+        or type(GetRunDepth) ~= "function" or type(UseHeroTraitsWithValue) ~= "function"
+        or type(CheckRoomExitsReady) ~= "function" then
+      return false, "native"
+    end
+    if room.CompletedFishing or room.FishingPointId ~= nil or room.ForceFishing then
+      return false, "existing"
+    end
+    if room.PersistentFishing and type(CurrentRun.RoomCreations) == "table" and CurrentRun.RoomCreations[room.Name] then
+      for _, past in pairs(CurrentRun.RoomHistory or {}) do
+        if type(past) == "table" and past.Name == room.Name and past.CompletedFishing then
+          return false, "existing"
+        end
+      end
+    end
+    if #GetInactiveIdsByType({ Name = "FishingPoint" }) == 0 then return false, "placement" end
+    if chanceEligible(room, "FishingPointChanceSuccess", IsFishingEligible, "IsFishingEligible") then
+      return true, nil
+    end
+    local req = type(room.FishingPointRequirements) == "table" and room.FishingPointRequirements or nil
+    if req then
+      if containsValue(req.RequiredCosmetics, "FishingUnlockItem")
+          and type(GameState) == "table" and type(GameState.Cosmetics) == "table"
+          and not GameState.Cosmetics.FishingUnlockItem then
+        return false, "rod"
+      end
+      if type(req.RequiredMinRoomsSinceFishingPoint) == "number"
+          and CurrentRun.LastFishingPointDepth ~= nil and type(CurrentRun.RunDepthCache) == "number"
+          and CurrentRun.LastFishingPointDepth ~= CurrentRun.RunDepthCache
+          and CurrentRun.RunDepthCache - req.RequiredMinRoomsSinceFishingPoint < CurrentRun.LastFishingPointDepth then
+        return false, "spacing"
+      end
+    end
+    return false, "progression"
+  end
+  local function canFish(room)
+    local ok = inspectFishing(room)
+    return ok
+  end
+  local function availableSecretPoints(allPoints)
+    local points = allPoints or GetIdsByType({ Name = "SecretPoint" })
     local occupied, available = {}, {}
     for _, door in pairs(OfferedExitDoors or {}) do
       if door.Name == "SecretDoor" or door.Name == "ShrinePointDoor" then
@@ -1765,12 +2139,48 @@ world = (function()
     end
     return available
   end
-  local function canChaos(room, points)
-    for _, door in pairs(OfferedExitDoors or {}) do
-      if door.Name == "SecretDoor" then return false end
+  local function inspectChaos(room, points)
+    if type(room) ~= "table" or isHubScene() then return false, "scene" end
+    if type(GetIdsByType) ~= "function" or type(IsSecretDoorEligible) ~= "function"
+        or type(ChooseNextRoomData) ~= "function" or type(CreateRoom) ~= "function"
+        or type(SpawnObstacle) ~= "function" or type(SetupObstacle) ~= "function"
+        or type(AssignRoomToExitDoor) ~= "function" or type(GetSecretDoorCost) ~= "function"
+        or type(UseHeroTraitsWithValue) ~= "function" or type(GetRunDepth) ~= "function"
+        or type(CheckRoomExitsReady) ~= "function"
+        or type(ObstacleData) ~= "table" or type(ObstacleData.SecretDoor) ~= "table"
+        or type(RoomSetData) ~= "table" or type(RoomSetData.Secrets) ~= "table" then
+      return false, "native"
     end
-    return #(points or availableSecretPoints()) > 0
-      and chanceEligible(room, "SecretChanceSuccess", IsSecretDoorEligible)
+    if room.ForceSecretDoor then return false, "existing" end
+    for _, door in pairs(OfferedExitDoors or {}) do
+      if door.Name == "SecretDoor" then return false, "existing" end
+    end
+    if room.RoomSetName == "Secrets" or room.UsePreviousRoomSet or not hasEligibleSecretDestination() then
+      return false, "route"
+    end
+    local allPoints = GetIdsByType({ Name = "SecretPoint" })
+    if #allPoints == 0 then return false, "placement" end
+    local free = points or availableSecretPoints(allPoints)
+    if #free == 0 then return false, "occupied" end
+    local forcedByHero = type(HasHeroTraitValue) == "function" and HasHeroTraitValue("ForceSecretDoor")
+    if type(room.SecretSpawnChance) == "number" and room.SecretSpawnChance == 0 and not forcedByHero then
+      return false, "room"
+    end
+    if chanceEligible(room, "SecretChanceSuccess", IsSecretDoorEligible, "IsSecretDoorEligible") then
+      return true, nil
+    end
+    local req = type(room.SecretDoorRequirements) == "table" and room.SecretDoorRequirements or nil
+    if req and not forcedByHero and type(req.RequiredMinRoomsSinceSecretDoor) == "number"
+        and CurrentRun.LastSecretDepth ~= nil and type(CurrentRun.RunDepthCache) == "number"
+        and CurrentRun.LastSecretDepth ~= CurrentRun.RunDepthCache
+        and CurrentRun.RunDepthCache - req.RequiredMinRoomsSinceSecretDoor < CurrentRun.LastSecretDepth then
+      return false, "spacing"
+    end
+    return false, "progression"
+  end
+  local function canChaos(room, points)
+    local ok = inspectChaos(room, points)
+    return ok
   end
   local function freePedestals(room, ids)
     local free = {}
@@ -1819,10 +2229,6 @@ world = (function()
       return chanceEligible(room, owner.chance, function(run) return callback(run) end)
     end
     return chanceEligible(room, owner.chance, callback)
-  end
-  local function canModify(room, args)
-    return not CurrentRun.CurrentRoom.DeferReward and not room.NoReward and not room.DeferReward
-      and not room.ForcedReward and not room.ForcedFirstReward and not couldBeForced(room, args)
   end
   local function clearDoorPreview(door)
     local ids, seen = {}, {}
@@ -1882,13 +2288,14 @@ world = (function()
   local rewardFields = {
     "Reward", "ChosenRewardType", "ForceLootName", "RewardStoreName",
     "RewardOverrides", "Encounter", "OriginalChosenRewardType", "OriginalForceLootName",
+    "DeferReward", "NoReward", "ForcedReward", "ForcedFirstReward",
   }
-  local function snapshotReward(door, target, leaseToken)
+  local function snapshotReward(door, roomID, target, leaseToken)
     local source = currentRoom()
     local offered = type(source.OfferedRewards) == "table" and source.OfferedRewards or nil
     local room = door.Room
     local edit = {
-      kind = "reward", original = room, applied = room, target = target,
+      kind = "reward", original = room, applied = room, room = roomID, rewardID = target, target = target,
       leaseToken = leaseToken, doorToken = doorId(door),
       physicalToken = physicalDoorId(door),
       originalCanBeRerolled = door.CanBeRerolled,
@@ -1923,9 +2330,9 @@ world = (function()
     end
   end
   -- A reserved category has no concrete room/reward until native door use.
-  -- Render a supported generic native preview without selecting a candidate,
-  -- leaking an NPC/boon icon, or mutating the actual door.Room identity.
-  local function routePreviewDescriptor(door, route)
+  -- When a specific reward was chosen with the room type, project that reward;
+  -- otherwise render a supported generic native preview without drawing RNG.
+  local function routePreviewDescriptor(door, route, reward)
     local proxy = DeepCopyTable(door.Room)
     proxy.Reward = nil
     proxy.ChosenRewardType = nil
@@ -1934,10 +2341,18 @@ world = (function()
     proxy.RewardOverrides = nil
     proxy.RewardPreviewIcon = nil
     proxy.RewardPreviewFx = nil
+    proxy.RewardPreviewOverride = nil
     proxy.Encounter = nil
     proxy.OriginalChosenRewardType = nil
     proxy.OriginalForceLootName = nil
     proxy.NextRoomSet = nil
+    if type(reward) == "table" then
+      proxy.ChosenRewardType = reward.rewardType
+      proxy.ForceLootName = reward.forceLoot
+      proxy.RewardStoreName = reward.store
+      proxy.RewardOverrides = reward.overrides and DeepCopyTable(reward.overrides) or nil
+      return proxy
+    end
     if route == "shop" then
       proxy.ChosenRewardType = "Shop"
     elseif route ~= "story" then
@@ -1947,20 +2362,19 @@ world = (function()
     end
     return proxy
   end
-  local function beginWorldMutation()
-    beginDeferredMutation("worldCommand")
-  end
-  local function reserveRoute(door, route, leaseToken)
+  local function reserveRoute(door, route, reward, leaseToken)
     assert(activeEdit(door) == nil, "hades.error.staleDoor")
-    local routes = routeRooms(currentRoom(), door)
-    local candidates = routes and routes[route]
+    local routes = routeCandidatesWithDiagnostics(door)
+    local candidates = routeRooms(routes and routes[route])
     assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
-    -- Only present the native generic category icon; candidate selection,
-    -- room generation and RNG are reserved for authorized native departure.
     beginWorldMutation()
-    drawDoorPreview(door, routePreviewDescriptor(door, route))
+    -- Only present the chosen reward or native generic category icon; candidate
+    -- selection and room generation are reserved for authorized native departure.
+    drawDoorPreview(door, routePreviewDescriptor(door, route, reward))
     edits[door] = {
-      kind = "route", route = route, target = route, leaseToken = leaseToken,
+      kind = "route", route = route, room = route,
+      reward = reward, rewardID = reward and reward.id or nil,
+      target = route, leaseToken = leaseToken,
       original = door.Room, run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
       physicalToken = physicalDoorId(door), signature = rewardSignature(door.Room),
     }
@@ -1992,42 +2406,174 @@ world = (function()
     return data
   end
   local function rewardSourceEligible(data)
-    return data.kind ~= "loot" or IsGameStateEligible(CurrentRun, LootData[data.id])
+    if data.kind ~= "loot" then return true end
+    if type(LootData) ~= "table" or type(IsGameStateEligible) ~= "function" then return true end
+    local ok, eligible, usedRandom = pcall(nativeEligibilityProbe, IsGameStateEligible, false, CurrentRun, LootData[data.id])
+    if not ok or usedRandom then return false end
+    return eligible == true
   end
-  local function doorReward(room, data)
-    if not rewardSourceEligible(data) then return end
-    for name, store in pairs(RewardStoreData) do
-      for _, reward in ipairs(store) do
-        if type(reward) == "table" and reward.Name == data.rewardType then
-          local roomProbe, rewardProbe = {}, {}
-          for key, value in pairs(room) do roomProbe[key] = value end
-          for key, value in pairs(reward) do rewardProbe[key] = value end
-          local eligible, stochastic = nativeEligibilityProbe(
-            IsRoomRewardEligible, false, CurrentRun, roomProbe, rewardProbe, nil, {}
-          )
-          if eligible and not stochastic then return reward, name end
+  local function rewardDataPresent(data)
+    if data.kind == "loot" then
+      return type(LootData) == "table" and type(LootData[data.id]) == "table"
+    end
+    return type(ConsumableData) ~= "table"
+      or type(ConsumableData[data.id]) == "table"
+      or type(ConsumableData[data.rewardType .. "RunProgress"]) == "table"
+  end
+  local function rewardCandidatesWithDiagnostics(door, diagnostics)
+    diagnostics = diagnostics or {}
+    local room = type(door) == "table" and door.Room or nil
+    if type(room) ~= "table" then
+      diagnostics.reason = "exit_room_unavailable"
+      return {}
+    end
+    local src = currentRoom() or {}
+    local locked = room.NoReward and "room_no_reward"
+      or ((src.DeferReward or room.DeferReward) and "room_reward_deferred")
+      or ((room.ForcedReward ~= nil or room.ForcedFirstReward ~= nil) and "room_has_forced_reward")
+      or ((room.ChosenRewardType == "Story" or room.ChosenRewardType == "Shop"
+        or room.ChosenRewardType == "Empty" or room.ChosenRewardType == "Devotion")
+        and "room_has_fixed_reward_category") or nil
+    local sName = room.RewardStoreName
+    local live = type(CurrentRun) == "table" and type(CurrentRun.RewardStores) == "table" and CurrentRun.RewardStores or nil
+    local curStore = (live and type(sName) == "string" and sName ~= "") and live[sName] or nil
+    if locked == nil and live ~= nil then
+      if type(sName) ~= "string" or sName == "" then locked = "reward_store_name_missing"
+      elseif type(curStore) ~= "table" then locked = "reward_store_unavailable" end
+    end
+    diagnostics.roomWarning = locked
+
+    local prev, exclGods, sibGods = {}, {}, {}
+    if type(src.OfferedRewards) == "table" then
+      for objId, off in pairs(src.OfferedRewards) do
+        if objId ~= door.ObjectId and type(off) == "table" and type(off.Type) == "string" then
+          prev[#prev + 1] = { RewardType = off.Type, ForceLootName = off.ForceLootName }
+          if off.Type == "Boon" and type(off.ForceLootName) == "string" then
+            exclGods[#exclGods + 1] = off.ForceLootName; sibGods[off.ForceLootName] = true
+          end
         end
       end
     end
+
+    local godKnown, godReason, eligGods, godLimit = false, nil, {}, false
+    if type(GetEligibleLootNames) == "function" then
+      local ok, names, rnd = pcall(nativeEligibilityProbe, GetEligibleLootNames, false, exclGods)
+      if ok and type(names) == "table" and not rnd then
+        godKnown = true; for _, n in pairs(names) do eligGods[n] = true end
+      else godReason = rnd and "god_eligibility_requires_rng" or "god_eligibility_unavailable" end
+    end
+    if type(ReachedMaxGods) == "function" then
+      local ok, lim, rnd = pcall(nativeEligibilityProbe, ReachedMaxGods, false, exclGods)
+      godLimit = ok and not rnd and lim == true
+    end
+
+    local tiers, seen = {}, {}
+    local function addTier(st, n, sk)
+      if type(st) == "table" and not seen[st] then seen[st] = true; tiers[#tiers + 1] = { store = st, name = n, sk = sk } end
+    end
+    if type(curStore) == "table" then addTier(curStore, sName, "current") end
+    if type(RewardStoreData) == "table" then
+      if type(sName) == "string" and sName ~= "" then addTier(RewardStoreData[sName], sName, "reference") end
+      local names = {}
+      for n, st in pairs(RewardStoreData) do
+        if type(n) == "string" and type(st) == "table" and n ~= "InvalidOverrides" and n ~= sName then names[#names + 1] = n end
+      end
+      table.sort(names)
+      for _, n in ipairs(names) do addTier(RewardStoreData[n], n, "other") end
+    end
+
+    local roomProbe, cache = copyTbl(room), {}
+    local function probeEntry(e)
+      if cache[e] then return cache[e] end
+      local r
+      if type(IsRoomRewardEligible) ~= "function" then r = { ok = true, eligible = true, usedRandom = false, unavailable = true }
+      else
+        local ok, el, rnd = pcall(nativeEligibilityProbe, IsRoomRewardEligible, false, CurrentRun, roomProbe, copyTbl(e), prev, { Door = door })
+        r = { ok = ok, eligible = el == true, usedRandom = rnd == true }
+      end
+      cache[e] = r; return r
+    end
+    local curElig = 0
+    if type(curStore) == "table" then
+      for _, e in ipairs(curStore) do
+        if type(e) == "table" then local p = probeEntry(e); if p.ok and not p.usedRandom and p.eligible then curElig = curElig + 1 end end
+      end
+    end
+
+    local ids = {}
+    for rid, d in pairs(runtime.worldDefinitions or {}) do if d.doorAllowed and rewardDataPresent(d) then ids[#ids + 1] = rid end end
+    table.sort(ids)
+    local out = {}
+    for _, rid in ipairs(ids) do
+      local d = runtime.worldDefinitions[rid]
+      local upg = d.rewardType .. "RunProgress"
+      local prefUpg = type(GameState) == "table" and type(GameState.Cosmetics) == "table" and GameState.Cosmetics[upg] == true
+      local best, bestScore, sawErr = nil, 99, false
+      for _, t in ipairs(tiers) do
+        for _, e in ipairs(t.store) do
+          if type(e) == "table" and (e.Name == d.rewardType or e.Name == upg) then
+            local p = probeEntry(e)
+            if not p.ok then sawErr = true
+            else
+              local w = nil
+              if p.unavailable then w = "reward_eligibility_unavailable"
+              elseif p.usedRandom then w = "reward_eligibility_requires_rng"
+              elseif not p.eligible then
+                if rid == "HermesUpgrade" then w = "god_not_eligible"
+                elseif d.rewardType == "Boon" then
+                  if sibGods[rid] then w = "reward_not_available"
+                  elseif type(GetEligibleLootNames) == "function" then
+                    w = not godKnown and (godReason or "god_eligibility_unavailable")
+                      or (not eligGods[rid] and (godLimit and "god_limit" or "god_not_eligible") or "reward_not_eligible")
+                  else w = not rewardSourceEligible(d) and "god_not_eligible" or "reward_not_eligible" end
+                else w = "reward_not_eligible" end
+              elseif d.rewardType == "Boon" then
+                if sibGods[rid] then w = "reward_not_available"
+                elseif type(GetEligibleLootNames) == "function" then
+                  if not godKnown then w = godReason or "god_eligibility_unavailable"
+                  elseif not eligGods[rid] then w = godLimit and "god_limit" or "god_not_eligible" end
+                elseif not rewardSourceEligible(d) then w = "god_not_eligible" end
+              elseif rid == "HermesUpgrade" and not rewardSourceEligible(d) then w = "god_not_eligible" end
+              if w == nil and ((t.sk == "other" and (type(curStore) == "table" or (type(sName) == "string" and sName ~= "")))
+                  or (t.sk == "reference" and curElig > 0)) then w = "reward_not_in_current_store" end
+              local pref = (prefUpg and e.Name == upg) or (not prefUpg and e.Name == d.rewardType)
+              local score = (w == nil and 0 or 2) + (pref and 0 or 1)
+              if score < bestScore then
+                bestScore = score
+                best = { id = rid, rewardType = e.Name or d.rewardType, forceLoot = d.rewardType == "Boon" and rid or nil,
+                  store = t.name, overrides = e.Overrides, reward = e, enabled = true, warning = w }
+              end
+            end
+          end
+        end
+      end
+      if best then out[#out + 1] = best
+      elseif sawErr then out[#out + 1] = { id = rid, enabled = false, reason = "reward_eligibility_probe_error" } end
+    end
+    return out
   end
-  local function applyRewardEdit(door, rewardId, leaseToken)
-    local data = definition(rewardId)
-    assert(data.doorAllowed and canModify(door.Room, door.ChooseRoomArgs), "hades.error.worldUnavailable")
-    local reward, store = doorReward(door.Room, data)
-    assert(reward, "hades.error.worldUnavailable")
+  local function rewardCandidate(door, target)
+    for _, candidate in ipairs(rewardCandidatesWithDiagnostics(door)) do
+      if candidate.id == target and candidate.enabled then return candidate end
+    end
+    return nil
+  end
+  local function applyRewardEdit(door, roomID, candidate, leaseToken)
     -- Prepare the native reward on a descriptor clone first. Committing the
     -- reward fields in-place preserves the exact physical target-room owner.
     local room = door.Room
     local prepared = DeepCopyTable(room)
-    prepared.ChosenRewardType = data.rewardType
-    prepared.ForceLootName = data.rewardType == "Boon" and rewardId or nil
-    prepared.RewardStoreName = store
-    prepared.RewardOverrides = reward.Overrides and DeepCopyTable(reward.Overrides) or nil
+    prepared.ChosenRewardType = candidate.rewardType
+    prepared.ForceLootName = candidate.forceLoot
+    prepared.RewardStoreName = candidate.store
+    prepared.RewardOverrides = candidate.overrides and DeepCopyTable(candidate.overrides) or nil
     prepared.Encounter = nil
     prepared.OriginalChosenRewardType = nil; prepared.OriginalForceLootName = nil
+    prepared.DeferReward = nil; prepared.NoReward = nil
+    prepared.ForcedReward = nil; prepared.ForcedFirstReward = nil
     SetupRoomReward(CurrentRun, prepared, nil, { IgnoreForceLootName = true })
+    local edit = snapshotReward(door, roomID, candidate.id, leaseToken)
     beginWorldMutation()
-    local edit = snapshotReward(door, rewardId, leaseToken)
     for _, field in ipairs(rewardFields) do room[field] = prepared[field] end
     edit.appliedSignature = rewardSignature(room)
     edits[door] = edit
@@ -2035,11 +2581,27 @@ world = (function()
   end
   local function materializeRoute(door, edit)
     assert(edit == activeEdit(door) and edit.kind == "route", "hades.error.staleDoor")
-    local routes = routeRooms(edit.sourceRoom, door)
-    local candidates = routes and routes[edit.route]
+    local routes = routeCandidatesWithDiagnostics(door)
+    local candidates = routeRooms(routes and routes[edit.route])
     assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
-    local room = CreateRoom(GetRandomValue(candidates), { SkipChooseEncounter = true })
+    local room = CreateRoom(GetRandomValue(candidates), {
+      SkipChooseEncounter = true,
+      SkipChooseReward = edit.reward ~= nil,
+    })
     assert(type(room) == "table", "hades.error.outcomeUnknown")
+    if type(edit.reward) == "table" then
+      room.ChosenRewardType = edit.reward.rewardType
+      room.ForceLootName = edit.reward.forceLoot
+      room.RewardStoreName = edit.reward.store
+      room.RewardOverrides = edit.reward.overrides and DeepCopyTable(edit.reward.overrides) or nil
+      room.DeferReward = nil
+      room.NoReward = nil
+      room.ForcedReward = nil
+      room.ForcedFirstReward = nil
+      if type(SetupRoomReward) == "function" then
+        SetupRoomReward(CurrentRun, room, nil, { IgnoreForceLootName = true })
+      end
+    end
     edits[door] = nil
     AssignRoomToExitDoor(door, room)
     return room
@@ -2052,6 +2614,18 @@ world = (function()
       hook(name, function(original)
         return function(...)
           if spawnContext and queryName ~= spawnContext.query then return false end
+          if directBypassQuery ~= queryName and queryName == "IsSecretDoorEligible" then
+            local run, room = ...
+            local captured = type(room) == "table" and chaosRooms[room] or nil
+            if captured and captured.run == CurrentRun and run == CurrentRun
+                and room == CurrentRun.CurrentRoom and captured.hero == hero()
+                and not room.ForceSecretDoor then
+              if captured.probability == 0 then return false end
+              if (captured.probability or 0) > 0 then
+                if not hasEligibleSecretDestination() or #availableSecretPoints() == 0 then return false end
+              end
+            end
+          end
           if spawnContext and queryName == "IsChallengeSwitchEligible" then
             local run = ...
             return original(run)
@@ -2070,7 +2644,7 @@ world = (function()
       end
     end)
     hook("CreateRoom", function(original)
-      return function(data, ...)
+      return function(data, args, ...)
         local pending = occurrencePendingRoom
         local matching = pending and pending.run == CurrentRun and pending.hero == hero()
           and pending.sourceRoom == currentRoom()
@@ -2082,14 +2656,64 @@ world = (function()
           run = CurrentRun, hero = hero(), sourceRoom = currentRoom(),
           roomName = type(data) == "table" and data.Name or nil,
         }
-        local result = table.pack(pcall(original, data, ...))
+        local fishingPct = type(CurrentRun) == "table" and type(data) == "table" and runtime.fishingChance or nil
+        local chaosPct = type(CurrentRun) == "table" and type(data) == "table" and runtime.chaosGateChance or nil
+        local overrides = type(args) == "table" and type(args.RoomOverrides) == "table" and args.RoomOverrides or nil
+        local baseData = type(RoomData) == "table" and RoomData.BaseRoom or nil
+        local origSecret = overrides and overrides.SecretSpawnChance
+        if origSecret == nil and type(data) == "table" then origSecret = data.SecretSpawnChance end
+        local origFishing = overrides and overrides.FishingPointChance
+        if origFishing == nil and type(data) == "table" then origFishing = data.FishingPointChance end
+        local baseSecret = origSecret ~= nil and origSecret or (baseData and baseData.SecretSpawnChance)
+        local baseFishing = origFishing ~= nil and origFishing or (baseData and baseData.FishingPointChance)
+        local applyChaos = chaosPct ~= nil and data.RoomSetName ~= "Secrets" and not data.UsePreviousRoomSet
+          and (baseSecret == nil or baseSecret > 0)
+        local applyFishing = fishingPct ~= nil and (baseFishing == nil or baseFishing > 0)
+        local callArgs = args
+        if applyChaos or applyFishing then
+          callArgs = type(args) == "table" and copyTbl(args) or {}
+          local callOverrides = type(callArgs.RoomOverrides) == "table" and copyTbl(callArgs.RoomOverrides) or {}
+          local secretMult, fishingMult = 1, 1
+          for _, mutator in pairs(type(GameState) == "table" and GameState.ActiveMutators or {}) do
+            if type(mutator) == "table" then
+              if finite(mutator.SecretSpawnChanceMultiplier) then secretMult = secretMult * mutator.SecretSpawnChanceMultiplier end
+              if finite(mutator.FishingPointChanceMultiplier) then fishingMult = fishingMult * mutator.FishingPointChanceMultiplier end
+            end
+          end
+          local fishingBonus = type(GetTotalHeroTraitValue) == "function" and (GetTotalHeroTraitValue("FishingPointChanceBonus") or 0) or 0
+          if applyChaos and secretMult > 0 then
+            callOverrides.SecretSpawnChance = (chaosPct == 0 and -1 or (chaosPct / 100)) / secretMult
+          end
+          if applyFishing and fishingMult > 0 then
+            callOverrides.FishingPointChance = ((fishingPct == 0 and -1 or (fishingPct / 100)) - fishingBonus) / fishingMult
+          end
+          callArgs.RoomOverrides = callOverrides
+        end
+        local result = table.pack(pcall(original, data, callArgs, ...))
+        if type(args) == "table" and type(callArgs) == "table" then
+          args.RewardStoreName = callArgs.RewardStoreName
+        end
         occurrenceGeneration = previous
         if not result[1] then error(result[2], 0) end
-        if matching and type(result[2]) == "table" then
-          occurrenceSelectedRooms[result[2]] = {
-            run = pending.run, hero = pending.hero, sourceRoom = pending.sourceRoom,
-            leaseToken = pending.leaseToken,
-          }
+        if type(result[2]) == "table" then
+          local created = result[2]
+          if applyChaos then
+            created.SecretSpawnChance = origSecret
+            if chaosPct == 0 then created.SecretChanceSuccess = false end
+          end
+          if applyFishing then
+            created.FishingPointChance = origFishing
+            if fishingPct == 0 then created.FishingPointChanceSuccess = false end
+          end
+          if chaosPct ~= nil then
+            chaosRooms[created] = { probability = chaosPct, run = CurrentRun, hero = hero() }
+          end
+          if matching then
+            occurrenceSelectedRooms[created] = {
+              run = pending.run, hero = pending.hero, sourceRoom = pending.sourceRoom,
+              leaseToken = pending.leaseToken,
+            }
+          end
         end
         return table.unpack(result, 2, result.n)
       end
@@ -2239,35 +2863,74 @@ world = (function()
     local doors = array()
     for _, door in pairs(OfferedExitDoors or {}) do
       if ordinaryDoor(door) then
-        local routes = routeRooms(room, door)
+        local routeDiagnostics = {}
+        local routes = routeCandidatesWithDiagnostics(door, routeDiagnostics)
         local edit = activeEdit(door)
         local targets = array()
-        if routes and canModify(door.Room, door.ChooseRoomArgs) then
-          local rewardIds = {}
-          for rewardId, data in pairs(runtime.worldDefinitions or {}) do
-            if data.doorAllowed and canModify(door.Room, door.ChooseRoomArgs)
-              and doorReward(door.Room, data) then rewardIds[#rewardIds + 1] = rewardId end
+        local rewardDiagnostics = {}
+        for _, candidate in ipairs(rewardCandidatesWithDiagnostics(door, rewardDiagnostics)) do
+          local target = {
+            kind = "reward",
+            id = candidate.id,
+            enabled = candidate.enabled,
+          }
+          if candidate.reason then target.reason = candidate.reason end
+          if candidate.warning then target.warning = candidate.warning end
+          targets[#targets + 1] = target
+        end
+        local currentKind = routeKind(door.Room.Name)
+        local currentListed = false
+        for _, kind in ipairs(type(routes) == "table" and routeOrder or {}) do
+          local bucket = routes[kind]
+          if bucket ~= nil then
+            local rooms = routeRooms(bucket)
+            local enabled = type(rooms) == "table" and #rooms > 0
+            local acceptsReward = kind == "combat" or kind == "miniboss"
+            local target = {
+              kind = "roomCategory",
+              id = kind,
+              enabled = enabled,
+              acceptsReward = acceptsReward,
+            }
+            if not enabled then
+              target.reason = bucket.probeErrors > 0 and "room_eligibility_probe_error" or "no_room_route"
+            else
+              local warning = routeWarning(bucket, door, routeDiagnostics)
+              if warning then target.warning = warning end
+            end
+            targets[#targets + 1] = target
+            if enabled and acceptsReward and (kind == currentKind or kind == door.Room.Name) then
+              currentListed = true
+            end
           end
-          table.sort(rewardIds)
-          for _, rewardId in ipairs(rewardIds) do
-            targets[#targets + 1] = { kind = "reward", id = rewardId }
-          end
-          for _, kind in ipairs({ "combat", "story", "shop", "reprieve", "miniboss" }) do
-            if routes[kind] then targets[#targets + 1] = { kind = "roomCategory", id = kind } end
-          end
+        end
+        if not currentListed then
+          targets[#targets + 1] = {
+            kind = "roomCategory",
+            id = "current",
+            enabled = true,
+            acceptsReward = true,
+          }
         end
         local lease
         if edit and edit.leaseToken then
           lease = {
-            kind = edit.kind == "route" and "roomCategory" or "reward",
-            target = edit.target,
+            room = edit.room,
+            reward = edit.rewardID,
             leaseToken = edit.leaseToken,
           }
         end
-        doors[#doors + 1] = { id = doorId(door), doorToken = doorId(door), number = door.ObjectId,
+        doors[#doors + 1] = {
+          id = doorId(door),
+          doorToken = doorId(door),
+          number = door.ObjectId,
           roomName = door.Room.Name or "",
+          roomKind = currentKind or "",
           reward = door.Room.ForceLootName or door.Room.ChosenRewardType or "",
-          targets = targets, activeLease = lease }
+          rewardWarning = rewardDiagnostics.roomWarning,
+          targets = targets,
+          activeLease = lease,
+        }
       end
     end
     table.sort(doors, function(a, b) return a.number < b.number end)
@@ -2288,8 +2951,12 @@ world = (function()
     local occurrence = request and {
       target = request.target, leaseToken = request.leaseToken,
     } or nil
+    local fishOk, fishReason = inspectFishing(room)
+    local chaosOk, chaosReason = inspectChaos(room)
     return {
-      roomId = roomId(room), doors = doors, canFish = canFish(room), canChaos = canChaos(room),
+      roomId = roomId(room), doors = doors,
+      canFish = fishOk, fishingReason = fishReason,
+      canChaos = chaosOk, chaosReason = chaosReason,
       objects = objects, occurrenceTargets = occurrenceList, occurrence = occurrence,
     }
   end
@@ -2400,17 +3067,24 @@ world = (function()
     local door = requireDoor(params)
     assert(activeEdit(door) == nil and type(params.requestId) == "string",
       "hades.error.staleDoor")
+    local roomID, rewardID = params.room, params.reward
+    assert(type(roomID) == "string" and roomID ~= "", "hades.error.invalidValue")
+    local rewardCandidateObj = nil
+    if rewardID ~= nil then
+      assert(type(rewardID) == "string" and rewardID ~= "", "hades.error.invalidValue")
+      rewardCandidateObj = rewardCandidate(door, rewardID)
+      assert(rewardCandidateObj, "hades.error.worldUnavailable")
+    end
     local leaseToken = "exit:" .. params.requestId
-    if params.kind == "reward" then
-      applyRewardEdit(door, params.targetID, leaseToken)
-    elseif params.kind == "roomCategory" then
-      assert(canModify(door.Room, door.ChooseRoomArgs), "hades.error.worldUnavailable")
-      local routes = routeRooms(CurrentRun.CurrentRoom, door)
-      local candidates = routes and routes[params.targetID]
-      assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
-      reserveRoute(door, params.targetID, leaseToken)
+    if rewardCandidateObj ~= nil and (roomID == "current" or roomID == door.Room.Name
+        or roomID == routeKind(door.Room.Name)) then
+      applyRewardEdit(door, roomID, rewardCandidateObj, leaseToken)
     else
-      error("hades.error.invalidValue")
+      assert(roomID ~= "current", "hades.error.invalidValue")
+      local routes = routeCandidatesWithDiagnostics(door)
+      local candidates = routeRooms(routes and routes[roomID])
+      assert(candidates and #candidates > 0, "hades.error.worldUnavailable")
+      reserveRoute(door, roomID, rewardCandidateObj, leaseToken)
     end
     return runtime.status()
   end
@@ -2448,6 +3122,35 @@ world = (function()
     occurrenceRequest = nil
     occurrenceSelection = nil
     clearOccurrenceRoomSelections()
+    return runtime.status()
+  end
+
+  function api.canOpenSellTraits()
+    local unit = hero()
+    if unit == nil or unit.IsDead == true or isHubScene() or currentRoom() == nil then
+      return false
+    end
+    if type(OpenSellTraitMenu) ~= "function" or type(thread) ~= "function" then
+      return false
+    end
+    if type(ActiveScreens) == "table" and next(ActiveScreens) ~= nil then
+      return false
+    end
+    if type(IsScreenOpen) == "function" and IsScreenOpen("SellTraitMenu") then
+      return false
+    end
+    return true
+  end
+  function runtime.open_sell_traits()
+    requireHero()
+    assert(not isHubScene() and currentRoom() ~= nil, "hades.error.worldUnavailable")
+    assert(type(OpenSellTraitMenu) == "function" and type(thread) == "function",
+      "hades.error.sellDataUnavailable")
+    if (type(ActiveScreens) == "table" and next(ActiveScreens) ~= nil)
+        or (type(IsScreenOpen) == "function" and IsScreenOpen("SellTraitMenu")) then
+      error("hades.error.sellScreenBusy", 0)
+    end
+    thread(OpenSellTraitMenu)
     return runtime.status()
   end
 

@@ -66,19 +66,19 @@ def mutation_params(command, params):
             raise invalid_value()
         result['reward'] = reward
     if command == 'apply_world_exit':
-        kind = params.get('kind')
-        target_id = params.get('targetID')
-        if kind == 'reward':
-            if (not isinstance(target_id, str) or target_id not in REWARDS
-                    or not REWARDS[target_id]['doorAllowed']):
-                raise invalid_value()
-        elif kind == 'roomCategory':
-            if target_id not in GENERIC_ROUTES:
+        room = params.get('room')
+        if not isinstance(room, str) or room not in (GENERIC_ROUTES | {'current'}):
+            raise invalid_value()
+        reward = params.get('reward')
+        if reward is None:
+            if room == 'current':
                 raise invalid_value()
         else:
-            raise invalid_value()
-        result['kind'] = kind
-        result['targetID'] = target_id
+            if (not isinstance(reward, str) or reward not in REWARDS
+                    or not REWARDS[reward]['doorAllowed']):
+                raise invalid_value()
+            result['reward'] = reward
+        result['room'] = room
     if command == 'cancel_world_exit':
         lease_token = params.get('leaseToken')
         if not isinstance(lease_token, str) or not 1 <= len(lease_token) <= 384:

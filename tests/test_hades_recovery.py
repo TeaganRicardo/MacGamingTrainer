@@ -11,9 +11,11 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
-from core.adapter import AdapterError
+from core.adapter import AdapterError, GameAdapterContext
 from core.sidecar import JsonLineSidecarClient, SidecarTerminalError
+from games.hades.adapter import HadesAdapter
 from games.hades.client import HadesRuntimeClient
+from games.hades.preferences import HadesPreferenceStore
 from games.hades.recovery import HadesRecoveryJournal, process_identity
 
 assert HadesRuntimeClient._new_sidecar().child_owns_cleanup
@@ -517,3 +519,37 @@ close_worker(SimpleNamespace(transport=transport,close=close))
     assert events.read_text().splitlines() == ['kill', 'kill', 'kill', 'exited']
     assert journal.path.is_file()
 print('hades_lost_reply_child_cleanup_completes_after_client_exit_ok')
+
+# Pre-connect adapter recovery visibility: unknown/confirmed/unavailable records
+# project into offline status & state_for_error without deleting runtime-request.json,
+# and respect running PID mismatch.
+with tempfile.TemporaryDirectory(prefix='hades-adapter-recovery-') as directory:
+    root = Path(directory)
+    ctx = GameAdapterContext('hades', 'Hades', 2, ROOT / 'Backend/games/hades', {}, home=root)
+    ctx.data_dir.mkdir(parents=True, exist_ok=True)
+    journal = HadesRecoveryJournal(ctx.data_dir / 'runtime-request.json')
+    prefs = HadesPreferenceStore(ctx.data_dir / 'preferences.json')
+    pending = journal.begin(42, 'birth-A', 'set_value')
+    adapter = HadesAdapter(ctx, runtime=types.SimpleNamespace(recovery=journal, close=lambda: None),
+                           locate_process=lambda: (42, '/tmp/Hades/Game.macOS'),
+                           preferences=prefs)
+    pre = adapter.dispatch('status', {}, 'pre-status')
+    assert pre['recovery']['outcome'] == 'unknown' and pre['recovery']['pid'] == 42
+    assert pre['status'] == 'restart_required' and journal.path.is_file()
+    err_state = adapter.state_for_error()
+    assert err_state['recovery']['outcome'] == 'unknown' and err_state['status'] == 'restart_required'
+    # Confirmed record also requires restart in Hades I.
+    journal.confirm(pending, {'ok': True})
+    confirmed_state = adapter.dispatch('status', {}, 'confirmed-status')
+    assert confirmed_state['recovery']['outcome'] == 'confirmed' and confirmed_state['status'] == 'restart_required'
+    # Different running PID keeps existing evidence cleanly until connect retires it, without flagging restart_required for new PID.
+    adapter.locate_process = lambda: (99, '/tmp/Hades/Game.macOS')
+    other_pid = adapter.dispatch('status', {}, 'other-pid')
+    assert other_pid['status'] == 'disconnected' and other_pid['pid'] == 99
+    assert journal.path.is_file()
+    # Unreadable recovery storage surfaces unavailable outcome cleanly.
+    journal.path.write_text('{corrupt')
+    unavailable = adapter.dispatch('status', {}, 'corrupt-recovery')
+    assert unavailable['recovery'] == {'outcome': 'unavailable', 'presentation': 'hades.error.recoveryFailed'}
+    assert unavailable['status'] == 'restart_required'
+print('hades_adapter_recovery_visibility_ok')

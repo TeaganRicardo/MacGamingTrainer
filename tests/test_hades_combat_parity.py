@@ -285,7 +285,11 @@ with tempfile.TemporaryDirectory(prefix='hades-combat-preferences-') as director
         for name, value in DEFAULT_PREFERENCES.items()
         if name not in {'infiniteHealth', 'infiniteAmmo', 'forceEnableRerolls',
                         'incomingDamageMultiplier', 'boonRarityTarget',
-                        'healthLock', 'moneyLock', 'rerollsLock'}
+                        'boonForceLegendary', 'boonForceDuo',
+                        'fishingChance', 'chaosGateChance',
+                        'healthLock', 'moneyLock', 'rerollsLock',
+                        'moneyMultiplierEnabled', 'resourceMultiplierEnabled',
+                        'moneyMultiplier', 'resourceMultiplier', 'resourceLocks'}
     }
     store.path.write_text(json.dumps({'schemaVersion': 1, 'features': historical}))
     assert store.load() == DEFAULT_PREFERENCES
