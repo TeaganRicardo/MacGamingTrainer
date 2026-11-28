@@ -556,7 +556,205 @@ MapState.ShipWheels = {}
 IsUseable, IsAlive = prevYieldUseable, prevYieldAlive
 RefreshUseButton, thread = prevRefreshUseButton, prevThread
 
--- 9. Unknown outcome: a native failure after the edit began is never
+-- 9. Ephyra (Biome N) CloseDoorsOnUse revisit: LeaveRoom clears stale
+-- CurrentRun.ClosedDoors for the materialized destination only after
+-- AssignRoomToExitDoor succeeds, leaving N_Hub door closures untouched.
+local prevRoomNHub, prevRoomNMiniBoss01, prevRoomNCombat01 =
+  RoomData.N_Hub, RoomData.N_MiniBoss01, RoomData.N_Combat01
+local prevRoomSetN = RoomSets.N
+local prevClosedDoors = CurrentRun.ClosedDoors
+local prevNMiniBoss01Eligible = roomEligible.N_MiniBoss01
+
+RoomData.N_Hub = { Name = "N_Hub", RoomSetName = "N", CloseDoorsOnUse = true }
+RoomData.N_MiniBoss01 = {
+  Name = "N_MiniBoss01", RoomSetName = "N", CloseDoorsOnUse = true,
+  MaxCreationsThisRun = 1, MaxAppearancesThisBiome = 1,
+}
+RoomData.N_Combat01 = { Name = "N_Combat01", RoomSetName = "N", CloseDoorsOnUse = true }
+RoomSets.N = { "N_MiniBoss01", "N_Combat01", "N_Story01", "N_Shop01" }
+roomEligible.N_MiniBoss01 = false
+CurrentRun.ClosedDoors = {
+  N_Hub = { [560705] = true },
+  N_MiniBoss01 = { [560908] = true },
+}
+
+setRoomSet("N")
+CurrentRun.CurrentRoom.Name = "N_Hub"
+CurrentRun.CurrentRoom.CloseDoorsOnUse = true
+MapState.OfferedExitDoors = {
+  [1] = { ObjectId = 1, ChooseRoomArgs = {}, ForceRoomName = "N_Combat01" },
+}
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local nDoor = MapState.OfferedExitDoors[1]
+
+local nRowFail = exitRow()
+local nFailApplied = M.dispatch("apply_world_exit", {
+  doorToken = nRowFail.doorToken, room = "N_MiniBoss01",
+  requestId = "n-miniboss-rollback", includeCatalogs = true,
+})
+assert(nFailApplied.worldActions.exits[1].activeLease.room == "N_MiniBoss01")
+local prevAssignN = AssignRoomToExitDoor
+AssignRoomToExitDoor = function(...) error("native assign fault") end
+local nFallbackRoom = AttemptUseDoor(nDoor)
+AssignRoomToExitDoor = prevAssignN
+assert(nFallbackRoom.Name == "N_Combat01",
+  "failed route materialization did not fall back to original N room")
+assert(CurrentRun.ClosedDoors.N_MiniBoss01[560908] == true
+    and CurrentRun.ClosedDoors.N_Hub[560705] == true,
+  "failed route materialization mutated CurrentRun.ClosedDoors")
+
+setRoomSet("N")
+CurrentRun.CurrentRoom.Name = "N_Hub"
+CurrentRun.CurrentRoom.CloseDoorsOnUse = true
+MapState.OfferedExitDoors = {
+  [1] = { ObjectId = 1, ChooseRoomArgs = {}, ForceRoomName = "N_Combat01" },
+}
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+nDoor = MapState.OfferedExitDoors[1]
+local nRowOk = exitRow()
+M.dispatch("apply_world_exit", {
+  doorToken = nRowOk.doorToken, room = "N_MiniBoss01",
+  requestId = "n-miniboss-revisit", includeCatalogs = true,
+})
+local nEntered = AttemptUseDoor(nDoor)
+assert(nEntered.Name == "N_MiniBoss01", "revisited Ephyra door did not build N_MiniBoss01")
+assert(CurrentRun.ClosedDoors.N_MiniBoss01 == nil,
+  "revisited CloseDoorsOnUse room retained stale CurrentRun.ClosedDoors entry")
+assert(CurrentRun.ClosedDoors.N_Hub[560705] == true,
+  "clearing revisited destination doors touched N_Hub ClosedDoors")
+
+-- Model native SetupDefaultDoor + UnlockRoomExits in the revisited room.
+local returnDoor = { ObjectId = 560908, ReadyToUse = false }
+local closedForRoom = CurrentRun.ClosedDoors[CurrentRun.CurrentRoom.Name]
+MapState.OfferedExitDoors = {}
+if not (type(closedForRoom) == "table" and closedForRoom[returnDoor.ObjectId]) then
+  MapState.OfferedExitDoors[returnDoor.ObjectId] = returnDoor
+end
+assert(MapState.OfferedExitDoors[560908] == returnDoor,
+  "native SetupDefaultDoor excluded the return door after revisit")
+if next(MapState.OfferedExitDoors) ~= nil then
+  returnDoor.ReadyToUse = true
+end
+assert(returnDoor.ReadyToUse == true,
+  "native UnlockRoomExits left the revisited room return door locked")
+
+RoomData.N_Hub, RoomData.N_MiniBoss01, RoomData.N_Combat01 =
+  prevRoomNHub, prevRoomNMiniBoss01, prevRoomNCombat01
+RoomSets.N = prevRoomSetN
+CurrentRun.ClosedDoors = prevClosedDoors
+roomEligible.N_MiniBoss01 = prevNMiniBoss01Eligible
+
+-- 10. Deterministically-ineligible LegalEncounters fallback: when every native
+-- encounter in LegalEncounters fails IsEncounterEligible, prepare a fallback
+-- encounter and RecordEncounter after Assign succeeds, while leaving normal
+-- eligible rooms to native ChooseEncounter.
+local prevLeaveRoomB = LeaveRoom
+local prevChooseEncounterB = ChooseEncounter
+local prevRecordEncounterB = RecordEncounter
+local prevFStoryLegal = RoomData.F_Story01.LegalEncounters
+local prevFCombatLegal = RoomData.F_Combat01.LegalEncounters
+local prevStoryArachne = EncounterData.Story_Arachne_01
+local prevStoryArachneEligible = encounterEligible.Story_Arachne_01
+
+local chooseEncounterCalls, recordEncounterCalls = 0, 0
+ChooseEncounter = function(run, room, args)
+  chooseEncounterCalls = chooseEncounterCalls + 1
+  return prevChooseEncounterB(run, room, args)
+end
+RecordEncounter = function(run, encounter)
+  recordEncounterCalls = recordEncounterCalls + 1
+  return prevRecordEncounterB(run, encounter)
+end
+LeaveRoom = function(run, door)
+  if door.Room.Encounter == nil then
+    door.Room.Encounter = ChooseEncounter(run, door.Room)
+    RecordEncounter(run, door.Room.Encounter)
+  end
+  return prevLeaveRoomB(run, door)
+end
+
+RoomData.F_Story01.LegalEncounters = { "Story_Arachne_01" }
+EncounterData.Story_Arachne_01 = { Name = "Story_Arachne_01", MaxAppearancesThisBiome = 1 }
+encounterEligible.Story_Arachne_01 = false
+CurrentRun.EncountersOccurredBiomeCache.Story_Arachne_01 = nil
+
+setRoomSet("F")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local bDoor = MapState.OfferedExitDoors[1]
+local bRow = exitRow()
+M.dispatch("apply_world_exit", {
+  doorToken = bRow.doorToken, room = "story",
+  requestId = "f-story-revisit", includeCatalogs = true,
+})
+local chooseBeforeStory = chooseEncounterCalls
+local bEntered = AttemptUseDoor(bDoor)
+assert(bEntered.Name == "F_Story01"
+    and type(bEntered.Encounter) == "table"
+    and bEntered.Encounter.Name == "Story_Arachne_01",
+  "revisited story room did not receive fallback encounter")
+assert(chooseEncounterCalls == chooseBeforeStory,
+  "revisited story room still invoked native ChooseEncounter")
+assert(CurrentRun.EncountersOccurredBiomeCache.Story_Arachne_01 == 1,
+  "RecordEncounter did not record fallback encounter after route commit")
+
+-- If AssignRoomToExitDoor fails after prepareFallbackEncounter, RecordEncounter
+-- must not be called for the aborted F_Story01 route.
+CurrentRun.EncountersOccurredBiomeCache.Story_Arachne_01 = nil
+RoomData.F_Combat01.LegalEncounters = { "CombatNormal" }
+setRoomSet("F")
+MapState.OfferedExitDoors = {
+  [1] = { ObjectId = 1, ChooseRoomArgs = {}, ForceRoomName = "F_Combat01" },
+}
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local bFailDoor = MapState.OfferedExitDoors[1]
+bFailDoor.ForceRoomName = nil
+local bFailRow = exitRow()
+M.dispatch("apply_world_exit", {
+  doorToken = bFailRow.doorToken, room = "story",
+  requestId = "f-story-rollback", includeCatalogs = true,
+})
+local recordBeforeFail = recordEncounterCalls
+local prevAssignB = AssignRoomToExitDoor
+AssignRoomToExitDoor = function(...) error("assign failed") end
+local bFallback = AttemptUseDoor(bFailDoor)
+AssignRoomToExitDoor = prevAssignB
+assert(bFallback.Name == "F_Combat01")
+assert(recordEncounterCalls == recordBeforeFail + 1
+    and CurrentRun.EncountersOccurredBiomeCache.Story_Arachne_01 == nil,
+  "RecordEncounter ran for a rolled-back fallback encounter")
+
+-- Normal eligible rooms must still leave target.Encounter nil for native ChooseEncounter.
+RoomData.F_Combat01.LegalEncounters = { "CombatNormal" }
+setRoomSet("F")
+MapState.OfferedExitDoors = {
+  [1] = { ObjectId = 1, ChooseRoomArgs = {}, ForceRoomName = "F_Story01" },
+}
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+local bNormalDoor = MapState.OfferedExitDoors[1]
+bNormalDoor.ForceRoomName = nil
+local bNormalRow = exitRow()
+M.dispatch("apply_world_exit", {
+  doorToken = bNormalRow.doorToken, room = "combat",
+  requestId = "f-combat-normal", includeCatalogs = true,
+})
+local chooseBeforeCombat = chooseEncounterCalls
+local bNormalEntered = AttemptUseDoor(bNormalDoor)
+assert(bNormalEntered.Name == "F_Combat01"
+    and type(bNormalEntered.Encounter) == "table"
+    and bNormalEntered.Encounter.Name == "CombatNormal",
+  "normal combat room failed to resolve native encounter")
+assert(chooseEncounterCalls == chooseBeforeCombat + 1,
+  "eligible combat room bypassed native ChooseEncounter")
+
+LeaveRoom = prevLeaveRoomB
+ChooseEncounter = prevChooseEncounterB
+RecordEncounter = prevRecordEncounterB
+RoomData.F_Story01.LegalEncounters = prevFStoryLegal
+RoomData.F_Combat01.LegalEncounters = prevFCombatLegal
+EncounterData.Story_Arachne_01 = prevStoryArachne
+encounterEligible.Story_Arachne_01 = prevStoryArachneEligible
+
+-- 11. Unknown outcome: a native failure after the edit began is never
 -- replayed, and the same request cannot run again.
 setRoomSet("F")
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
