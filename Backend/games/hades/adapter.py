@@ -62,7 +62,8 @@ class HadesAdapter(GameAdapter):
             except AttributeError:
                 self.recovery = None
         self.locate_process = locate_process or partial(_locate_hades_target, context)
-        self.connected = False
+        self._connected = False
+        self._last_observation = {}
         self._connected_game_version = ''
         self.preferences = preferences or HadesPreferenceStore(context.data_dir / 'preferences.json')
         self.profiles = HadesProfileStore(self.preferences.path.parent / 'profiles')
@@ -95,6 +96,14 @@ class HadesAdapter(GameAdapter):
                 'This control belongs to an earlier document baseline. Refresh the editor before editing.',
             ),
         )
+
+    @property
+    def connected(self):
+        return self._connected and getattr(self.runtime, 'connected', True)
+
+    @connected.setter
+    def connected(self, connected):
+        self._connected = connected
 
     def _reconcile_rarity_and_occurrence(self, state):
         rarity = _rarity_params(self.features)
@@ -183,6 +192,7 @@ class HadesAdapter(GameAdapter):
             state = self.runtime.connect(*target, features=runtime_features)
             self.connected = state['connected']
             if self.connected:
+                self._last_observation = {}
                 game_app, executable, _ = config.resolve_game_install(Path(target[1]))
                 self._connected_game_version = config.read_build_version(game_app) if executable.is_file() else ''
                 state = self._reconcile_locks(state)
@@ -590,8 +600,7 @@ class HadesAdapter(GameAdapter):
             'errorArguments': [str(value) for value in error.get('arguments', ())],
         }
 
-    def _observe(self, state):
-        self.connected = state['connected']
+    def _project_features(self, state):
         observed = state.get('features')
         features = (
             from_runtime_feature_map(observed, DEFAULT_FEATURES)
@@ -638,9 +647,14 @@ class HadesAdapter(GameAdapter):
                 state[key] = float(raw) if type(raw) in (int, float) else None
             else:
                 state[key] = self.features.get(key)
+        return state
+
+    def _observe(self, state):
+        self.connected = state['connected']
+        self._project_features(state)
         pending_recovery = self._describe_recovery()
         state['recovery'] = pending_recovery
-        if live:
+        if state['connected']:
             state['version'] = self._connected_game_version
             raw_status = state.get('status')
             if not isinstance(raw_status, str) or not raw_status:
@@ -670,15 +684,7 @@ class HadesAdapter(GameAdapter):
             state['scene'] = 'unknown'
             state['roomName'] = None
             state['runtimeRevision'] = None
-            recovery_matches = (
-                pending_recovery is not None
-                and (
-                    pending_recovery.get('outcome') == 'unavailable'
-                    or observed_pid is None
-                    or pending_recovery.get('pid') == observed_pid
-                )
-            )
-            if recovery_matches:
+            if self._recovery_matches(pending_recovery, observed_pid):
                 state['status'] = 'restart_required'
             elif located is not None:
                 if not compatible:
@@ -689,7 +695,14 @@ class HadesAdapter(GameAdapter):
                 state['status'] = 'disconnected'
             else:
                 state['status'] = 'not_running' if installed else 'not_installed'
+        self._last_observation = state.copy()
         return state
+
+    @staticmethod
+    def _recovery_matches(recovery, pid):
+        return recovery is not None and (
+            recovery.get('outcome') == 'unavailable' or pid is None or recovery.get('pid') == pid
+        )
 
     def _describe_recovery(self):
         if self.recovery is None or not callable(getattr(self.recovery, 'describe', None)):
@@ -700,7 +713,33 @@ class HadesAdapter(GameAdapter):
             return {'outcome': 'unavailable', 'presentation': error.presentation}
 
     def state_for_error(self):
-        return self._observe({**self._offline(), 'features': self.features})
+        observed = self._last_observation
+        recovery = self._describe_recovery()
+        pid = observed.get('pid')
+        if self._connected:
+            pid = getattr(self.runtime, 'pid', None) or pid
+        recovery_matches = self._recovery_matches(recovery, pid)
+        if self.connected and not recovery_matches:
+            if not observed.get('connected'):
+                return {'recovery': recovery}
+            return {
+                **observed,
+                'features': {**observed['features'], 'gameSpeed': self._game_speed_projection()},
+                'recovery': recovery,
+            }
+
+        status = observed.get('status', 'disconnected')
+        if recovery_matches:
+            status = 'restart_required'
+        elif observed.get('connected') or status == 'restart_required':
+            status = 'disconnected'
+        state = self._project_features({
+            **self._offline(), 'features': self.features, 'pid': pid, 'status': status, 'recovery': recovery,
+            'version': observed.get('version', ''), 'scene': 'unknown', 'roomName': None, 'runtimeRevision': None,
+        })
+        if observed.get('connected'):
+            state['features']['gameSpeed'].update(actual=None, active=None)
+        return state
 
     @staticmethod
     def _offline():
