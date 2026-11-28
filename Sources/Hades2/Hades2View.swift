@@ -524,13 +524,12 @@ struct Hades2TrainerView: View {
             VStack(alignment: .leading, spacing: 8) {
                 currentRunTraitCommonControls(managedCurrentRunTrait)
                     .frame(maxWidth: .infinity, alignment: .trailing)
-                if let trait = managedCurrentRunTrait, !trait.canIncreaseLevel && !trait.canSetRarity,
-                   let reason = [trait.levelReason, trait.rarityReason].first(where: { !$0.isEmpty }) {
-                    let key = "hades2.traits.limitation.\(reason)"
-                    let resolved = text(key)
-                    Text(resolved == key ? text("hades2.traits.limitation.default") : resolved)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if let trait = managedCurrentRunTrait {
+                    ForEach(currentRunTraitLimitations(trait), id: \.self) { limitation in
+                        Text(limitation)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 if let trait = managedCurrentRunTrait, trait.hasContextualControls {
                     currentRunTraitContextualControls(trait)
@@ -553,6 +552,23 @@ struct Hades2TrainerView: View {
         .onChange(of: managedTraitSelection) { _, _ in
             syncManagedTraitRemainingUsesInput(force: true)
         }
+    }
+
+    private func currentRunTraitLimitations(_ trait: CurrentRunTrait) -> [String] {
+        func limitation(_ reason: String) -> String? {
+            guard !reason.isEmpty else { return nil }
+            let key = "hades2.traits.limitation.\(reason)"
+            let message = text(key)
+            return message == key ? text("hades2.traits.limitation.default") : message
+        }
+
+        let level = trait.canIncreaseLevel ? nil : limitation(trait.levelReason)
+        let rarity = trait.canSetRarity ? nil : limitation(trait.rarityReason)
+        if let level, level == rarity { return [level] }
+        return [
+            level.map { text("hades2.traits.levelLabel") + " · " + $0 },
+            rarity.map { text("hades2.traits.targetRarity") + " · " + $0 },
+        ].compactMap { $0 }
     }
 
     @ViewBuilder
@@ -1805,25 +1821,24 @@ struct Hades2TrainerView: View {
                     .onAppear { repairChaosPairSelections() }
                     .onChange(of: model.exactBoonOptions.map(\.id)) { _, _ in repairChaosPairSelections() }
 
-                    if model.acquisitionTarget == .chaos {
-                        HStack(spacing: 6) {
-                            Text(text("hades2.spawn.chaosEncounters"))
-                                .font(.caption).foregroundStyle(.secondary)
-                                .fixedSize(horizontal: true, vertical: false)
-                            TrainerNumberField(
-                                text: $model.chaosEncounters,
-                                accessibilityLabel: text("hades2.spawn.chaosEncounters"),
-                                width: theme.inlineFieldWidth,
-                                enabled: model.canAcquireChaosPair,
-                                onCommit: { completion in
-                                    guard let count = Int(completion.text.trimmingCharacters(in: .whitespacesAndNewlines)),
-                                          (1...100).contains(count) else {
-                                        return completion.rejected(message: text("hades2.error.chaosEncountersRange"))
-                                    }
-                                    return String(count)
+                    HStack(spacing: 6) {
+                        Text(text("hades2.spawn.chaosEncounters"))
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: true, vertical: false)
+                        TrainerNumberField(
+                            text: $model.chaosEncounters,
+                            accessibilityLabel: text("hades2.spawn.chaosEncounters"),
+                            accessibilityIdentifier: "hades2.spawn.chaosEncounters",
+                            width: theme.inlineFieldWidth,
+                            enabled: model.canAcquireChaosPair,
+                            onCommit: { completion in
+                                guard let count = Int(completion.text.trimmingCharacters(in: .whitespacesAndNewlines)),
+                                      (1...100).contains(count) else {
+                                    return completion.rejected(message: text("hades2.error.chaosEncountersRange"))
                                 }
-                            )
-                        }
+                                return String(count)
+                            }
+                        )
                     }
                 }
 

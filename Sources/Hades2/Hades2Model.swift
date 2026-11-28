@@ -2152,14 +2152,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             return
         }
         if action == .disableAll {
-            // Global disable remains an exclusive barrier. Rejected shortcuts
-            // now sound distinct from a confirmed runtime mutation.
+            // An offline reset only clears the saved settings.
             guard canDisableAll else {
                 rejectShortcut(action)
                 return
             }
+            let successFeedback: TrainerHotkeyFeedback = connected ? .disabled : .deferred
             disableAll { success in
-                TrainerHotkeyFeedbackPlayer.play(success ? .disabled : .rejected)
+                TrainerHotkeyFeedbackPlayer.play(success ? successFeedback : .rejected)
             }
             return
         }

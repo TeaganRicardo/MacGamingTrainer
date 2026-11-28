@@ -1049,6 +1049,14 @@ private func exerciseWorldExitJourney(python: URL, worker: URL, commandLog: URL)
         }
     }
 
+    model.activateAcquisition(.exact)
+    nativePickerWait("Chaos encounters available before selecting Chaos") {
+        host.layoutSubtreeIfNeeded()
+        return model.acquisitionTarget == .exact && allTextFields(in: host).contains {
+            $0.accessibilityIdentifier() == "hades2.spawn.chaosEncounters"
+        }
+    }
+
     // 9. Verify Boon Rarity Control single-row layout (widths 760/900/1050 EN/ZH),
     // Exact Boons Row 1 alignment right next to search box, and unclipped Default placeholders.
     for width in [CGFloat(760), CGFloat(900), CGFloat(1050)] {
